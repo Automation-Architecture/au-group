@@ -20,6 +20,8 @@
 
 Discovery is complete. Three spec documents are attached — review them and let me know what you need clarified before we kick off Build Phase.
 
+**Live project dashboard (when deployed):** [https://dashboard.automationarchitecture.ai/client/bci](https://dashboard.automationarchitecture.ai/client/bci) — same content drivers as our weekly status (Jira project **KD**, GitHub, and curated links to the specs in the `au-group` repo). If that URL 404s briefly, the dashboard bundle is staged in-repo at `export/aaa-client-dashboard/bci/` until it is merged into the hosting app; see `docs/AAA_CLIENT_DASHBOARD_REPO_STATUS.md`.
+
 ---
 
 ## What's Attached (Review These)
@@ -112,8 +114,9 @@ Looking forward to launch on September 20.
 - Send to: `keith@woods.com` (confirm email address before sending)
 
 **Dashboard:**
-- Link not live yet. If hosted post-send, follow up with dashboard URL in a second email.
-- For now, all project tracking lives in the Jira board (shared with Keith separately).
+- Target URL: [https://dashboard.automationarchitecture.ai/client/bci](https://dashboard.automationarchitecture.ai/client/bci) (merge `export/aaa-client-dashboard/bci/` into the AAA dashboard deploy repo if the link is not yet 200).
+- Jira (project **KD**): [Software board](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451).
+- Markdown status mirror: [client-dashboard.md](https://github.com/Automation-Architecture/au-group/blob/main/client-dashboard.md) in `Automation-Architecture/au-group`.
 
 **Key points:**
 - This marks the end of Discovery Phase.
