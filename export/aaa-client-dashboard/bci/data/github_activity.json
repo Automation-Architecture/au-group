@@ -1,0 +1,7 @@
+{
+  "slug": "bci",
+  "githubRepo": "Automation-Architecture/au-group",
+  "githubUrl": "https://github.com/Automation-Architecture/au-group",
+  "_comment": "Discovery and specs repo. Replace with application repo when it exists; dashboard sync may populate commits[].",
+  "commits": []
+}
