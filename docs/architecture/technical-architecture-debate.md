@@ -223,7 +223,7 @@ PostgreSQL (data persistence)
 - `bankruptcies` (debtor metadata, filing date, case number)
 - `creditors` (name, address, claim amount, company/individual flag)
 - `bankruptcy_creditors` (join table linking creditors to bankruptcies)
-- `zoominfo_contacts` (enriched contact data)
+- `zoom_info_contacts` (enriched contact data)
 - `salesforce_accounts` (account IDs, last sync timestamp)
 - `processing_jobs` (job status, retry count, error logs)
 - `schedule_f_queue` (active cases for monitoring)
@@ -301,7 +301,7 @@ PostgreSQL (data persistence)
 **Implementation:**
 ```
 PostgreSQL (RDS):
-  - bankruptcies, creditors, bankruptcy_creditors, zoominfo_contacts, processing_jobs, schedule_f_queue
+  - bankruptcies, creditors, bankruptcy_creditors, zoom_info_contacts, processing_jobs, schedule_f_queue
   - Indexes: creditor_name (GIN for fuzzy), bankruptcy_date (BTREE), case_number (unique)
 
 Redis (ElastiCache):

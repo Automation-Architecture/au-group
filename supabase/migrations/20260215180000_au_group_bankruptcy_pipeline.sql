@@ -29,7 +29,7 @@ do $$ begin
   create type public.au_group_job_type as enum (
     'pacer_poll',
     'document_parse',
-    'zoominfo_enrich',
+    'zoom_info_enrich',
     'salesforce_push'
   );
 exception
@@ -106,7 +106,7 @@ create trigger creditors_set_updated_at
   before update on public.creditors
   for each row execute function public.set_updated_at();
 
-create table if not exists public.zoominfo_contacts (
+create table if not exists public.zoom_info_contacts (
   id uuid primary key default gen_random_uuid(),
   creditor_id uuid not null references public.creditors (id) on delete cascade,
   full_name varchar(255) not null,
@@ -170,7 +170,7 @@ create table if not exists public.pipeline_executions (
 alter table public.bankruptcies enable row level security;
 alter table public.creditors enable row level security;
 alter table public.bankruptcy_creditors enable row level security;
-alter table public.zoominfo_contacts enable row level security;
+alter table public.zoom_info_contacts enable row level security;
 alter table public.salesforce_accounts enable row level security;
 alter table public.processing_jobs enable row level security;
 alter table public.schedule_f_queue enable row level security;
@@ -182,7 +182,7 @@ create index if not exists idx_creditors_name_gin on public.creditors using gin 
 create index if not exists idx_processing_jobs_status on public.processing_jobs (status);
 create index if not exists idx_processing_jobs_bankruptcy_id on public.processing_jobs (bankruptcy_id);
 create index if not exists idx_schedule_f_queue_status on public.schedule_f_queue (status);
-create index if not exists idx_zoominfo_contacts_creditor_id on public.zoominfo_contacts (creditor_id);
+create index if not exists idx_zoom_info_contacts_creditor_id on public.zoom_info_contacts (creditor_id);
 create index if not exists idx_salesforce_accounts_creditor_id on public.salesforce_accounts (creditor_id);
 create index if not exists idx_pipeline_executions_created_at on public.pipeline_executions (created_at desc);
 create index if not exists idx_pipeline_executions_n8n_execution on public.pipeline_executions (n8n_execution_id)

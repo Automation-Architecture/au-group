@@ -26,7 +26,7 @@
 
 | Epic ID | Epic Name | Priority | Story Points | Sprint Target | Phase |
 |---------|-----------|----------|--------------|---------------|-------|
-| **AU_GROUP-1** | Infrastructure Setup & AWS Configuration | Highest | 21 | Sprint 1 | Phase 0 |
+| **AU_GROUP-1** | Infrastructure Setup & AWS Configuration | Highest | 23 | Sprint 1 | Phase 0 |
 | **AU_GROUP-2** | PACER Filing Monitor & Document Download | Highest | 34 | Sprint 2-3 | Phase 1 |
 | **AU_GROUP-3** | Document Parsing Engine | Highest | 55 | Sprint 3-4 | Phase 1 |
 | **AU_GROUP-4** | ZoomInfo Enrichment Pipeline | Highest | 34 | Sprint 4-5 | Phase 1 |
@@ -35,7 +35,7 @@
 | **AU_GROUP-7** | Historical Database Import & Exposure Tracking | Medium | 34 | Sprint 9 | Phase 3 |
 | **AU_GROUP-8** | DevOps, Monitoring & Security | Highest | 21 | Continuous | All |
 
-**Total Story Points:** 309 points  
+**Total Story Points:** 311 points  
 **Estimated Duration:** 9 sprints (18 weeks / ~4.5 months)  
 **Target for Phase 1-3 MVP:** 9 sprints
 
@@ -366,7 +366,7 @@ As a backend engineer, I need an S3 bucket configured with lifecycle policies so
 ### Story AU_GROUP-1.6: AWS Secrets Manager Configuration (Backend/Infrastructure)
 
 **Priority:** Highest  
-**Story Points:** 3  
+**Story Points:** 5  
 **Labels:** `infrastructure`, `security`, `aws-secrets`, `phase-0`  
 **Sprint:** Sprint 1  
 **Dependencies:** None
@@ -391,7 +391,7 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 **Subtasks:**
 - Create secret: `/prod/pacer/credentials` (username, password)
 - Create secret: `/prod/zoominfo/api-key` (api_key)
-- Create secret: `/prod/salesforce/oauth` (client_id, client_secret, refresh_token)
+- Create secret: `/prod/salesforce/oauth` (client_id, client_secret, refresh_token, instance_url)
 - Create secret: `/prod/admin/api-key` (api_key)
 - Set rotation period: 90 days (manual rotation for MVP)
 
@@ -417,6 +417,31 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 - Application can fetch all secrets successfully
 - Secrets cached in memory (not fetched on every request)
 - Unit tests passing
+
+---
+
+#### Task AU_GROUP-1.6.3: Gather Production Credentials for Salesforce and ZoomInfo (Client / PM)
+
+**Assignee:** PM / Operator (client-facing)  
+**Story Points:** 2  
+**Labels:** `client`, `salesforce`, `zoominfo`, `credentials`, `blocking`, `phase-0`  
+**Sprint:** Sprint 1 (or current sprint)  
+**Dependencies:** None (runs in parallel with secret scaffolding; **blocks** AU_GROUP-1.6.1 population and Epics AU_GROUP-4 / AU_GROUP-5 until complete)
+
+**Description:**  
+Salesforce trial signup fails (“Something went wrong. Please try again.”) and ZoomInfo trial is sales-gated. Capture **production** credentials and access details from the client’s existing Salesforce and ZoomInfo accounts so secrets can be created and API clients implemented.
+
+**Subtasks:**
+- Share client checklist: [`docs/project/production-credentials-client-checklist.md`](production-credentials-client-checklist.md)
+- Track responses; receive secrets only via approved secure channels (no plaintext in email/Slack)
+- **Jira Cloud (`KD`):** Track in **[KD-53](https://automationarchitecture.atlassian.net/browse/KD-53)** — *Gather Production Credentials for Salesforce and ZoomInfo* (blocks KD-3, KD-4; relates to KD-1); see checklist for client-facing items
+
+**Acceptance Criteria:**
+- ZoomInfo: production API key + documented rate limits + confirmed capabilities (company match, contacts + titles, scores if licensed) + endpoint / allowlist notes
+- Salesforce: `client_id`, `client_secret`, `refresh_token`, `instance_url` for integration user + API permissions confirmed
+- Territory mapping (state → rep + Salesforce usernames or 18-char user IDs) documented
+- Admin confirmation for custom objects/fields per AU_GROUP-5.1 (or documented equivalents)
+- Handoff to DevOps for AU_GROUP-1.6.1 secret values (`/prod/zoominfo/api-key`, `/prod/salesforce/oauth` including `instance_url` in JSON); **Jira:** [KD-53](https://automationarchitecture.atlassian.net/browse/KD-53) marked Done when complete
 
 ---
 
@@ -1275,7 +1300,7 @@ As a backend engineer, I need a Celery job that enriches company creditors with 
   4. Classify company tier based on firmographic data
   5. Get target titles for tier
   6. Retrieve up to 3 contacts with fallback logic
-  7. Save contacts to `zoominfo_contacts` table
+  7. Save contacts to `zoom_info_contacts` table
   8. Cache API response in Redis (TTL: 7 days)
 - Log enrichment stats: total companies, matched, no match, cache hits
 - Send CloudWatch metric: `ZoomInfoMatchRate`
@@ -2768,11 +2793,11 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 - AU_GROUP-1.3: RDS PostgreSQL Database Setup (5 points)
 - AU_GROUP-1.4: Redis ElastiCache Configuration (3 points)
 - AU_GROUP-1.5: S3 Bucket & Lifecycle Policies (2 points)
-- AU_GROUP-1.6: AWS Secrets Manager Configuration (3 points)
+- AU_GROUP-1.6: AWS Secrets Manager Configuration (5 points)
 - AU_GROUP-8.4: Error Tracking with Sentry (5 points)
 - AU_GROUP-8.5: Security Hardening (8 points - only tasks 8.5.1 and 8.5.2)
 
-**Total:** 34 points  
+**Total:** 36 points  
 **Dependencies:** None  
 **Deliverables:** Infrastructure ready, database schema applied, credentials in Secrets Manager
 
@@ -2935,6 +2960,6 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **End of Jira Backlog Structure**
 
-**Total Story Points:** 309 points  
+**Total Story Points:** 311 points  
 **Estimated Duration:** 9 sprints (18 weeks)  
 **Target Launch:** End of Sprint 9 (Week 18)

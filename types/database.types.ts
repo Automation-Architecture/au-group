@@ -26,6 +26,7 @@ export type Database = {
           estimated_creditor_count: number | null
           estimated_liabilities: number | null
           filing_date: string
+          forms_downloaded_at: string | null
           id: string
           state: string
           updated_at: string
@@ -40,6 +41,7 @@ export type Database = {
           estimated_creditor_count?: number | null
           estimated_liabilities?: number | null
           filing_date: string
+          forms_downloaded_at?: string | null
           id?: string
           state: string
           updated_at?: string
@@ -54,6 +56,7 @@ export type Database = {
           estimated_creditor_count?: number | null
           estimated_liabilities?: number | null
           filing_date?: string
+          forms_downloaded_at?: string | null
           id?: string
           state?: string
           updated_at?: string
@@ -369,7 +372,7 @@ export type Database = {
       au_group_job_type:
         | "pacer_poll"
         | "document_parse"
-        | "zoominfo_enrich"
+        | "zoom_info_enrich"
         | "salesforce_push"
       au_group_schedule_f_status:
         | "monitoring"
@@ -481,7 +484,7 @@ export const Constants = {
     Enums: {
       au_group_chapter_type: ["11", "7", "11-Subchapter-V"],
       au_group_job_status: ["pending", "running", "completed", "failed"],
-      au_group_job_type: ["pacer_poll", "document_parse", "zoominfo_enrich", "salesforce_push"],
+      au_group_job_type: ["pacer_poll", "document_parse", "zoom_info_enrich", "salesforce_push"],
       au_group_schedule_f_status: [
         "monitoring",
         "detected",
