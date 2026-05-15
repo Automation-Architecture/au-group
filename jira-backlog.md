@@ -1,8 +1,9 @@
 # Jira Backlog Structure
 ## Bankruptcy Creditor Intelligence Platform
 
-**Project Key:** `BCI`  
-**Project Name:** Bankruptcy Creditor Intelligence  
+**Jira Cloud project key:** `KD` — [Software board](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451)  
+**Project name:** Bankruptcy Creditor Intelligence  
+**Backlog doc IDs:** `BCI-*` below are logical epic/story labels from discovery; create and track work in Jira under **`KD-*`** (same structure, project key differs).
 **Version:** 1.0  
 **Date:** March 12, 2026
 
