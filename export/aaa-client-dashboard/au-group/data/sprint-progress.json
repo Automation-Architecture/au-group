@@ -1,0 +1,61 @@
+{
+  "slug": "au-group",
+  "jiraProjectKey": "KD",
+  "jiraBoardUrl": "https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451",
+  "_comment": "Prefer live data from sync_jira.py. Narrative matches client-dashboard.md Sprint 0 until sync overwrites.",
+  "sprintGoal": "Set up AWS infrastructure, database, and core services ready for Phase 1 development.",
+  "sprintName": "Sprint 0",
+  "sprintWindow": "2026-05-13 — 2026-05-17",
+  "capacityPoints": 34,
+  "completedPoints": 0,
+  "issues": [
+    {
+      "summary": "AWS VPC & Network Configuration",
+      "points": 5,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    },
+    {
+      "summary": "EC2 Instance Provisioning",
+      "points": 3,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    },
+    {
+      "summary": "RDS PostgreSQL Database Setup",
+      "points": 5,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    },
+    {
+      "summary": "Redis ElastiCache Configuration",
+      "points": 3,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    },
+    {
+      "summary": "S3 Bucket & Lifecycle Policies",
+      "points": 2,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    },
+    {
+      "summary": "AWS Secrets Manager Configuration",
+      "points": 3,
+      "status": "Not Started",
+      "assigneeRole": "Backend"
+    },
+    {
+      "summary": "Error Tracking (Sentry Setup)",
+      "points": 5,
+      "status": "Not Started",
+      "assigneeRole": "Backend"
+    },
+    {
+      "summary": "Security Hardening (Initial)",
+      "points": 8,
+      "status": "Not Started",
+      "assigneeRole": "DevOps"
+    }
+  ]
+}

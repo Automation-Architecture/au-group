@@ -1,0 +1,87 @@
+{
+  "slug": "au-group",
+  "launchTarget": "2026-09-20",
+  "launchLabel": "MVP launch (end of Sprint 9)",
+  "milestones": [
+    {
+      "name": "Sprint 0",
+      "start": "2026-05-13",
+      "end": "2026-05-17",
+      "durationWeeks": 1,
+      "focus": "Infrastructure Setup",
+      "status": "current"
+    },
+    {
+      "name": "Sprint 1",
+      "start": "2026-05-20",
+      "end": "2026-05-31",
+      "durationWeeks": 2,
+      "focus": "PACER Integration (Part 1)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 2",
+      "start": "2026-06-03",
+      "end": "2026-06-14",
+      "durationWeeks": 2,
+      "focus": "PACER Integration (Part 2)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 3",
+      "start": "2026-06-17",
+      "end": "2026-06-28",
+      "durationWeeks": 2,
+      "focus": "Document Parsing (Part 1)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 4",
+      "start": "2026-07-01",
+      "end": "2026-07-12",
+      "durationWeeks": 2,
+      "focus": "Document Parsing (Part 2)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 5",
+      "start": "2026-07-15",
+      "end": "2026-07-26",
+      "durationWeeks": 2,
+      "focus": "ZoomInfo Enrichment",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 6",
+      "start": "2026-07-29",
+      "end": "2026-08-09",
+      "durationWeeks": 2,
+      "focus": "Salesforce Integration",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 7",
+      "start": "2026-08-12",
+      "end": "2026-08-23",
+      "durationWeeks": 2,
+      "focus": "Schedule F Monitoring (Part 1)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 8",
+      "start": "2026-08-26",
+      "end": "2026-09-06",
+      "durationWeeks": 2,
+      "focus": "Schedule F Monitoring (Part 2)",
+      "status": "upcoming"
+    },
+    {
+      "name": "Sprint 9",
+      "start": "2026-09-09",
+      "end": "2026-09-20",
+      "durationWeeks": 2,
+      "focus": "Historical Database",
+      "status": "upcoming"
+    }
+  ]
+}

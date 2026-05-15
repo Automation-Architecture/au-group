@@ -1,0 +1,25 @@
+{
+  "slug": "au-group",
+  "updates": [
+    {
+      "date": "2026-05-13",
+      "title": "Week 0 — Discovery complete, Sprint 0 kickoff",
+      "summary": "Project kickoff held; discovery documents finalized (PRD, project brief, technical architecture); Jira backlog created (309 story points across 8 epics); Sprint 0 planning complete (34 story points). Infrastructure setup begins.",
+      "bullets": [
+        "Kickoff meeting held",
+        "PRD, project brief, and technical architecture locked for handoff",
+        "Jira backlog populated; Sprint 0 scoped for VPC, EC2, RDS, Redis, S3, Secrets Manager, Sentry, security hardening"
+      ]
+    },
+    {
+      "date": "2026-05-14",
+      "title": "Sprint 0 — Infrastructure in progress",
+      "summary": "VPC and networking configuration in progress; database schema design complete. Next: EC2, RDS, Redis, S3, Secrets Manager, Sentry.",
+      "bullets": [
+        "VPC / networking: in progress",
+        "PostgreSQL schema design: complete",
+        "EC2, RDS, Redis, S3: upcoming this week"
+      ]
+    }
+  ]
+}

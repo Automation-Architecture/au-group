@@ -1,0 +1,12 @@
+.agents
+skills-lock.json
+.cursor
+.claude
+node_modules
+.env
+.env*
+.env.local
+MCP_STATUS.txt
+FINAL_SETUP_STATUS.txt
+WORKFLOWS_VIEWED.md
+update-jira-tasks.sh

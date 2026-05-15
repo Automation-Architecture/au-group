@@ -1,0 +1,10 @@
+# Append this step to the dashboard repo's Jira sync workflow (e.g. sync-jira-data.yml).
+# Requires secrets: JIRA_BASE_URL, JIRA_USER_EMAIL, JIRA_API_TOKEN
+
+- name: Sync AU Group sprint data from Jira (project KD)
+  continue-on-error: true
+  env:
+    JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+    JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+    JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+  run: python scripts/sync_jira.py --slug au-group --project-key KD
