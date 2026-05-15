@@ -1,14 +1,14 @@
 project:
-  name: "Bankruptcy Creditor Intelligence Platform"
+  name: "AU Group — Bankruptcy Creditor Intelligence"
   client: "Keith"
-  slug: "bci"
+  slug: "au-group"
   slack_contact_channel: "#bankruptcy-intelligence"
-  api_base_url: "https://bci.railway.app" # placeholder until prod is up
+  api_base_url: "https://au-group.railway.app" # placeholder until prod is up
   stage: "discovery"
   closed_stages: []
   started: "2026-05-13"
   target_launch: "2026-09-20"
   # Live board: https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451
   jira_project_key: "KD"
-  description: "AI-powered lead generation platform that monitors federal bankruptcy filings via PACER, extracts creditors from Schedule F documents, enriches them via ZoomInfo, and pushes qualified leads into Salesforce."
+  description: "AU Group — AI-powered lead generation platform that monitors federal bankruptcy filings via PACER, extracts creditors from Schedule F documents, enriches them via ZoomInfo, and pushes qualified leads into Salesforce."
   engagement_type: "Project · AI Agent"

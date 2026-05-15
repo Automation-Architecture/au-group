@@ -1,4 +1,4 @@
-# Bankruptcy Creditor Intelligence Platform
+# AU Group — Bankruptcy Creditor Intelligence
 ## Client Dashboard
 
 **Client:** Keith Woods  
@@ -40,14 +40,14 @@
 
 | Ticket | Status | Assignee | Points | Progress |
 |--------|--------|----------|--------|----------|
-| **BCI-1.1**: AWS VPC & Network Configuration | ⚪ Not Started | DevOps | 5 | 0% |
-| **BCI-1.2**: EC2 Instance Provisioning | ⚪ Not Started | DevOps | 3 | 0% |
-| **BCI-1.3**: RDS PostgreSQL Database Setup | ⚪ Not Started | DevOps | 5 | 0% |
-| **BCI-1.4**: Redis ElastiCache Configuration | ⚪ Not Started | DevOps | 3 | 0% |
-| **BCI-1.5**: S3 Bucket & Lifecycle Policies | ⚪ Not Started | DevOps | 2 | 0% |
-| **BCI-1.6**: AWS Secrets Manager Configuration | ⚪ Not Started | Backend | 3 | 0% |
-| **BCI-8.4**: Error Tracking (Sentry Setup) | ⚪ Not Started | Backend | 5 | 0% |
-| **BCI-8.5**: Security Hardening (Initial) | ⚪ Not Started | DevOps | 8 | 0% |
+| **AU_GROUP-1.1**: AWS VPC & Network Configuration | ⚪ Not Started | DevOps | 5 | 0% |
+| **AU_GROUP-1.2**: EC2 Instance Provisioning | ⚪ Not Started | DevOps | 3 | 0% |
+| **AU_GROUP-1.3**: RDS PostgreSQL Database Setup | ⚪ Not Started | DevOps | 5 | 0% |
+| **AU_GROUP-1.4**: Redis ElastiCache Configuration | ⚪ Not Started | DevOps | 3 | 0% |
+| **AU_GROUP-1.5**: S3 Bucket & Lifecycle Policies | ⚪ Not Started | DevOps | 2 | 0% |
+| **AU_GROUP-1.6**: AWS Secrets Manager Configuration | ⚪ Not Started | Backend | 3 | 0% |
+| **AU_GROUP-8.4**: Error Tracking (Sentry Setup) | ⚪ Not Started | Backend | 5 | 0% |
+| **AU_GROUP-8.5**: Security Hardening (Initial) | ⚪ Not Started | DevOps | 8 | 0% |
 
 **Sprint Burndown:** 0 / 34 points completed
 
@@ -199,7 +199,7 @@ May       June      July      Aug       Sept
 
 ## 📈 Ticket Progress by Epic
 
-### Epic BCI-1: Infrastructure Setup (Sprint 0)
+### Epic AU_GROUP-1: Infrastructure Setup (Sprint 0)
 **Progress:** 0 / 21 points (0%)  
 **Status:** 🔵 In Progress  
 **Timeline:** Week 0
@@ -213,7 +213,7 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
 ---
 
-### Epic BCI-2: PACER Filing Monitor (Sprints 1-2)
+### Epic AU_GROUP-2: PACER Filing Monitor (Sprints 1-2)
 **Progress:** 0 / 34 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 1-4
@@ -223,11 +223,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 5  
-**Blockers:** None (depends on BCI-1)
+**Blockers:** None (depends on AU_GROUP-1)
 
 ---
 
-### Epic BCI-3: Document Parsing Engine (Sprints 3-4)
+### Epic AU_GROUP-3: Document Parsing Engine (Sprints 3-4)
 **Progress:** 0 / 55 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 5-8
@@ -237,11 +237,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 5  
-**Blockers:** None (depends on BCI-2)
+**Blockers:** None (depends on AU_GROUP-2)
 
 ---
 
-### Epic BCI-4: ZoomInfo Enrichment (Sprint 5)
+### Epic AU_GROUP-4: ZoomInfo Enrichment (Sprint 5)
 **Progress:** 0 / 34 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 9-10
@@ -251,11 +251,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 5  
-**Blockers:** None (depends on BCI-3)
+**Blockers:** None (depends on AU_GROUP-3)
 
 ---
 
-### Epic BCI-5: Salesforce Integration (Sprint 6)
+### Epic AU_GROUP-5: Salesforce Integration (Sprint 6)
 **Progress:** 0 / 55 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 11-12
@@ -265,11 +265,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 5  
-**Blockers:** None (depends on BCI-4)
+**Blockers:** None (depends on AU_GROUP-4)
 
 ---
 
-### Epic BCI-6: Schedule F Monitoring (Sprints 7-8)
+### Epic AU_GROUP-6: Schedule F Monitoring (Sprints 7-8)
 **Progress:** 0 / 55 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 13-16
@@ -279,11 +279,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 5  
-**Blockers:** None (depends on BCI-2, BCI-3)
+**Blockers:** None (depends on AU_GROUP-2, AU_GROUP-3)
 
 ---
 
-### Epic BCI-7: Historical Database (Sprint 9)
+### Epic AU_GROUP-7: Historical Database (Sprint 9)
 **Progress:** 0 / 34 points (0%)  
 **Status:** ⚪ Not Started  
 **Timeline:** Weeks 17-18
@@ -293,11 +293,11 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 ```
 
 **Stories Completed:** 0 / 4  
-**Blockers:** None (depends on BCI-5)
+**Blockers:** None (depends on AU_GROUP-5)
 
 ---
 
-### Epic BCI-8: DevOps & Security (Continuous)
+### Epic AU_GROUP-8: DevOps & Security (Continuous)
 **Progress:** 0 / 21 points (0%)  
 **Status:** 🔵 In Progress  
 **Timeline:** All sprints

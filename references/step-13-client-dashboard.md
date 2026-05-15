@@ -8,7 +8,7 @@ The client dashboard reads from Jira (sprint data) and GitHub (activity), so ste
 
 ## Prerequisites
 
-- Jira board populated (step 11) so the dashboard's sync workflow has data to pull. Use the **real** Jira project key from your site (e.g. Keith / Bankruptcy work lives under project **`KD`**: [board](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451)) — do not assume the backlog doc’s `BCI-*` labels are the Jira key, and do not point sync at unrelated projects (e.g. kidneyhood).
+- Jira board populated (step 11) so the dashboard's sync workflow has data to pull. Use the **real** Jira project key from your site (e.g. Keith / Bankruptcy work lives under project **`KD`**: [board](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451)) — do not assume the backlog doc’s `AU_GROUP-*` labels are the Jira key, and do not point sync at unrelated projects (e.g. kidneyhood).
 - GitHub repo created (step 6) so the activity feed has commits
 - A `project.config.yaml` in the project repo with the slug, contact channel, and other metadata
 

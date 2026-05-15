@@ -1,3 +1,5 @@
+.agents
+skills-lock.json
 .cursor
 .claude
 node_modules

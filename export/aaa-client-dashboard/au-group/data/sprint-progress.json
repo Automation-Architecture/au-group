@@ -1,5 +1,5 @@
 {
-  "slug": "bci",
+  "slug": "au-group",
   "jiraProjectKey": "KD",
   "jiraBoardUrl": "https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451",
   "_comment": "Prefer live data from sync_jira.py. Narrative matches client-dashboard.md Sprint 0 until sync overwrites.",

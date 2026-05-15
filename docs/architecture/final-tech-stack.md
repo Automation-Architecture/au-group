@@ -165,6 +165,8 @@ safety==3.0.1
 
 ## 3. Database
 
+> **AU Group (2026):** Pipeline tables (`bankruptcies`, `creditors`, `bankruptcy_creditors`, `zoom_info_contacts`, `salesforce_accounts`, `processing_jobs`, `schedule_f_queue`, plus `pipeline_executions`) are deployed on **Supabase Postgres** with migrations named `au_group_*`. TypeScript types for the project database live in [`types/database.types.ts`](types/database.types.ts). The RDS option below remains the documented scale-out / alternative from the original architecture debate.
+
 ### Primary Database: PostgreSQL
 
 | Component | Specification | Purpose |
@@ -216,7 +218,7 @@ CREATE TABLE bankruptcy_creditors (
     PRIMARY KEY (bankruptcy_id, creditor_id)
 );
 
-CREATE TABLE zoominfo_contacts (
+CREATE TABLE zoom_info_contacts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     creditor_id UUID REFERENCES creditors(id) ON DELETE CASCADE,
     full_name VARCHAR(255) NOT NULL,

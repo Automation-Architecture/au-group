@@ -1,9 +1,9 @@
-# Jira Backlog Structure
+# Jira Backlog Structure — AU Group
 ## Bankruptcy Creditor Intelligence Platform
 
 **Jira Cloud project key:** `KD` — [Software board](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451)  
-**Project name:** Bankruptcy Creditor Intelligence  
-**Backlog doc IDs:** `BCI-*` below are logical epic/story labels from discovery; create and track work in Jira under **`KD-*`** (same structure, project key differs).
+**Project name:** AU Group — Bankruptcy Creditor Intelligence  
+**Backlog doc IDs:** `AU_GROUP-*` below are logical epic/story labels from discovery (AU Group); create and track work in Jira under **`KD-*`** (same structure, project key differs).
 **Version:** 1.0  
 **Date:** March 12, 2026
 
@@ -26,14 +26,14 @@
 
 | Epic ID | Epic Name | Priority | Story Points | Sprint Target | Phase |
 |---------|-----------|----------|--------------|---------------|-------|
-| **BCI-1** | Infrastructure Setup & AWS Configuration | Highest | 21 | Sprint 1 | Phase 0 |
-| **BCI-2** | PACER Filing Monitor & Document Download | Highest | 34 | Sprint 2-3 | Phase 1 |
-| **BCI-3** | Document Parsing Engine | Highest | 55 | Sprint 3-4 | Phase 1 |
-| **BCI-4** | ZoomInfo Enrichment Pipeline | Highest | 34 | Sprint 4-5 | Phase 1 |
-| **BCI-5** | Salesforce Integration | Highest | 55 | Sprint 5-6 | Phase 1 |
-| **BCI-6** | Schedule F Monitoring Queue | High | 55 | Sprint 7-8 | Phase 2 |
-| **BCI-7** | Historical Database Import & Exposure Tracking | Medium | 34 | Sprint 9 | Phase 3 |
-| **BCI-8** | DevOps, Monitoring & Security | Highest | 21 | Continuous | All |
+| **AU_GROUP-1** | Infrastructure Setup & AWS Configuration | Highest | 21 | Sprint 1 | Phase 0 |
+| **AU_GROUP-2** | PACER Filing Monitor & Document Download | Highest | 34 | Sprint 2-3 | Phase 1 |
+| **AU_GROUP-3** | Document Parsing Engine | Highest | 55 | Sprint 3-4 | Phase 1 |
+| **AU_GROUP-4** | ZoomInfo Enrichment Pipeline | Highest | 34 | Sprint 4-5 | Phase 1 |
+| **AU_GROUP-5** | Salesforce Integration | Highest | 55 | Sprint 5-6 | Phase 1 |
+| **AU_GROUP-6** | Schedule F Monitoring Queue | High | 55 | Sprint 7-8 | Phase 2 |
+| **AU_GROUP-7** | Historical Database Import & Exposure Tracking | Medium | 34 | Sprint 9 | Phase 3 |
+| **AU_GROUP-8** | DevOps, Monitoring & Security | Highest | 21 | Continuous | All |
 
 **Total Story Points:** 309 points  
 **Estimated Duration:** 9 sprints (18 weeks / ~4.5 months)  
@@ -43,7 +43,7 @@
 
 ## Phase 0: Infrastructure & Setup (Week 0)
 
-### Epic BCI-1: Infrastructure Setup & AWS Configuration
+### Epic AU_GROUP-1: Infrastructure Setup & AWS Configuration
 
 **Epic Description:** Set up AWS infrastructure, networking, database, and core services required for the platform.
 
@@ -58,7 +58,7 @@
 
 ---
 
-### Story BCI-1.1: AWS VPC & Network Configuration (Backend/Infrastructure)
+### Story AU_GROUP-1.1: AWS VPC & Network Configuration (Backend/Infrastructure)
 
 **Priority:** Highest  
 **Story Points:** 5  
@@ -79,7 +79,7 @@ As a DevOps engineer, I need to set up a secure VPC with public and private subn
 
 **Tasks:**
 
-#### Task BCI-1.1.1: Create VPC and Subnets
+#### Task AU_GROUP-1.1.1: Create VPC and Subnets
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `aws-vpc`
@@ -96,7 +96,7 @@ As a DevOps engineer, I need to set up a secure VPC with public and private subn
 
 ---
 
-#### Task BCI-1.1.2: Configure NAT Gateway and Internet Gateway
+#### Task AU_GROUP-1.1.2: Configure NAT Gateway and Internet Gateway
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `aws-networking`
@@ -114,7 +114,7 @@ As a DevOps engineer, I need to set up a secure VPC with public and private subn
 
 ---
 
-#### Task BCI-1.1.3: Configure Security Groups
+#### Task AU_GROUP-1.1.3: Configure Security Groups
 **Assignee:** DevOps Engineer  
 **Story Points:** 1  
 **Labels:** `infrastructure`, `security`
@@ -132,13 +132,13 @@ As a DevOps engineer, I need to set up a secure VPC with public and private subn
 
 ---
 
-### Story BCI-1.2: EC2 Instance Provisioning (Backend/Infrastructure)
+### Story AU_GROUP-1.2: EC2 Instance Provisioning (Backend/Infrastructure)
 
 **Priority:** Highest  
 **Story Points:** 3  
 **Labels:** `infrastructure`, `aws-ec2`, `phase-0`  
 **Sprint:** Sprint 1  
-**Dependencies:** BCI-1.1 (VPC setup)
+**Dependencies:** AU_GROUP-1.1 (VPC setup)
 
 **Description:**
 As a DevOps engineer, I need to provision an EC2 instance in the private subnet so that the application can run securely without direct internet exposure.
@@ -153,7 +153,7 @@ As a DevOps engineer, I need to provision an EC2 instance in the private subnet 
 
 **Tasks:**
 
-#### Task BCI-1.2.1: Provision EC2 Instance
+#### Task AU_GROUP-1.2.1: Provision EC2 Instance
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `aws-ec2`
@@ -171,7 +171,7 @@ As a DevOps engineer, I need to provision an EC2 instance in the private subnet 
 
 ---
 
-#### Task BCI-1.2.2: Install System Dependencies
+#### Task AU_GROUP-1.2.2: Install System Dependencies
 **Assignee:** Backend Engineer  
 **Story Points:** 1  
 **Labels:** `infrastructure`, `setup`
@@ -190,13 +190,13 @@ As a DevOps engineer, I need to provision an EC2 instance in the private subnet 
 
 ---
 
-### Story BCI-1.3: RDS PostgreSQL Database Setup (Backend/Infrastructure)
+### Story AU_GROUP-1.3: RDS PostgreSQL Database Setup (Backend/Infrastructure)
 
 **Priority:** Highest  
 **Story Points:** 5  
 **Labels:** `infrastructure`, `database`, `aws-rds`, `phase-0`  
 **Sprint:** Sprint 1  
-**Dependencies:** BCI-1.1 (VPC setup)
+**Dependencies:** AU_GROUP-1.1 (VPC setup)
 
 **Description:**
 As a backend engineer, I need a PostgreSQL database configured with encryption and proper networking so that the application can store creditor data securely.
@@ -211,7 +211,7 @@ As a backend engineer, I need a PostgreSQL database configured with encryption a
 
 **Tasks:**
 
-#### Task BCI-1.3.1: Create RDS PostgreSQL Instance
+#### Task AU_GROUP-1.3.1: Create RDS PostgreSQL Instance
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `aws-rds`
@@ -230,14 +230,14 @@ As a backend engineer, I need a PostgreSQL database configured with encryption a
 
 ---
 
-#### Task BCI-1.3.2: Apply Database Schema
+#### Task AU_GROUP-1.3.2: Apply Database Schema
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `database`, `schema`
 
 **Subtasks:**
 - Create Alembic migration: initial schema
-- Create tables: bankruptcies, creditors, bankruptcy_creditors, zoominfo_contacts, salesforce_accounts, processing_jobs, schedule_f_queue
+- Create tables: bankruptcies, creditors, bankruptcy_creditors, zoom_info_contacts, salesforce_accounts, processing_jobs, schedule_f_queue
 - Create indexes: filing_date, state, creditor_name (GIN for fuzzy matching)
 - Enable PostgreSQL extensions: uuid-ossp, pg_trgm
 - Run migration on RDS instance
@@ -250,13 +250,13 @@ As a backend engineer, I need a PostgreSQL database configured with encryption a
 
 ---
 
-### Story BCI-1.4: Redis ElastiCache Configuration (Backend/Infrastructure)
+### Story AU_GROUP-1.4: Redis ElastiCache Configuration (Backend/Infrastructure)
 
 **Priority:** Highest  
 **Story Points:** 3  
 **Labels:** `infrastructure`, `cache`, `aws-elasticache`, `phase-0`  
 **Sprint:** Sprint 1  
-**Dependencies:** BCI-1.1 (VPC setup)
+**Dependencies:** AU_GROUP-1.1 (VPC setup)
 
 **Description:**
 As a backend engineer, I need a Redis instance configured for Celery task queue and API response caching so that async jobs can be processed reliably.
@@ -271,7 +271,7 @@ As a backend engineer, I need a Redis instance configured for Celery task queue 
 
 **Tasks:**
 
-#### Task BCI-1.4.1: Create ElastiCache Redis Cluster
+#### Task AU_GROUP-1.4.1: Create ElastiCache Redis Cluster
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `aws-elasticache`
@@ -289,7 +289,7 @@ As a backend engineer, I need a Redis instance configured for Celery task queue 
 
 ---
 
-#### Task BCI-1.4.2: Configure Celery Broker Connection
+#### Task AU_GROUP-1.4.2: Configure Celery Broker Connection
 **Assignee:** Backend Engineer  
 **Story Points:** 1  
 **Labels:** `backend`, `celery`
@@ -306,13 +306,13 @@ As a backend engineer, I need a Redis instance configured for Celery task queue 
 
 ---
 
-### Story BCI-1.5: S3 Bucket & Lifecycle Policies (Backend/Infrastructure)
+### Story AU_GROUP-1.5: S3 Bucket & Lifecycle Policies (Backend/Infrastructure)
 
 **Priority:** High  
 **Story Points:** 2  
 **Labels:** `infrastructure`, `storage`, `aws-s3`, `phase-0`  
 **Sprint:** Sprint 1  
-**Dependencies:** BCI-1.1 (VPC setup)
+**Dependencies:** AU_GROUP-1.1 (VPC setup)
 
 **Description:**
 As a backend engineer, I need an S3 bucket configured with lifecycle policies so that raw PACER documents can be stored cost-effectively.
@@ -327,7 +327,7 @@ As a backend engineer, I need an S3 bucket configured with lifecycle policies so
 
 **Tasks:**
 
-#### Task BCI-1.5.1: Create S3 Bucket with Encryption
+#### Task AU_GROUP-1.5.1: Create S3 Bucket with Encryption
 **Assignee:** DevOps Engineer  
 **Story Points:** 1  
 **Labels:** `infrastructure`, `aws-s3`
@@ -346,7 +346,7 @@ As a backend engineer, I need an S3 bucket configured with lifecycle policies so
 
 ---
 
-#### Task BCI-1.5.2: Configure Lifecycle Policies
+#### Task AU_GROUP-1.5.2: Configure Lifecycle Policies
 **Assignee:** DevOps Engineer  
 **Story Points:** 1  
 **Labels:** `infrastructure`, `aws-s3`
@@ -363,7 +363,7 @@ As a backend engineer, I need an S3 bucket configured with lifecycle policies so
 
 ---
 
-### Story BCI-1.6: AWS Secrets Manager Configuration (Backend/Infrastructure)
+### Story AU_GROUP-1.6: AWS Secrets Manager Configuration (Backend/Infrastructure)
 
 **Priority:** Highest  
 **Story Points:** 3  
@@ -383,7 +383,7 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 
 **Tasks:**
 
-#### Task BCI-1.6.1: Create Secrets in Secrets Manager
+#### Task AU_GROUP-1.6.1: Create Secrets in Secrets Manager
 **Assignee:** DevOps Engineer  
 **Story Points:** 1  
 **Labels:** `infrastructure`, `security`
@@ -401,7 +401,7 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 
 ---
 
-#### Task BCI-1.6.2: Implement Secret Fetching in Application
+#### Task AU_GROUP-1.6.2: Implement Secret Fetching in Application
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `security`
@@ -422,7 +422,7 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 
 ## Phase 1: Daily Pipeline Foundation (Weeks 1-4)
 
-### Epic BCI-2: PACER Filing Monitor & Document Download
+### Epic AU_GROUP-2: PACER Filing Monitor & Document Download
 
 **Epic Description:** Implement daily polling of PACER for new Chapter 11 bankruptcy filings and automatic download of Form 201 (petition) and Form 204 (top 20 creditors).
 
@@ -435,13 +435,13 @@ As a backend engineer, I need all credentials stored in AWS Secrets Manager with
 
 ---
 
-### Story BCI-2.1: PACER API Client Integration (Backend)
+### Story AU_GROUP-2.1: PACER API Client Integration (Backend)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `integration`, `pacer`, `phase-1`  
 **Sprint:** Sprint 2  
-**Dependencies:** BCI-1.6 (Secrets Manager)
+**Dependencies:** AU_GROUP-1.6 (Secrets Manager)
 
 **Description:**
 As a backend engineer, I need a PACER API client that handles authentication and document download so that we can programmatically access bankruptcy filings.
@@ -456,7 +456,7 @@ As a backend engineer, I need a PACER API client that handles authentication and
 
 **Tasks:**
 
-#### Task BCI-2.1.1: Implement PACER Authentication
+#### Task AU_GROUP-2.1.1: Implement PACER Authentication
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `pacer`, `authentication`
@@ -475,7 +475,7 @@ As a backend engineer, I need a PACER API client that handles authentication and
 
 ---
 
-#### Task BCI-2.1.2: Implement Filing Search
+#### Task AU_GROUP-2.1.2: Implement Filing Search
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `pacer`, `search`
@@ -494,7 +494,7 @@ As a backend engineer, I need a PACER API client that handles authentication and
 
 ---
 
-#### Task BCI-2.1.3: Implement Document Download
+#### Task AU_GROUP-2.1.3: Implement Document Download
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `pacer`, `download`
@@ -513,13 +513,13 @@ As a backend engineer, I need a PACER API client that handles authentication and
 
 ---
 
-### Story BCI-2.2: Daily PACER Polling Job (Backend/AI-Automation)
+### Story AU_GROUP-2.2: Daily PACER Polling Job (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 5  
 **Labels:** `backend`, `celery`, `automation`, `phase-1`  
 **Sprint:** Sprint 2  
-**Dependencies:** BCI-2.1 (PACER client), BCI-1.4 (Redis/Celery)
+**Dependencies:** AU_GROUP-2.1 (PACER client), AU_GROUP-1.4 (Redis/Celery)
 
 **Description:**
 As a backend engineer, I need a scheduled Celery job that polls PACER daily for new filings so that we process 100% of filings in target states within 24 hours.
@@ -534,7 +534,7 @@ As a backend engineer, I need a scheduled Celery job that polls PACER daily for 
 
 **Tasks:**
 
-#### Task BCI-2.2.1: Create Celery Daily Polling Task
+#### Task AU_GROUP-2.2.1: Create Celery Daily Polling Task
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `celery`, `automation`
@@ -554,7 +554,7 @@ As a backend engineer, I need a scheduled Celery job that polls PACER daily for 
 
 ---
 
-#### Task BCI-2.2.2: Implement Idempotency and Error Handling
+#### Task AU_GROUP-2.2.2: Implement Idempotency and Error Handling
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `error-handling`
@@ -573,13 +573,13 @@ As a backend engineer, I need a scheduled Celery job that polls PACER daily for 
 
 ---
 
-### Story BCI-2.3: Form 201 & 204 Document Download (Backend)
+### Story AU_GROUP-2.3: Form 201 & 204 Document Download (Backend)
 
 **Priority:** Highest  
 **Story Points:** 5  
 **Labels:** `backend`, `document-processing`, `phase-1`  
 **Sprint:** Sprint 2-3  
-**Dependencies:** BCI-2.2 (Daily polling job)
+**Dependencies:** AU_GROUP-2.2 (Daily polling job)
 
 **Description:**
 As a backend engineer, I need automatic download of Form 201 (petition) and Form 204 (top 20 creditors) for each new filing so that we have the source documents for extraction.
@@ -593,7 +593,7 @@ As a backend engineer, I need automatic download of Form 201 (petition) and Form
 
 **Tasks:**
 
-#### Task BCI-2.3.1: Implement Form Download Logic
+#### Task AU_GROUP-2.3.1: Implement Form Download Logic
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `document-processing`
@@ -613,7 +613,7 @@ As a backend engineer, I need automatic download of Form 201 (petition) and Form
 
 ---
 
-#### Task BCI-2.3.2: Implement Parallel Download (Optimization)
+#### Task AU_GROUP-2.3.2: Implement Parallel Download (Optimization)
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `optimization`
@@ -630,13 +630,13 @@ As a backend engineer, I need automatic download of Form 201 (petition) and Form
 
 ---
 
-### Story BCI-2.4: Debtor Metadata Extraction (Backend/AI-Automation)
+### Story AU_GROUP-2.4: Debtor Metadata Extraction (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `ai`, `document-parsing`, `phase-1`  
 **Sprint:** Sprint 3  
-**Dependencies:** BCI-2.3 (Form download)
+**Dependencies:** AU_GROUP-2.3 (Form download)
 
 **Description:**
 As a backend engineer, I need to extract debtor metadata from Form 201 (petition) using PyPDF2 so that we can populate the `bankruptcies` table with structured data.
@@ -650,7 +650,7 @@ As a backend engineer, I need to extract debtor metadata from Form 201 (petition
 
 **Tasks:**
 
-#### Task BCI-2.4.1: Implement Form 201 PDF Parser
+#### Task AU_GROUP-2.4.1: Implement Form 201 PDF Parser
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `document-parsing`
@@ -672,7 +672,7 @@ As a backend engineer, I need to extract debtor metadata from Form 201 (petition
 
 ---
 
-#### Task BCI-2.4.2: Integrate Extraction with Celery Pipeline
+#### Task AU_GROUP-2.4.2: Integrate Extraction with Celery Pipeline
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `celery`
@@ -691,13 +691,13 @@ As a backend engineer, I need to extract debtor metadata from Form 201 (petition
 
 ---
 
-### Story BCI-2.5: Top 20 Creditor Extraction (Backend/AI-Automation)
+### Story AU_GROUP-2.5: Top 20 Creditor Extraction (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `ai`, `document-parsing`, `phase-1`  
 **Sprint:** Sprint 3  
-**Dependencies:** BCI-2.3 (Form download)
+**Dependencies:** AU_GROUP-2.3 (Form download)
 
 **Description:**
 As a backend engineer, I need to extract the top 20 unsecured creditors from Form 204 so that we have immediate leads on day one without manual document review.
@@ -711,7 +711,7 @@ As a backend engineer, I need to extract the top 20 unsecured creditors from For
 
 **Tasks:**
 
-#### Task BCI-2.5.1: Implement Form 204 PDF Parser
+#### Task AU_GROUP-2.5.1: Implement Form 204 PDF Parser
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `document-parsing`
@@ -731,7 +731,7 @@ As a backend engineer, I need to extract the top 20 unsecured creditors from For
 
 ---
 
-#### Task BCI-2.5.2: Save Creditors to Database
+#### Task AU_GROUP-2.5.2: Save Creditors to Database
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `database`
@@ -750,7 +750,7 @@ As a backend engineer, I need to extract the top 20 unsecured creditors from For
 
 ---
 
-## Epic BCI-3: Document Parsing Engine
+## Epic AU_GROUP-3: Document Parsing Engine
 
 **Epic Description:** Build a multi-format document parsing engine that handles structured PDFs, simple creditor lists, and OCR for scanned documents.
 
@@ -763,13 +763,13 @@ As a backend engineer, I need to extract the top 20 unsecured creditors from For
 
 ---
 
-### Story BCI-3.1: Structured Schedule E/F Parser (Backend/AI-Automation)
+### Story AU_GROUP-3.1: Structured Schedule E/F Parser (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 13  
 **Labels:** `backend`, `ai`, `document-parsing`, `phase-1`  
 **Sprint:** Sprint 3-4  
-**Dependencies:** BCI-2.1 (PACER client)
+**Dependencies:** AU_GROUP-2.1 (PACER client)
 
 **Description:**
 As a backend engineer, I need to parse structured Schedule E/F documents (Form 206E/F tabular format) to extract all unsecured creditors with full details.
@@ -783,7 +783,7 @@ As a backend engineer, I need to parse structured Schedule E/F documents (Form 2
 
 **Tasks:**
 
-#### Task BCI-3.1.1: Implement Table Detection and Extraction
+#### Task AU_GROUP-3.1.1: Implement Table Detection and Extraction
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `document-parsing`, `tables`
@@ -804,7 +804,7 @@ As a backend engineer, I need to parse structured Schedule E/F documents (Form 2
 
 ---
 
-#### Task BCI-3.1.2: Implement Data Parsing and Validation
+#### Task AU_GROUP-3.1.2: Implement Data Parsing and Validation
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `data-processing`
@@ -825,13 +825,13 @@ As a backend engineer, I need to parse structured Schedule E/F documents (Form 2
 
 ---
 
-### Story BCI-3.2: Simple Creditor List Parser (Backend/AI-Automation)
+### Story AU_GROUP-3.2: Simple Creditor List Parser (Backend/AI-Automation)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `backend`, `ai`, `document-parsing`, `phase-1`  
 **Sprint:** Sprint 4  
-**Dependencies:** BCI-3.1 (Structured parser)
+**Dependencies:** AU_GROUP-3.1 (Structured parser)
 
 **Description:**
 As a backend engineer, I need to parse simple creditor lists (name and address only, no amounts or dates) from text-based attachments so that smaller filings can be processed.
@@ -845,7 +845,7 @@ As a backend engineer, I need to parse simple creditor lists (name and address o
 
 **Tasks:**
 
-#### Task BCI-3.2.1: Implement Text-Based Creditor Extraction
+#### Task AU_GROUP-3.2.1: Implement Text-Based Creditor Extraction
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `nlp`, `document-parsing`
@@ -865,7 +865,7 @@ As a backend engineer, I need to parse simple creditor lists (name and address o
 
 ---
 
-#### Task BCI-3.2.2: Implement Company vs. Individual Classification
+#### Task AU_GROUP-3.2.2: Implement Company vs. Individual Classification
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `ai`, `nlp`
@@ -885,13 +885,13 @@ As a backend engineer, I need to parse simple creditor lists (name and address o
 
 ---
 
-### Story BCI-3.3: OCR Engine for Scanned Documents (Backend/AI-Automation)
+### Story AU_GROUP-3.3: OCR Engine for Scanned Documents (Backend/AI-Automation)
 
 **Priority:** High  
 **Story Points:** 13  
 **Labels:** `backend`, `ai`, `ocr`, `phase-1`  
 **Sprint:** Sprint 4  
-**Dependencies:** BCI-3.1 (Structured parser)
+**Dependencies:** AU_GROUP-3.1 (Structured parser)
 
 **Description:**
 As a backend engineer, I need OCR capability for scanned/handwritten Schedule F documents so that we can process small business filings that are submitted as images.
@@ -905,7 +905,7 @@ As a backend engineer, I need OCR capability for scanned/handwritten Schedule F 
 
 **Tasks:**
 
-#### Task BCI-3.3.1: Implement Tesseract OCR Integration
+#### Task AU_GROUP-3.3.1: Implement Tesseract OCR Integration
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `ocr`
@@ -927,7 +927,7 @@ As a backend engineer, I need OCR capability for scanned/handwritten Schedule F 
 
 ---
 
-#### Task BCI-3.3.2: Implement Low-Confidence Flagging
+#### Task AU_GROUP-3.3.2: Implement Low-Confidence Flagging
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `quality-control`
@@ -946,13 +946,13 @@ As a backend engineer, I need OCR capability for scanned/handwritten Schedule F 
 
 ---
 
-#### Task BCI-3.3.3: Implement Post-OCR Creditor Extraction
+#### Task AU_GROUP-3.3.3: Implement Post-OCR Creditor Extraction
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `nlp`
 
 **Subtasks:**
-- Parse OCR text using simple creditor list parser (reuse BCI-3.2)
+- Parse OCR text using simple creditor list parser (reuse AU_GROUP-3.2)
 - Extract creditor names and addresses from OCR text
 - Apply company/individual classification
 - Save creditors to database if confidence ≥ 80%
@@ -964,13 +964,13 @@ As a backend engineer, I need OCR capability for scanned/handwritten Schedule F 
 
 ---
 
-### Story BCI-3.4: Creditor Deduplication (Backend/AI-Automation)
+### Story AU_GROUP-3.4: Creditor Deduplication (Backend/AI-Automation)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `backend`, `ai`, `data-quality`, `phase-1`  
 **Sprint:** Sprint 4  
-**Dependencies:** BCI-3.1 (Creditor extraction)
+**Dependencies:** AU_GROUP-3.1 (Creditor extraction)
 
 **Description:**
 As a backend engineer, I need to deduplicate creditor entries within a single filing (same company listed multiple times with slight variations) so that we don't create duplicate enrichment requests.
@@ -984,7 +984,7 @@ As a backend engineer, I need to deduplicate creditor entries within a single fi
 
 **Tasks:**
 
-#### Task BCI-3.4.1: Implement Fuzzy Matching
+#### Task AU_GROUP-3.4.1: Implement Fuzzy Matching
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `data-quality`
@@ -1005,7 +1005,7 @@ As a backend engineer, I need to deduplicate creditor entries within a single fi
 
 ---
 
-#### Task BCI-3.4.2: Integrate Deduplication into Pipeline
+#### Task AU_GROUP-3.4.2: Integrate Deduplication into Pipeline
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `celery`
@@ -1023,13 +1023,13 @@ As a backend engineer, I need to deduplicate creditor entries within a single fi
 
 ---
 
-### Story BCI-3.5: Page Classification for Multi-Document Filings (Backend/AI-Automation)
+### Story AU_GROUP-3.5: Page Classification for Multi-Document Filings (Backend/AI-Automation)
 
 **Priority:** Medium  
 **Story Points:** 13  
 **Labels:** `backend`, `ai`, `document-processing`, `phase-1`  
 **Sprint:** Sprint 4  
-**Dependencies:** BCI-3.1 (Structured parser)
+**Dependencies:** AU_GROUP-3.1 (Structured parser)
 
 **Description:**
 As a backend engineer, I need to classify pages in large dockets (200+ pages) to identify creditor list pages so that we only parse relevant sections.
@@ -1043,7 +1043,7 @@ As a backend engineer, I need to classify pages in large dockets (200+ pages) to
 
 **Tasks:**
 
-#### Task BCI-3.5.1: Implement Rule-Based Page Classification
+#### Task AU_GROUP-3.5.1: Implement Rule-Based Page Classification
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `document-processing`
@@ -1064,7 +1064,7 @@ As a backend engineer, I need to classify pages in large dockets (200+ pages) to
 
 ---
 
-#### Task BCI-3.5.2: Integrate Page Classification into Parser
+#### Task AU_GROUP-3.5.2: Integrate Page Classification into Parser
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `optimization`
@@ -1083,7 +1083,7 @@ As a backend engineer, I need to classify pages in large dockets (200+ pages) to
 
 ---
 
-#### Task BCI-3.5.3: Implement False Negative Detection
+#### Task AU_GROUP-3.5.3: Implement False Negative Detection
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `quality-control`
@@ -1101,7 +1101,7 @@ As a backend engineer, I need to classify pages in large dockets (200+ pages) to
 
 ---
 
-## Epic BCI-4: ZoomInfo Enrichment Pipeline
+## Epic AU_GROUP-4: ZoomInfo Enrichment Pipeline
 
 **Epic Description:** Integrate with ZoomInfo API to enrich creditor companies with firmographic data and decision-maker contacts using tier-based targeting rules.
 
@@ -1114,13 +1114,13 @@ As a backend engineer, I need to classify pages in large dockets (200+ pages) to
 
 ---
 
-### Story BCI-4.1: ZoomInfo API Client Integration (Backend)
+### Story AU_GROUP-4.1: ZoomInfo API Client Integration (Backend)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `integration`, `zoominfo`, `phase-1`  
 **Sprint:** Sprint 4-5  
-**Dependencies:** BCI-1.6 (Secrets Manager), BCI-1.4 (Redis)
+**Dependencies:** AU_GROUP-1.6 (Secrets Manager), AU_GROUP-1.4 (Redis)
 
 **Description:**
 As a backend engineer, I need a ZoomInfo API client that handles authentication, company lookup, and contact retrieval so that we can enrich creditor data.
@@ -1135,7 +1135,7 @@ As a backend engineer, I need a ZoomInfo API client that handles authentication,
 
 **Tasks:**
 
-#### Task BCI-4.1.1: Implement ZoomInfo Authentication and Company Lookup
+#### Task AU_GROUP-4.1.1: Implement ZoomInfo Authentication and Company Lookup
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `zoominfo`
@@ -1156,7 +1156,7 @@ As a backend engineer, I need a ZoomInfo API client that handles authentication,
 
 ---
 
-#### Task BCI-4.1.2: Implement Contact Retrieval with Title Filtering
+#### Task AU_GROUP-4.1.2: Implement Contact Retrieval with Title Filtering
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `zoominfo`
@@ -1175,13 +1175,13 @@ As a backend engineer, I need a ZoomInfo API client that handles authentication,
 
 ---
 
-### Story BCI-4.2: Tier-Based Targeting Rules Implementation (Backend)
+### Story AU_GROUP-4.2: Tier-Based Targeting Rules Implementation (Backend)
 
 **Priority:** Highest  
 **Story Points:** 5  
 **Labels:** `backend`, `business-logic`, `phase-1`  
 **Sprint:** Sprint 5  
-**Dependencies:** BCI-4.1 (ZoomInfo client)
+**Dependencies:** AU_GROUP-4.1 (ZoomInfo client)
 
 **Description:**
 As a backend engineer, I need to implement tier-based targeting rules that select appropriate contact titles based on company size so that we target the right decision-makers.
@@ -1196,7 +1196,7 @@ As a backend engineer, I need to implement tier-based targeting rules that selec
 
 **Tasks:**
 
-#### Task BCI-4.2.1: Implement Tier Classification
+#### Task AU_GROUP-4.2.1: Implement Tier Classification
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `business-logic`
@@ -1216,7 +1216,7 @@ As a backend engineer, I need to implement tier-based targeting rules that selec
 
 ---
 
-#### Task BCI-4.2.2: Implement Title Selection with Fallback
+#### Task AU_GROUP-4.2.2: Implement Title Selection with Fallback
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
@@ -1239,13 +1239,13 @@ As a backend engineer, I need to implement tier-based targeting rules that selec
 
 ---
 
-### Story BCI-4.3: ZoomInfo Enrichment Celery Job (Backend/AI-Automation)
+### Story AU_GROUP-4.3: ZoomInfo Enrichment Celery Job (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `celery`, `automation`, `phase-1`  
 **Sprint:** Sprint 5  
-**Dependencies:** BCI-4.2 (Targeting rules), BCI-3.2 (Company classification)
+**Dependencies:** AU_GROUP-4.2 (Targeting rules), AU_GROUP-3.2 (Company classification)
 
 **Description:**
 As a backend engineer, I need a Celery job that enriches company creditors with ZoomInfo data so that we have decision-maker contacts for outreach.
@@ -1254,13 +1254,13 @@ As a backend engineer, I need a Celery job that enriches company creditors with 
 - ✅ Job processes company creditors (skips individuals)
 - ✅ Company lookup and contact retrieval via ZoomInfo client
 - ✅ Tier-based targeting rules applied
-- ✅ Enriched data saved to `zoominfo_contacts` table
+- ✅ Enriched data saved to `zoom_info_contacts` table
 - ✅ 80%+ successful match rate achieved
 - ✅ Job completes within 4 hours for 1,000 companies
 
 **Tasks:**
 
-#### Task BCI-4.3.1: Implement ZoomInfo Enrichment Task
+#### Task AU_GROUP-4.3.1: Implement ZoomInfo Enrichment Task
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `celery`, `automation`
@@ -1287,7 +1287,7 @@ As a backend engineer, I need a Celery job that enriches company creditors with 
 
 ---
 
-#### Task BCI-4.3.2: Implement Batch Processing for Performance
+#### Task AU_GROUP-4.3.2: Implement Batch Processing for Performance
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `optimization`
@@ -1306,13 +1306,13 @@ As a backend engineer, I need a Celery job that enriches company creditors with 
 
 ---
 
-### Story BCI-4.4: Redis Caching for ZoomInfo Responses (Backend)
+### Story AU_GROUP-4.4: Redis Caching for ZoomInfo Responses (Backend)
 
 **Priority:** High  
 **Story Points:** 5  
 **Labels:** `backend`, `cache`, `cost-optimization`, `phase-1`  
 **Sprint:** Sprint 5  
-**Dependencies:** BCI-4.1 (ZoomInfo client)
+**Dependencies:** AU_GROUP-4.1 (ZoomInfo client)
 
 **Description:**
 As a backend engineer, I need to cache ZoomInfo API responses in Redis so that we reduce API costs when the same company appears in multiple bankruptcies.
@@ -1326,7 +1326,7 @@ As a backend engineer, I need to cache ZoomInfo API responses in Redis so that w
 
 **Tasks:**
 
-#### Task BCI-4.4.1: Implement Cache Layer
+#### Task AU_GROUP-4.4.1: Implement Cache Layer
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `cache`
@@ -1347,7 +1347,7 @@ As a backend engineer, I need to cache ZoomInfo API responses in Redis so that w
 
 ---
 
-#### Task BCI-4.4.2: Integrate Cache into Enrichment Pipeline
+#### Task AU_GROUP-4.4.2: Integrate Cache into Enrichment Pipeline
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `integration`
@@ -1366,13 +1366,13 @@ As a backend engineer, I need to cache ZoomInfo API responses in Redis so that w
 
 ---
 
-### Story BCI-4.5: Company Name Normalization (Backend/AI-Automation)
+### Story AU_GROUP-4.5: Company Name Normalization (Backend/AI-Automation)
 
 **Priority:** Medium  
 **Story Points:** 8  
 **Labels:** `backend`, `ai`, `data-quality`, `phase-1`  
 **Sprint:** Sprint 5  
-**Dependencies:** BCI-4.1 (ZoomInfo client)
+**Dependencies:** AU_GROUP-4.1 (ZoomInfo client)
 
 **Description:**
 As a backend engineer, I need to normalize company names (abbreviate long names, use canonical names) so that ZoomInfo lookups are more accurate.
@@ -1385,7 +1385,7 @@ As a backend engineer, I need to normalize company names (abbreviate long names,
 
 **Tasks:**
 
-#### Task BCI-4.5.1: Implement Name Normalization Rules
+#### Task AU_GROUP-4.5.1: Implement Name Normalization Rules
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `data-processing`
@@ -1408,7 +1408,7 @@ As a backend engineer, I need to normalize company names (abbreviate long names,
 
 ---
 
-#### Task BCI-4.5.2: Integrate Normalization into Lookup
+#### Task AU_GROUP-4.5.2: Integrate Normalization into Lookup
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `integration`
@@ -1426,7 +1426,7 @@ As a backend engineer, I need to normalize company names (abbreviate long names,
 
 ---
 
-## Epic BCI-5: Salesforce Integration
+## Epic AU_GROUP-5: Salesforce Integration
 
 **Epic Description:** Integrate with Salesforce to create/update accounts, log bankruptcy events, route leads to territory reps, and trigger automated outreach.
 
@@ -1439,7 +1439,7 @@ As a backend engineer, I need to normalize company names (abbreviate long names,
 
 ---
 
-### Story BCI-5.1: Salesforce Custom Objects & Fields (Design/Backend)
+### Story AU_GROUP-5.1: Salesforce Custom Objects & Fields (Design/Backend)
 
 **Priority:** Highest  
 **Story Points:** 8  
@@ -1459,7 +1459,7 @@ As a Salesforce admin, I need custom objects and fields configured in Salesforce
 
 **Tasks:**
 
-#### Task BCI-5.1.1: Create Bankruptcy_Event Custom Object
+#### Task AU_GROUP-5.1.1: Create Bankruptcy_Event Custom Object
 **Assignee:** Salesforce Admin / Backend Engineer  
 **Story Points:** 3  
 **Labels:** `salesforce`, `design`
@@ -1485,7 +1485,7 @@ As a Salesforce admin, I need custom objects and fields configured in Salesforce
 
 ---
 
-#### Task BCI-5.1.2: Add Custom Fields to Account Object
+#### Task AU_GROUP-5.1.2: Add Custom Fields to Account Object
 **Assignee:** Salesforce Admin  
 **Story Points:** 2  
 **Labels:** `salesforce`, `design`
@@ -1507,7 +1507,7 @@ As a Salesforce admin, I need custom objects and fields configured in Salesforce
 
 ---
 
-#### Task BCI-5.1.3: Configure Territory-Based Views and Access
+#### Task AU_GROUP-5.1.3: Configure Territory-Based Views and Access
 **Assignee:** Salesforce Admin  
 **Story Points:** 3  
 **Labels:** `salesforce`, `design`, `rbac`
@@ -1527,13 +1527,13 @@ As a Salesforce admin, I need custom objects and fields configured in Salesforce
 
 ---
 
-### Story BCI-5.2: Salesforce API Client Integration (Backend)
+### Story AU_GROUP-5.2: Salesforce API Client Integration (Backend)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `backend`, `integration`, `salesforce`, `phase-1`  
 **Sprint:** Sprint 5-6  
-**Dependencies:** BCI-5.1 (Salesforce objects), BCI-1.6 (Secrets Manager)
+**Dependencies:** AU_GROUP-5.1 (Salesforce objects), AU_GROUP-1.6 (Secrets Manager)
 
 **Description:**
 As a backend engineer, I need a Salesforce API client that handles authentication and CRUD operations so that we can create/update accounts and bankruptcy events.
@@ -1548,7 +1548,7 @@ As a backend engineer, I need a Salesforce API client that handles authenticatio
 
 **Tasks:**
 
-#### Task BCI-5.2.1: Implement Salesforce OAuth Authentication
+#### Task AU_GROUP-5.2.1: Implement Salesforce OAuth Authentication
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `salesforce`, `authentication`
@@ -1568,7 +1568,7 @@ As a backend engineer, I need a Salesforce API client that handles authenticatio
 
 ---
 
-#### Task BCI-5.2.2: Implement Account CRUD Operations
+#### Task AU_GROUP-5.2.2: Implement Account CRUD Operations
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `salesforce`
@@ -1588,13 +1588,13 @@ As a backend engineer, I need a Salesforce API client that handles authenticatio
 
 ---
 
-### Story BCI-5.3: Salesforce Push Celery Job (Backend/AI-Automation)
+### Story AU_GROUP-5.3: Salesforce Push Celery Job (Backend/AI-Automation)
 
 **Priority:** Highest  
 **Story Points:** 13  
 **Labels:** `backend`, `celery`, `automation`, `phase-1`  
 **Sprint:** Sprint 6  
-**Dependencies:** BCI-5.2 (Salesforce client), BCI-4.3 (ZoomInfo enrichment)
+**Dependencies:** AU_GROUP-5.2 (Salesforce client), AU_GROUP-4.3 (ZoomInfo enrichment)
 
 **Description:**
 As a backend engineer, I need a Celery job that pushes enriched leads to Salesforce with territory routing so that reps can view leads immediately.
@@ -1609,7 +1609,7 @@ As a backend engineer, I need a Celery job that pushes enriched leads to Salesfo
 
 **Tasks:**
 
-#### Task BCI-5.3.1: Implement Salesforce Push Task
+#### Task AU_GROUP-5.3.1: Implement Salesforce Push Task
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `celery`, `automation`
@@ -1637,7 +1637,7 @@ As a backend engineer, I need a Celery job that pushes enriched leads to Salesfo
 
 ---
 
-#### Task BCI-5.3.2: Implement Territory Routing Logic
+#### Task AU_GROUP-5.3.2: Implement Territory Routing Logic
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
@@ -1659,7 +1659,7 @@ As a backend engineer, I need a Celery job that pushes enriched leads to Salesfo
 
 ---
 
-#### Task BCI-5.3.3: Implement Do-Not-Contact and Active Engagement Checks
+#### Task AU_GROUP-5.3.3: Implement Do-Not-Contact and Active Engagement Checks
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `business-logic`
@@ -1680,13 +1680,13 @@ As a backend engineer, I need a Celery job that pushes enriched leads to Salesfo
 
 ---
 
-### Story BCI-5.4: Automated Outreach Triggering (Backend)
+### Story AU_GROUP-5.4: Automated Outreach Triggering (Backend)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `backend`, `integration`, `automation`, `phase-1`  
 **Sprint:** Sprint 6  
-**Dependencies:** BCI-5.3 (Salesforce push)
+**Dependencies:** AU_GROUP-5.3 (Salesforce push)
 
 **Description:**
 As a backend engineer, I need to trigger automated email sequences via ZoomInfo Engage/SalesLoft for net-new qualified leads so that outreach happens within 24 hours.
@@ -1700,7 +1700,7 @@ As a backend engineer, I need to trigger automated email sequences via ZoomInfo 
 
 **Tasks:**
 
-#### Task BCI-5.4.1: Integrate with ZoomInfo Engage API
+#### Task AU_GROUP-5.4.1: Integrate with ZoomInfo Engage API
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `integration`, `zoominfo`
@@ -1720,7 +1720,7 @@ As a backend engineer, I need to trigger automated email sequences via ZoomInfo 
 
 ---
 
-#### Task BCI-5.4.2: Implement Outreach Timing Logic (T+1)
+#### Task AU_GROUP-5.4.2: Implement Outreach Timing Logic (T+1)
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
@@ -1739,13 +1739,13 @@ As a backend engineer, I need to trigger automated email sequences via ZoomInfo 
 
 ---
 
-### Story BCI-5.5: Historical Exposure Calculation (Backend)
+### Story AU_GROUP-5.5: Historical Exposure Calculation (Backend)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `backend`, `business-logic`, `phase-1`  
 **Sprint:** Sprint 6  
-**Dependencies:** BCI-5.3 (Salesforce push)
+**Dependencies:** AU_GROUP-5.3 (Salesforce push)
 
 **Description:**
 As a backend engineer, I need to calculate cumulative bankruptcy exposure for each creditor (number of filings, total claim amounts, date range) so that historical context is visible in Salesforce.
@@ -1759,7 +1759,7 @@ As a backend engineer, I need to calculate cumulative bankruptcy exposure for ea
 
 **Tasks:**
 
-#### Task BCI-5.5.1: Implement Exposure Calculation
+#### Task AU_GROUP-5.5.1: Implement Exposure Calculation
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `business-logic`
@@ -1782,7 +1782,7 @@ As a backend engineer, I need to calculate cumulative bankruptcy exposure for ea
 
 ---
 
-#### Task BCI-5.5.2: Integrate Exposure Calculation into Pipeline
+#### Task AU_GROUP-5.5.2: Integrate Exposure Calculation into Pipeline
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `celery`
@@ -1802,7 +1802,7 @@ As a backend engineer, I need to calculate cumulative bankruptcy exposure for ea
 
 ## Phase 2: Schedule F Monitoring (Weeks 5-7)
 
-### Epic BCI-6: Schedule F Monitoring Queue
+### Epic AU_GROUP-6: Schedule F Monitoring Queue
 
 **Epic Description:** Implement active docket monitoring that scans for Schedule F publication and human-in-the-loop purchase approval workflow.
 
@@ -1815,13 +1815,13 @@ As a backend engineer, I need to calculate cumulative bankruptcy exposure for ea
 
 ---
 
-### Story BCI-6.1: Schedule F Monitoring Queue Database (Backend)
+### Story AU_GROUP-6.1: Schedule F Monitoring Queue Database (Backend)
 
 **Priority:** High  
 **Story Points:** 5  
 **Labels:** `backend`, `database`, `phase-2`  
 **Sprint:** Sprint 7  
-**Dependencies:** BCI-2.2 (Daily polling job)
+**Dependencies:** AU_GROUP-2.2 (Daily polling job)
 
 **Description:**
 As a backend engineer, I need a database table to track active bankruptcy cases for Schedule F monitoring so that we can systematically scan dockets.
@@ -1835,13 +1835,13 @@ As a backend engineer, I need a database table to track active bankruptcy cases 
 
 **Tasks:**
 
-#### Task BCI-6.1.1: Create Schedule F Queue Schema
+#### Task AU_GROUP-6.1.1: Create Schedule F Queue Schema
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `database`
 
 **Subtasks:**
-- Add `schedule_f_queue` table (already in schema from BCI-1.3.2)
+- Add `schedule_f_queue` table (already in schema from AU_GROUP-1.3.2)
 - Add indexes: status, last_scanned_at
 - Create Alembic migration
 - Run migration on RDS instance
@@ -1852,7 +1852,7 @@ As a backend engineer, I need a database table to track active bankruptcy cases 
 
 ---
 
-#### Task BCI-6.1.2: Implement Queue Management Functions
+#### Task AU_GROUP-6.1.2: Implement Queue Management Functions
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
@@ -1870,13 +1870,13 @@ As a backend engineer, I need a database table to track active bankruptcy cases 
 
 ---
 
-### Story BCI-6.2: Weekly Docket Scanning Job (Backend/AI-Automation)
+### Story AU_GROUP-6.2: Weekly Docket Scanning Job (Backend/AI-Automation)
 
 **Priority:** High  
 **Story Points:** 13  
 **Labels:** `backend`, `celery`, `automation`, `phase-2`  
 **Sprint:** Sprint 7  
-**Dependencies:** BCI-6.1 (Queue database), BCI-2.1 (PACER client)
+**Dependencies:** AU_GROUP-6.1 (Queue database), AU_GROUP-2.1 (PACER client)
 
 **Description:**
 As a backend engineer, I need a scheduled Celery job that scans dockets weekly for Schedule F publication so that we detect full creditor lists within 7 days.
@@ -1890,7 +1890,7 @@ As a backend engineer, I need a scheduled Celery job that scans dockets weekly f
 
 **Tasks:**
 
-#### Task BCI-6.2.1: Implement Docket Scanning Task
+#### Task AU_GROUP-6.2.1: Implement Docket Scanning Task
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `celery`, `automation`
@@ -1916,7 +1916,7 @@ As a backend engineer, I need a scheduled Celery job that scans dockets weekly f
 
 ---
 
-#### Task BCI-6.2.2: Implement Concurrent Docket Fetching
+#### Task AU_GROUP-6.2.2: Implement Concurrent Docket Fetching
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `optimization`
@@ -1934,13 +1934,13 @@ As a backend engineer, I need a scheduled Celery job that scans dockets weekly f
 
 ---
 
-### Story BCI-6.3: PACER Favorites Purchase Approval Workflow (Backend)
+### Story AU_GROUP-6.3: PACER Favorites Purchase Approval Workflow (Backend)
 
 **Priority:** High  
 **Story Points:** 13  
 **Labels:** `backend`, `integration`, `pacer`, `phase-2`  
 **Sprint:** Sprint 7-8  
-**Dependencies:** BCI-6.2 (Docket scanning)
+**Dependencies:** AU_GROUP-6.2 (Docket scanning)
 
 **Description:**
 As a backend engineer, I need to integrate with PACER favorites feature so that Keith can approve/reject Schedule F purchases with zero manual data entry.
@@ -1954,7 +1954,7 @@ As a backend engineer, I need to integrate with PACER favorites feature so that 
 
 **Tasks:**
 
-#### Task BCI-6.3.1: Implement PACER Favorites API Integration
+#### Task AU_GROUP-6.3.1: Implement PACER Favorites API Integration
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `pacer`, `integration`
@@ -1973,7 +1973,7 @@ As a backend engineer, I need to integrate with PACER favorites feature so that 
 
 ---
 
-#### Task BCI-6.3.2: Implement Hourly Favorites Sync Job
+#### Task AU_GROUP-6.3.2: Implement Hourly Favorites Sync Job
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `celery`, `automation`
@@ -1998,13 +1998,13 @@ As a backend engineer, I need to integrate with PACER favorites feature so that 
 
 ---
 
-### Story BCI-6.4: Schedule F Document Download & Parsing (Backend/AI-Automation)
+### Story AU_GROUP-6.4: Schedule F Document Download & Parsing (Backend/AI-Automation)
 
 **Priority:** High  
 **Story Points:** 13  
 **Labels:** `backend`, `document-processing`, `automation`, `phase-2`  
 **Sprint:** Sprint 8  
-**Dependencies:** BCI-6.3 (Purchase approval), BCI-3 (Parsing engine)
+**Dependencies:** AU_GROUP-6.3 (Purchase approval), AU_GROUP-3 (Parsing engine)
 
 **Description:**
 As a backend engineer, I need to automatically download and parse approved Schedule F documents so that all creditors are extracted without manual effort.
@@ -2018,7 +2018,7 @@ As a backend engineer, I need to automatically download and parse approved Sched
 
 **Tasks:**
 
-#### Task BCI-6.4.1: Implement Schedule F Download Task
+#### Task AU_GROUP-6.4.1: Implement Schedule F Download Task
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `celery`, `automation`
@@ -2038,7 +2038,7 @@ As a backend engineer, I need to automatically download and parse approved Sched
 
 ---
 
-#### Task BCI-6.4.2: Implement Format Detection and Parsing
+#### Task AU_GROUP-6.4.2: Implement Format Detection and Parsing
 **Assignee:** Backend Engineer  
 **Story Points:** 8  
 **Labels:** `backend`, `document-processing`
@@ -2047,14 +2047,14 @@ As a backend engineer, I need to automatically download and parse approved Sched
 - Create Celery task: `parse_schedule_f(queue_id)`
 - Detect document format:
   1. Attempt structured parsing (pdfplumber table extraction)
-  2. If tables found: use structured parser (BCI-3.1)
-  3. If no tables: attempt simple text parsing (BCI-3.2)
-  4. If text quality poor (< 80% confidence): apply OCR (BCI-3.3)
+  2. If tables found: use structured parser (AU_GROUP-3.1)
+  3. If no tables: attempt simple text parsing (AU_GROUP-3.2)
+  4. If text quality poor (< 80% confidence): apply OCR (AU_GROUP-3.3)
 - Parse creditors using appropriate parser
-- Apply deduplication (BCI-3.4)
+- Apply deduplication (AU_GROUP-3.4)
 - Save creditors to `creditors` and `bankruptcy_creditors` tables
 - Update `schedule_f_queue.status` = 'processed'
-- Proceed to ZoomInfo enrichment (trigger BCI-4.3 task)
+- Proceed to ZoomInfo enrichment (trigger AU_GROUP-4.3 task)
 
 **Acceptance Criteria:**
 - Format detected correctly
@@ -2064,13 +2064,13 @@ As a backend engineer, I need to automatically download and parse approved Sched
 
 ---
 
-### Story BCI-6.5: Schedule F Alert Generation (Backend/Design)
+### Story AU_GROUP-6.5: Schedule F Alert Generation (Backend/Design)
 
 **Priority:** Medium  
 **Story Points:** 5  
 **Labels:** `backend`, `design`, `alerts`, `phase-2`  
 **Sprint:** Sprint 8  
-**Dependencies:** BCI-6.2 (Docket scanning)
+**Dependencies:** AU_GROUP-6.2 (Docket scanning)
 
 **Description:**
 As a backend engineer, I need to generate alerts for Keith when Schedule F is detected so that he can review and approve purchases quickly.
@@ -2084,7 +2084,7 @@ As a backend engineer, I need to generate alerts for Keith when Schedule F is de
 
 **Tasks:**
 
-#### Task BCI-6.5.1: Implement Email Alert
+#### Task AU_GROUP-6.5.1: Implement Email Alert
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `alerts`
@@ -2105,7 +2105,7 @@ As a backend engineer, I need to generate alerts for Keith when Schedule F is de
 
 ---
 
-#### Task BCI-6.5.2: Optional: Implement Slack Alert
+#### Task AU_GROUP-6.5.2: Optional: Implement Slack Alert
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `alerts`, `optional`
@@ -2126,7 +2126,7 @@ As a backend engineer, I need to generate alerts for Keith when Schedule F is de
 
 ## Phase 3: Historical Database (Weeks 8-9)
 
-### Epic BCI-7: Historical Database Import & Exposure Tracking
+### Epic AU_GROUP-7: Historical Database Import & Exposure Tracking
 
 **Epic Description:** Import Keith's existing 25K-row Excel database of historical creditor-bankruptcy records and build creditor exposure tracking.
 
@@ -2139,13 +2139,13 @@ As a backend engineer, I need to generate alerts for Keith when Schedule F is de
 
 ---
 
-### Story BCI-7.1: Historical Data Import Script (Backend)
+### Story AU_GROUP-7.1: Historical Data Import Script (Backend)
 
 **Priority:** Medium  
 **Story Points:** 8  
 **Labels:** `backend`, `data-migration`, `phase-3`  
 **Sprint:** Sprint 9  
-**Dependencies:** BCI-1.3 (Database schema)
+**Dependencies:** AU_GROUP-1.3 (Database schema)
 
 **Description:**
 As a backend engineer, I need a data import script that loads Keith's 25K-row Excel database into PostgreSQL so that historical exposure data is available.
@@ -2159,7 +2159,7 @@ As a backend engineer, I need a data import script that loads Keith's 25K-row Ex
 
 **Tasks:**
 
-#### Task BCI-7.1.1: Implement Excel Parser
+#### Task AU_GROUP-7.1.1: Implement Excel Parser
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `data-processing`
@@ -2183,7 +2183,7 @@ As a backend engineer, I need a data import script that loads Keith's 25K-row Ex
 
 ---
 
-#### Task BCI-7.1.2: Implement Database Import
+#### Task AU_GROUP-7.1.2: Implement Database Import
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `database`
@@ -2205,13 +2205,13 @@ As a backend engineer, I need a data import script that loads Keith's 25K-row Ex
 
 ---
 
-### Story BCI-7.2: Creditor Exposure Calculation (Backend)
+### Story AU_GROUP-7.2: Creditor Exposure Calculation (Backend)
 
 **Priority:** Medium  
 **Story Points:** 8  
 **Labels:** `backend`, `business-logic`, `phase-3`  
 **Sprint:** Sprint 9  
-**Dependencies:** BCI-7.1 (Historical data import), BCI-5.5 (Exposure calculation function)
+**Dependencies:** AU_GROUP-7.1 (Historical data import), AU_GROUP-5.5 (Exposure calculation function)
 
 **Description:**
 As a backend engineer, I need to calculate creditor exposure scores for all creditors (historical + new) so that exposure data is available in Salesforce.
@@ -2225,7 +2225,7 @@ As a backend engineer, I need to calculate creditor exposure scores for all cred
 
 **Tasks:**
 
-#### Task BCI-7.2.1: Implement Batch Exposure Calculation
+#### Task AU_GROUP-7.2.1: Implement Batch Exposure Calculation
 **Assignee:** Backend Engineer  
 **Story Points:** 5  
 **Labels:** `backend`, `business-logic`
@@ -2233,7 +2233,7 @@ As a backend engineer, I need to calculate creditor exposure scores for all cred
 **Subtasks:**
 - Create Celery task: `calculate_all_exposures()`
 - Query all creditors with > 1 bankruptcy event
-- For each creditor: call `calculate_bankruptcy_exposure()` (reuse from BCI-5.5.1)
+- For each creditor: call `calculate_bankruptcy_exposure()` (reuse from AU_GROUP-5.5.1)
 - Update Salesforce Account fields (batch update, not one-by-one)
 - Log exposure calculation stats to `processing_jobs`
 - Add CloudWatch metric: `ExposureCalculationDuration`
@@ -2245,7 +2245,7 @@ As a backend engineer, I need to calculate creditor exposure scores for all cred
 
 ---
 
-#### Task BCI-7.2.2: Schedule Nightly Exposure Recalculation
+#### Task AU_GROUP-7.2.2: Schedule Nightly Exposure Recalculation
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `celery`, `automation`
@@ -2263,13 +2263,13 @@ As a backend engineer, I need to calculate creditor exposure scores for all cred
 
 ---
 
-### Story BCI-7.3: Two-Tier Email Logic (Repeat Exposure Flagging) (Backend)
+### Story AU_GROUP-7.3: Two-Tier Email Logic (Repeat Exposure Flagging) (Backend)
 
 **Priority:** Medium  
 **Story Points:** 8  
 **Labels:** `backend`, `business-logic`, `phase-3`  
 **Sprint:** Sprint 9  
-**Dependencies:** BCI-7.2 (Exposure calculation), BCI-5.4 (Outreach triggering)
+**Dependencies:** AU_GROUP-7.2 (Exposure calculation), AU_GROUP-5.4 (Outreach triggering)
 
 **Description:**
 As a backend engineer, I need to implement two-tier email logic that suppresses auto-send for repeat-exposure creditors and generates suggested alternate messaging.
@@ -2283,13 +2283,13 @@ As a backend engineer, I need to implement two-tier email logic that suppresses 
 
 **Tasks:**
 
-#### Task BCI-7.3.1: Implement Repeat Exposure Detection
+#### Task AU_GROUP-7.3.1: Implement Repeat Exposure Detection
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
 
 **Subtasks:**
-- Modify outreach trigger logic (BCI-5.4) to check repeat-exposure flag
+- Modify outreach trigger logic (AU_GROUP-5.4) to check repeat-exposure flag
 - Query Bankruptcy_Event__c for Account (WHERE Filing_Date__c > NOW() - 18 months)
 - Count events in 18-month window
 - If count ≥ 4: set `outreach_status` = 'flagged_repeat_exposure'
@@ -2302,7 +2302,7 @@ As a backend engineer, I need to implement two-tier email logic that suppresses 
 
 ---
 
-#### Task BCI-7.3.2: Generate Suggested Alternate Messaging
+#### Task AU_GROUP-7.3.2: Generate Suggested Alternate Messaging
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `business-logic`
@@ -2320,7 +2320,7 @@ As a backend engineer, I need to implement two-tier email logic that suppresses 
 
 ---
 
-#### Task BCI-7.3.3: Implement Manual Review Queue for Keith
+#### Task AU_GROUP-7.3.3: Implement Manual Review Queue for Keith
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `design`
@@ -2337,13 +2337,13 @@ As a backend engineer, I need to implement two-tier email logic that suppresses 
 
 ---
 
-### Story BCI-7.4: Salesforce Exposure Views (Design/Backend)
+### Story AU_GROUP-7.4: Salesforce Exposure Views (Design/Backend)
 
 **Priority:** Low  
 **Story Points:** 5  
 **Labels:** `design`, `salesforce`, `backend`, `phase-3`  
 **Sprint:** Sprint 9  
-**Dependencies:** BCI-7.2 (Exposure calculation)
+**Dependencies:** AU_GROUP-7.2 (Exposure calculation)
 
 **Description:**
 As a Salesforce admin, I need custom page layouts and dashboards that display creditor exposure history so that reps can reference it during outreach.
@@ -2356,7 +2356,7 @@ As a Salesforce admin, I need custom page layouts and dashboards that display cr
 
 **Tasks:**
 
-#### Task BCI-7.4.1: Update Account Page Layout
+#### Task AU_GROUP-7.4.1: Update Account Page Layout
 **Assignee:** Salesforce Admin  
 **Story Points:** 2  
 **Labels:** `salesforce`, `design`
@@ -2374,7 +2374,7 @@ As a Salesforce admin, I need custom page layouts and dashboards that display cr
 
 ---
 
-#### Task BCI-7.4.2: Create Exposure Dashboards and Reports
+#### Task AU_GROUP-7.4.2: Create Exposure Dashboards and Reports
 **Assignee:** Salesforce Admin  
 **Story Points:** 3  
 **Labels:** `salesforce`, `design`, `analytics`
@@ -2394,7 +2394,7 @@ As a Salesforce admin, I need custom page layouts and dashboards that display cr
 
 ## Continuous: QA & DevOps
 
-### Epic BCI-8: DevOps, Monitoring & Security
+### Epic AU_GROUP-8: DevOps, Monitoring & Security
 
 **Epic Description:** Set up CI/CD pipeline, monitoring dashboards, error tracking, and security hardening for production launch.
 
@@ -2408,7 +2408,7 @@ As a Salesforce admin, I need custom page layouts and dashboards that display cr
 
 ---
 
-### Story BCI-8.1: Automated Testing (QA/Backend)
+### Story AU_GROUP-8.1: Automated Testing (QA/Backend)
 
 **Priority:** High  
 **Story Points:** 13  
@@ -2428,17 +2428,17 @@ As a QA engineer, I need comprehensive automated tests (unit + integration) so t
 
 **Tasks:**
 
-#### Task BCI-8.1.1: Write Unit Tests for Core Modules
+#### Task AU_GROUP-8.1.1: Write Unit Tests for Core Modules
 **Assignee:** QA Engineer / Backend Engineer  
 **Story Points:** 8  
 **Labels:** `qa`, `testing`
 
 **Subtasks:**
-- Write unit tests for PDF parsers (BCI-3.1, BCI-3.2, BCI-3.3)
-- Write unit tests for creditor classification (BCI-3.2.2)
-- Write unit tests for deduplication (BCI-3.4.1)
-- Write unit tests for tier classification (BCI-4.2.1)
-- Write unit tests for exposure calculation (BCI-5.5.1)
+- Write unit tests for PDF parsers (AU_GROUP-3.1, AU_GROUP-3.2, AU_GROUP-3.3)
+- Write unit tests for creditor classification (AU_GROUP-3.2.2)
+- Write unit tests for deduplication (AU_GROUP-3.4.1)
+- Write unit tests for tier classification (AU_GROUP-4.2.1)
+- Write unit tests for exposure calculation (AU_GROUP-5.5.1)
 - Target: 80%+ code coverage
 - Use pytest + pytest-cov
 
@@ -2449,7 +2449,7 @@ As a QA engineer, I need comprehensive automated tests (unit + integration) so t
 
 ---
 
-#### Task BCI-8.1.2: Write Integration Tests for API Clients
+#### Task AU_GROUP-8.1.2: Write Integration Tests for API Clients
 **Assignee:** QA Engineer  
 **Story Points:** 5  
 **Labels:** `qa`, `testing`, `integration`
@@ -2468,13 +2468,13 @@ As a QA engineer, I need comprehensive automated tests (unit + integration) so t
 
 ---
 
-### Story BCI-8.2: CI/CD Pipeline (DevOps)
+### Story AU_GROUP-8.2: CI/CD Pipeline (DevOps)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `devops`, `ci-cd`, `continuous`  
 **Sprint:** Sprint 2 (setup), ongoing  
-**Dependencies:** BCI-8.1 (Testing)
+**Dependencies:** AU_GROUP-8.1 (Testing)
 
 **Description:**
 As a DevOps engineer, I need a CI/CD pipeline that automatically tests and deploys code so that deployments are fast, reliable, and repeatable.
@@ -2488,7 +2488,7 @@ As a DevOps engineer, I need a CI/CD pipeline that automatically tests and deplo
 
 **Tasks:**
 
-#### Task BCI-8.2.1: Configure GitHub Actions Workflow
+#### Task AU_GROUP-8.2.1: Configure GitHub Actions Workflow
 **Assignee:** DevOps Engineer  
 **Story Points:** 5  
 **Labels:** `devops`, `ci-cd`
@@ -2512,7 +2512,7 @@ As a DevOps engineer, I need a CI/CD pipeline that automatically tests and deplo
 
 ---
 
-#### Task BCI-8.2.2: Implement Rollback Procedure
+#### Task AU_GROUP-8.2.2: Implement Rollback Procedure
 **Assignee:** DevOps Engineer  
 **Story Points:** 3  
 **Labels:** `devops`, `incident-response`
@@ -2530,13 +2530,13 @@ As a DevOps engineer, I need a CI/CD pipeline that automatically tests and deplo
 
 ---
 
-### Story BCI-8.3: Monitoring Dashboards (DevOps)
+### Story AU_GROUP-8.3: Monitoring Dashboards (DevOps)
 
 **Priority:** High  
 **Story Points:** 8  
 **Labels:** `devops`, `monitoring`, `continuous`  
 **Sprint:** Sprint 3 (setup), ongoing  
-**Dependencies:** BCI-2 (Daily polling job)
+**Dependencies:** AU_GROUP-2 (Daily polling job)
 
 **Description:**
 As a DevOps engineer, I need CloudWatch dashboards that display key metrics so that we can monitor system health and performance.
@@ -2550,7 +2550,7 @@ As a DevOps engineer, I need CloudWatch dashboards that display key metrics so t
 
 **Tasks:**
 
-#### Task BCI-8.3.1: Create Daily Processing Dashboard
+#### Task AU_GROUP-8.3.1: Create Daily Processing Dashboard
 **Assignee:** DevOps Engineer  
 **Story Points:** 3  
 **Labels:** `devops`, `monitoring`
@@ -2571,7 +2571,7 @@ As a DevOps engineer, I need CloudWatch dashboards that display key metrics so t
 
 ---
 
-#### Task BCI-8.3.2: Create Infrastructure Dashboard
+#### Task AU_GROUP-8.3.2: Create Infrastructure Dashboard
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `devops`, `monitoring`
@@ -2593,7 +2593,7 @@ As a DevOps engineer, I need CloudWatch dashboards that display key metrics so t
 
 ---
 
-#### Task BCI-8.3.3: Create API Usage & Cost Dashboard
+#### Task AU_GROUP-8.3.3: Create API Usage & Cost Dashboard
 **Assignee:** DevOps Engineer  
 **Story Points:** 3  
 **Labels:** `devops`, `monitoring`, `cost-tracking`
@@ -2615,7 +2615,7 @@ As a DevOps engineer, I need CloudWatch dashboards that display key metrics so t
 
 ---
 
-### Story BCI-8.4: Error Tracking with Sentry (DevOps)
+### Story AU_GROUP-8.4: Error Tracking with Sentry (DevOps)
 
 **Priority:** High  
 **Story Points:** 5  
@@ -2635,7 +2635,7 @@ As a DevOps engineer, I need Sentry error tracking integrated so that we get rea
 
 **Tasks:**
 
-#### Task BCI-8.4.1: Integrate Sentry SDK
+#### Task AU_GROUP-8.4.1: Integrate Sentry SDK
 **Assignee:** Backend Engineer  
 **Story Points:** 3  
 **Labels:** `backend`, `monitoring`
@@ -2655,7 +2655,7 @@ As a DevOps engineer, I need Sentry error tracking integrated so that we get rea
 
 ---
 
-#### Task BCI-8.4.2: Configure Error Alerts
+#### Task AU_GROUP-8.4.2: Configure Error Alerts
 **Assignee:** DevOps Engineer  
 **Story Points:** 2  
 **Labels:** `devops`, `alerts`
@@ -2674,13 +2674,13 @@ As a DevOps engineer, I need Sentry error tracking integrated so that we get rea
 
 ---
 
-### Story BCI-8.5: Security Hardening (DevOps/Backend)
+### Story AU_GROUP-8.5: Security Hardening (DevOps/Backend)
 
 **Priority:** Highest  
 **Story Points:** 8  
 **Labels:** `devops`, `backend`, `security`, `continuous`  
 **Sprint:** Sprint 1 (setup), Sprint 8 (pre-launch audit)  
-**Dependencies:** BCI-1 (Infrastructure)
+**Dependencies:** AU_GROUP-1 (Infrastructure)
 
 **Description:**
 As a DevOps engineer, I need to harden security (dependency scanning, secrets audit, penetration testing) so that the system is secure before production launch.
@@ -2694,7 +2694,7 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Tasks:**
 
-#### Task BCI-8.5.1: Dependency Vulnerability Scanning
+#### Task AU_GROUP-8.5.1: Dependency Vulnerability Scanning
 **Assignee:** DevOps Engineer  
 **Story Points:** 3  
 **Labels:** `devops`, `security`
@@ -2712,7 +2712,7 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 ---
 
-#### Task BCI-8.5.2: Secrets Audit
+#### Task AU_GROUP-8.5.2: Secrets Audit
 **Assignee:** Backend Engineer  
 **Story Points:** 2  
 **Labels:** `backend`, `security`
@@ -2730,7 +2730,7 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 ---
 
-#### Task BCI-8.5.3: Security Group Audit
+#### Task AU_GROUP-8.5.3: Security Group Audit
 **Assignee:** DevOps Engineer  
 **Story Points:** 3  
 **Labels:** `devops`, `security`, `audit`
@@ -2760,17 +2760,17 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Set up AWS infrastructure, database, and core services.
 
-**Epic:** BCI-1 (Infrastructure Setup)
+**Epic:** AU_GROUP-1 (Infrastructure Setup)
 
 **Stories:**
-- BCI-1.1: AWS VPC & Network Configuration (5 points)
-- BCI-1.2: EC2 Instance Provisioning (3 points)
-- BCI-1.3: RDS PostgreSQL Database Setup (5 points)
-- BCI-1.4: Redis ElastiCache Configuration (3 points)
-- BCI-1.5: S3 Bucket & Lifecycle Policies (2 points)
-- BCI-1.6: AWS Secrets Manager Configuration (3 points)
-- BCI-8.4: Error Tracking with Sentry (5 points)
-- BCI-8.5: Security Hardening (8 points - only tasks 8.5.1 and 8.5.2)
+- AU_GROUP-1.1: AWS VPC & Network Configuration (5 points)
+- AU_GROUP-1.2: EC2 Instance Provisioning (3 points)
+- AU_GROUP-1.3: RDS PostgreSQL Database Setup (5 points)
+- AU_GROUP-1.4: Redis ElastiCache Configuration (3 points)
+- AU_GROUP-1.5: S3 Bucket & Lifecycle Policies (2 points)
+- AU_GROUP-1.6: AWS Secrets Manager Configuration (3 points)
+- AU_GROUP-8.4: Error Tracking with Sentry (5 points)
+- AU_GROUP-8.5: Security Hardening (8 points - only tasks 8.5.1 and 8.5.2)
 
 **Total:** 34 points  
 **Dependencies:** None  
@@ -2782,19 +2782,19 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Implement daily PACER polling and automatic download of Form 201/204.
 
-**Epic:** BCI-2 (PACER Filing Monitor)
+**Epic:** AU_GROUP-2 (PACER Filing Monitor)
 
 **Stories:**
-- BCI-2.1: PACER API Client Integration (8 points)
-- BCI-2.2: Daily PACER Polling Job (5 points)
-- BCI-2.3: Form 201 & 204 Document Download (5 points)
-- BCI-2.4: Debtor Metadata Extraction (8 points)
-- BCI-2.5: Top 20 Creditor Extraction (8 points)
-- BCI-8.1: Automated Testing (8 points - start unit tests)
-- BCI-8.2: CI/CD Pipeline (8 points)
+- AU_GROUP-2.1: PACER API Client Integration (8 points)
+- AU_GROUP-2.2: Daily PACER Polling Job (5 points)
+- AU_GROUP-2.3: Form 201 & 204 Document Download (5 points)
+- AU_GROUP-2.4: Debtor Metadata Extraction (8 points)
+- AU_GROUP-2.5: Top 20 Creditor Extraction (8 points)
+- AU_GROUP-8.1: Automated Testing (8 points - start unit tests)
+- AU_GROUP-8.2: CI/CD Pipeline (8 points)
 
 **Total:** 50 points across 2 sprints  
-**Dependencies:** BCI-1 (Infrastructure)  
+**Dependencies:** AU_GROUP-1 (Infrastructure)  
 **Deliverables:** Daily PACER polling working, top 20 creditors extracted to database
 
 ---
@@ -2803,18 +2803,18 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Build multi-format document parsing engine.
 
-**Epic:** BCI-3 (Document Parsing Engine)
+**Epic:** AU_GROUP-3 (Document Parsing Engine)
 
 **Stories:**
-- BCI-3.1: Structured Schedule E/F Parser (13 points)
-- BCI-3.2: Simple Creditor List Parser (8 points)
-- BCI-3.3: OCR Engine for Scanned Documents (13 points)
-- BCI-3.4: Creditor Deduplication (8 points)
-- BCI-3.5: Page Classification for Multi-Document Filings (13 points)
-- BCI-8.1: Automated Testing (5 points - continue unit tests)
+- AU_GROUP-3.1: Structured Schedule E/F Parser (13 points)
+- AU_GROUP-3.2: Simple Creditor List Parser (8 points)
+- AU_GROUP-3.3: OCR Engine for Scanned Documents (13 points)
+- AU_GROUP-3.4: Creditor Deduplication (8 points)
+- AU_GROUP-3.5: Page Classification for Multi-Document Filings (13 points)
+- AU_GROUP-8.1: Automated Testing (5 points - continue unit tests)
 
 **Total:** 60 points across 2 sprints  
-**Dependencies:** BCI-2 (PACER integration)  
+**Dependencies:** AU_GROUP-2 (PACER integration)  
 **Deliverables:** Parsing engine handles all document formats, deduplication working
 
 ---
@@ -2823,18 +2823,18 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Integrate ZoomInfo API and implement tier-based targeting.
 
-**Epic:** BCI-4 (ZoomInfo Enrichment)
+**Epic:** AU_GROUP-4 (ZoomInfo Enrichment)
 
 **Stories:**
-- BCI-4.1: ZoomInfo API Client Integration (8 points)
-- BCI-4.2: Tier-Based Targeting Rules Implementation (5 points)
-- BCI-4.3: ZoomInfo Enrichment Celery Job (8 points)
-- BCI-4.4: Redis Caching for ZoomInfo Responses (5 points)
-- BCI-4.5: Company Name Normalization (8 points)
-- BCI-5.1: Salesforce Custom Objects & Fields (8 points)
+- AU_GROUP-4.1: ZoomInfo API Client Integration (8 points)
+- AU_GROUP-4.2: Tier-Based Targeting Rules Implementation (5 points)
+- AU_GROUP-4.3: ZoomInfo Enrichment Celery Job (8 points)
+- AU_GROUP-4.4: Redis Caching for ZoomInfo Responses (5 points)
+- AU_GROUP-4.5: Company Name Normalization (8 points)
+- AU_GROUP-5.1: Salesforce Custom Objects & Fields (8 points)
 
 **Total:** 42 points  
-**Dependencies:** BCI-3 (Parsing engine), BCI-1.4 (Redis)  
+**Dependencies:** AU_GROUP-3 (Parsing engine), AU_GROUP-1.4 (Redis)  
 **Deliverables:** ZoomInfo enrichment working, 80%+ match rate, caching operational
 
 ---
@@ -2843,17 +2843,17 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Integrate with Salesforce and implement outreach triggering.
 
-**Epic:** BCI-5 (Salesforce Integration)
+**Epic:** AU_GROUP-5 (Salesforce Integration)
 
 **Stories:**
-- BCI-5.2: Salesforce API Client Integration (8 points)
-- BCI-5.3: Salesforce Push Celery Job (13 points)
-- BCI-5.4: Automated Outreach Triggering (8 points)
-- BCI-5.5: Historical Exposure Calculation (8 points)
-- BCI-8.3: Monitoring Dashboards (8 points)
+- AU_GROUP-5.2: Salesforce API Client Integration (8 points)
+- AU_GROUP-5.3: Salesforce Push Celery Job (13 points)
+- AU_GROUP-5.4: Automated Outreach Triggering (8 points)
+- AU_GROUP-5.5: Historical Exposure Calculation (8 points)
+- AU_GROUP-8.3: Monitoring Dashboards (8 points)
 
 **Total:** 45 points  
-**Dependencies:** BCI-4 (ZoomInfo), BCI-5.1 (Salesforce objects)  
+**Dependencies:** AU_GROUP-4 (ZoomInfo), AU_GROUP-5.1 (Salesforce objects)  
 **Deliverables:** Leads pushed to Salesforce, territory routing working, outreach triggering operational
 
 ---
@@ -2862,17 +2862,17 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Implement Schedule F detection and purchase approval workflow.
 
-**Epic:** BCI-6 (Schedule F Monitoring Queue)
+**Epic:** AU_GROUP-6 (Schedule F Monitoring Queue)
 
 **Stories:**
-- BCI-6.1: Schedule F Monitoring Queue Database (5 points)
-- BCI-6.2: Weekly Docket Scanning Job (13 points)
-- BCI-6.3: PACER Favorites Purchase Approval Workflow (13 points)
-- BCI-6.4: Schedule F Document Download & Parsing (13 points)
-- BCI-6.5: Schedule F Alert Generation (5 points)
+- AU_GROUP-6.1: Schedule F Monitoring Queue Database (5 points)
+- AU_GROUP-6.2: Weekly Docket Scanning Job (13 points)
+- AU_GROUP-6.3: PACER Favorites Purchase Approval Workflow (13 points)
+- AU_GROUP-6.4: Schedule F Document Download & Parsing (13 points)
+- AU_GROUP-6.5: Schedule F Alert Generation (5 points)
 
 **Total:** 49 points across 2 sprints  
-**Dependencies:** BCI-2 (PACER), BCI-3 (Parsing)  
+**Dependencies:** AU_GROUP-2 (PACER), AU_GROUP-3 (Parsing)  
 **Deliverables:** Schedule F detection working, purchase approval via PACER favorites, zero missed filings
 
 ---
@@ -2881,17 +2881,17 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 **Goal:** Import historical data and build exposure tracking.
 
-**Epic:** BCI-7 (Historical Database)
+**Epic:** AU_GROUP-7 (Historical Database)
 
 **Stories:**
-- BCI-7.1: Historical Data Import Script (8 points)
-- BCI-7.2: Creditor Exposure Calculation (8 points)
-- BCI-7.3: Two-Tier Email Logic (Repeat Exposure Flagging) (8 points)
-- BCI-7.4: Salesforce Exposure Views (5 points)
-- BCI-8.5: Security Hardening (3 points - task 8.5.3 audit)
+- AU_GROUP-7.1: Historical Data Import Script (8 points)
+- AU_GROUP-7.2: Creditor Exposure Calculation (8 points)
+- AU_GROUP-7.3: Two-Tier Email Logic (Repeat Exposure Flagging) (8 points)
+- AU_GROUP-7.4: Salesforce Exposure Views (5 points)
+- AU_GROUP-8.5: Security Hardening (3 points - task 8.5.3 audit)
 
 **Total:** 32 points  
-**Dependencies:** BCI-5 (Salesforce), BCI-7 (Exposure calculation)  
+**Dependencies:** AU_GROUP-5 (Salesforce), AU_GROUP-7 (Exposure calculation)  
 **Deliverables:** 25K historical records imported, exposure scores calculated, repeat-exposure flagging working
 
 ---
@@ -2900,14 +2900,14 @@ As a DevOps engineer, I need to harden security (dependency scanning, secrets au
 
 | Epic/Story | Depends On | Blocks |
 |------------|-----------|--------|
-| **BCI-1** (Infrastructure) | None | BCI-2, BCI-3, BCI-4, BCI-5, BCI-6, BCI-7 |
-| **BCI-2** (PACER Monitor) | BCI-1 | BCI-3, BCI-6 |
-| **BCI-3** (Parsing Engine) | BCI-2 | BCI-4, BCI-6 |
-| **BCI-4** (ZoomInfo) | BCI-3, BCI-1.4 (Redis) | BCI-5 |
-| **BCI-5** (Salesforce) | BCI-4, BCI-5.1 (SF Objects) | BCI-7 |
-| **BCI-6** (Schedule F) | BCI-2, BCI-3 | None |
-| **BCI-7** (Historical DB) | BCI-5 | None |
-| **BCI-8** (DevOps) | Various (continuous) | None |
+| **AU_GROUP-1** (Infrastructure) | None | AU_GROUP-2, AU_GROUP-3, AU_GROUP-4, AU_GROUP-5, AU_GROUP-6, AU_GROUP-7 |
+| **AU_GROUP-2** (PACER Monitor) | AU_GROUP-1 | AU_GROUP-3, AU_GROUP-6 |
+| **AU_GROUP-3** (Parsing Engine) | AU_GROUP-2 | AU_GROUP-4, AU_GROUP-6 |
+| **AU_GROUP-4** (ZoomInfo) | AU_GROUP-3, AU_GROUP-1.4 (Redis) | AU_GROUP-5 |
+| **AU_GROUP-5** (Salesforce) | AU_GROUP-4, AU_GROUP-5.1 (SF Objects) | AU_GROUP-7 |
+| **AU_GROUP-6** (Schedule F) | AU_GROUP-2, AU_GROUP-3 | None |
+| **AU_GROUP-7** (Historical DB) | AU_GROUP-5 | None |
+| **AU_GROUP-8** (DevOps) | Various (continuous) | None |
 
 ---
 
