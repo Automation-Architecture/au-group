@@ -183,14 +183,14 @@ class DocumentPipeline:
             docket_hint=docket_hint or FilingType.FORM_201,
             force=force,
         )
-        if result.form201 is None or result.validation is None:
+        if result.form201 is None:
             refreshed_result = self.parse_document(
                 bankruptcy_id=bankruptcy_id,
                 s3_key=s3_key,
                 docket_hint=docket_hint or FilingType.FORM_201,
                 force=True,
             )
-            if refreshed_result.form201 is not None or refreshed_result.validation is not None:
+            if refreshed_result.form201 is not None:
                 result = refreshed_result
 
         form201 = result.form201
