@@ -171,10 +171,16 @@ class SupabaseClient:
             "limit": str(limit),
             "offset": str(offset),
         }
+        count_params: dict[str, str] = {
+            "select": "id",
+        }
         if status:
-            params["status"] = f"eq.{status}"
+            status_filter = f"eq.{status}"
+            params["status"] = status_filter
+            count_params["status"] = status_filter
         rows = self._request("GET", "manual_review_queue", params=params) or []
-        return rows, len(rows)
+        total_rows = self._request("GET", "manual_review_queue", params=count_params) or []
+        return rows, len(total_rows)
 
     def upsert_bankruptcy_from_form201(
         self,
