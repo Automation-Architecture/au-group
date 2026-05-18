@@ -42,11 +42,13 @@ class DocumentPipeline:
     def _resolve_pdf(self, *, s3_key: str | None, document_url: str | None) -> tuple[Path, str]:
         if s3_key:
             return self._s3.download_to_temp(s3_key), s3_key
-        if document_url and document_url.startswith("file://"):
-            if not self._settings.allow_local_file_urls:
-                raise ValueError("file:// URLs are disabled in this environment")
-            path = Path(document_url.removeprefix("file://")).resolve()
-            return path, str(path)
+        if document_url:
+            if document_url.startswith("file://"):
+                if not self._settings.allow_local_file_urls:
+                    raise ValueError("file:// URLs are disabled in this environment")
+                path = Path(document_url.removeprefix("file://")).resolve()
+                return path, str(path)
+            raise ValueError("only file:// URLs are supported for document_url")
         raise ValueError("s3_key or document_url is required")
 
     def _choose_parse_mode(self, path: Path) -> ParseMode:
