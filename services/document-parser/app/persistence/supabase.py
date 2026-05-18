@@ -159,9 +159,54 @@ class SupabaseClient:
         if status:
             params["status"] = f"eq.{status}"
         rows = self._request("GET", "manual_review_queue", params=params) or []
-        count_header = "0"
-        # Approximate total with returned rows when count not available
-        return rows, len(rows) if rows else 0
+        total = len(rows) if rows else 0
+
+        settings = get_settings()
+        base_url = getattr(self, "base_url", None) or getattr(self, "_base_url", None)
+        if not base_url:
+            supabase_url = getattr(settings, "supabase_url", "").rstrip("/")
+            if supabase_url:
+                base_url = f"{supabase_url}/rest/v1"
+
+        headers = dict(
+            getattr(self, "headers", None) or getattr(self, "_headers", None) or {}
+        )
+        supabase_key = (
+            getattr(settings, "supabase_key", None)
+            or getattr(settings, "supabase_service_role_key", None)
+            or getattr(settings, "supabase_anon_key", None)
+        )
+        if supabase_key:
+            headers.setdefault("apikey", supabase_key)
+            headers.setdefault("Authorization", f"Bearer {supabase_key}")
+        headers["Prefer"] = "count=exact"
+        headers.setdefault("Range", "0-0")
+
+        if base_url:
+            count_params = {
+                "select": "id",
+                "order": "created_at.desc",
+            }
+            if status:
+                count_params["status"] = f"eq.{status}"
+            try:
+                response = httpx.request(
+                    "HEAD",
+                    f"{base_url.rstrip('/')}/manual_review_queue",
+                    params=count_params,
+                    headers=headers,
+                    timeout=10.0,
+                )
+                response.raise_for_status()
+                content_range = response.headers.get("Content-Range", "")
+                if "/" in content_range:
+                    total = int(content_range.rsplit("/", 1)[1])
+            except (httpx.HTTPError, ValueError):
+                logger.warning(
+                    "Failed to retrieve exact manual review count; falling back to returned row count"
+                )
+
+        return rows, total
 
     def upsert_bankruptcy_from_form201(
         self,
