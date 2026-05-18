@@ -50,11 +50,22 @@ async def get_job_status(
         raise HTTPException(status_code=404, detail="Document not found")
     raw = row.get("raw_extraction")
     filing = row.get("filing_type")
+
+    manual_review_required = row.get("manual_review_required")
+    if manual_review_required is None and isinstance(raw, dict):
+        manual_review_required = raw.get("manual_review_required")
+    if manual_review_required is None:
+        review_reason = row.get("review_reason")
+        review_status = row.get("status")
+        manual_review_required = bool(review_reason) or (
+            review_status in {"pending", "assigned", "in_review"}
+        )
+
     return JobStatusResponse(
         document_id=document_id,
         status="completed" if raw else "pending",
         parser_version=str(row.get("parser_version", "")),
         filing_type=FilingType(filing) if filing else None,
-        manual_review_required=False,
+        manual_review_required=bool(manual_review_required),
         result=raw if isinstance(raw, dict) else None,
     )
