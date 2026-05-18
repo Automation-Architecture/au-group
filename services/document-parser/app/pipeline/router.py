@@ -324,22 +324,61 @@ class DocumentPipeline:
             if s3_key:
                 path.unlink(missing_ok=True)
 
+    def _coerce_mapping(self, value: object) -> dict:
+        if isinstance(value, dict):
+            return value
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {}
+
+    def _validation_from_cached_row(self, row: dict, raw: dict) -> ValidationResult:
+        validation_data = self._coerce_mapping(row.get("validation"))
+        if not validation_data:
+            validation_data = self._coerce_mapping(raw.get("validation"))
+
+        missing_fields = validation_data.get("missing_fields")
+        if not isinstance(missing_fields, list):
+            missing_fields = []
+
+        manual_review_required = validation_data.get("manual_review_required")
+        if manual_review_required is None:
+            manual_review_required = row.get("manual_review_required")
+        if manual_review_required is None:
+            manual_review_required = raw.get("manual_review_required")
+
+        confidence_score = validation_data.get("confidence_score")
+        if confidence_score is None:
+            confidence_score = raw.get("ocr_confidence")
+        if confidence_score is None:
+            confidence_score = 1.0
+
+        level = validation_data.get("level")
+        if level is None:
+            level = "high" if float(confidence_score) >= 0.9 else "medium"
+
+        return ValidationResult(
+            confidence_score=float(confidence_score),
+            manual_review_required=bool(manual_review_required),
+            missing_fields=missing_fields,
+            level=level,
+        )
+
     def _response_from_cached_row(self, row: dict) -> ParseDocumentResponse:
-        raw = row.get("raw_extraction") or {}
+        raw = self._coerce_mapping(row.get("raw_extraction"))
+        validation = self._validation_from_cached_row(row, raw)
         return ParseDocumentResponse(
             filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
             parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
             ocr_used=bool(row.get("ocr_used")),
             page_count=int(row.get("page_count") or 0),
-            confidence=float(raw.get("ocr_confidence") or 1.0),
-            manual_review_required=False,
+            confidence=float(validation.confidence_score),
+            manual_review_required=bool(validation.manual_review_required),
             document_id=UUID(str(row["id"])) if row.get("id") else None,
-            validation=ValidationResult(
-                confidence_score=1.0,
-                manual_review_required=False,
-                missing_fields=[],
-                level="high",
-            ),
+            validation=validation,
         )
 
     def get_document_status(self, document_id: UUID) -> dict | None:
