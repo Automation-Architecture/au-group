@@ -22,7 +22,7 @@ def _missing_form201_fields(form201: Form201Data) -> list[str]:
         value = data.get(field)
         if value is None:
             missing.append(field)
-        elif isinstance(value, dict) and not any(value.values()):
+        elif isinstance(value, dict) and not any(v is not None for v in value.values()):
             missing.append(field)
     return missing
 

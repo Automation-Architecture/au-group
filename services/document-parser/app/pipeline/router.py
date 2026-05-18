@@ -136,7 +136,20 @@ class DocumentPipeline:
             docket_hint=docket_hint or FilingType.FORM_201,
             force=force,
         )
-        form201 = result.form201 or extract_form201("")
+        if result.form201 is None or result.validation is None:
+            refreshed_result = self.parse_document(
+                bankruptcy_id=bankruptcy_id,
+                s3_key=s3_key,
+                docket_hint=docket_hint or FilingType.FORM_201,
+                force=True,
+            )
+            if refreshed_result.form201 is not None or refreshed_result.validation is not None:
+                result = refreshed_result
+
+        form201 = result.form201
+        if form201 is None:
+            raise ValueError("parse_document() did not return form201 data")
+
         validation = result.validation or validate_form201(form201, ocr_used=result.ocr_used)
         return ExtractForm201Response(
             filing_type=result.filing_type,
