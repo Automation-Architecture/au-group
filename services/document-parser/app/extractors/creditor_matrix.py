@@ -8,6 +8,12 @@ ENTITY_SUFFIXES = re.compile(
     re.I,
 )
 
+HEADER_PATTERN = re.compile(
+    r"^(list of creditors|creditor matrix|creditors holding|official form 204|"
+    r"20 largest unsecured|name of creditor|creditor\s*name)\b",
+    re.I,
+)
+
 
 def _infer_entity_type(name: str) -> str:
     if ENTITY_SUFFIXES.search(name):
@@ -67,9 +73,12 @@ def _rows_from_text(text: str) -> list[CreditorRow]:
         if len(lines) < 1:
             continue
         first = lines[0]
-        if len(first) < 3 or first.lower().startswith("creditor"):
+        if len(first) < 3 or HEADER_PATTERN.search(first):
             continue
-        if re.match(r"^\d+\.?\s+", first):
+        numbered = re.match(r"^\d+\.?\s+", first)
+        if not numbered and len(lines) < 2 and "$" not in block:
+            continue
+        if numbered:
             first = re.sub(r"^\d+\.?\s+", "", first)
         address = ", ".join(lines[1:3]) if len(lines) > 1 else None
         amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block)

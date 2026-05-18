@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     max_pdf_pages: int = 500
 
     confidence_review_threshold: float = 0.85
+    allow_local_file_urls: bool = False
 
     @field_validator("api_key")
     @classmethod

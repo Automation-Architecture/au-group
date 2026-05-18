@@ -9,9 +9,12 @@ from app.extractors.creditor_matrix import extract_creditor_matrix
 from app.extractors.form201 import extract_form201
 from app.extractors.structured_pdf import StructuredPdfResult, extract_structured_pdf, probe_text_density
 from app.models.schemas import (
+    CreditorRow,
     ExtractCreditorMatrixResponse,
     ExtractForm201Response,
     FilingType,
+    Form201Data,
+    JobStatusResponse,
     ParseDocumentResponse,
     ParseMode,
     ParseTextResponse,
@@ -40,7 +43,9 @@ class DocumentPipeline:
         if s3_key:
             return self._s3.download_to_temp(s3_key), s3_key
         if document_url and document_url.startswith("file://"):
-            path = Path(document_url.removeprefix("file://"))
+            if not self._settings.allow_local_file_urls:
+                raise ValueError("file:// URLs are disabled in this environment")
+            path = Path(document_url.removeprefix("file://")).resolve()
             return path, str(path)
         raise ValueError("s3_key or document_url is required")
 
@@ -241,10 +246,16 @@ class DocumentPipeline:
                     "filing_type": filing_type.value,
                     "ocr_confidence": ocr_confidence,
                     "parsed_s3_key": parsed_key,
+                    "validation": validation.model_dump(),
+                    "manual_review_required": validation.manual_review_required,
+                    "form201": form201.model_dump() if form201 else None,
+                    "creditors": [c.model_dump() for c in creditors] if creditors else None,
                 },
             )
             doc_payload["id"] = str(document_id)
-            self._db.upsert_document(doc_payload)
+            saved = self._db.upsert_document(doc_payload)
+            if saved.get("id"):
+                document_id = UUID(str(saved["id"]))
 
             if form201 and bankruptcy_id:
                 self._db.insert_form201_extraction(
@@ -367,9 +378,24 @@ class DocumentPipeline:
             level=level,
         )
 
+    def _form201_from_raw(self, raw: dict) -> Form201Data | None:
+        data = self._coerce_mapping(raw.get("form201"))
+        if not data:
+            return None
+        return Form201Data.model_validate(data)
+
+    def _creditors_from_raw(self, raw: dict) -> list[CreditorRow] | None:
+        items = raw.get("creditors")
+        if not isinstance(items, list):
+            return None
+        return [CreditorRow.model_validate(item) for item in items]
+
     def _response_from_cached_row(self, row: dict) -> ParseDocumentResponse:
         raw = self._coerce_mapping(row.get("raw_extraction"))
         validation = self._validation_from_cached_row(row, raw)
+        document_id = UUID(str(row["id"])) if row.get("id") else None
+        if document_id and self._db.has_pending_manual_review(document_id):
+            validation = validation.model_copy(update={"manual_review_required": True})
         return ParseDocumentResponse(
             filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
             parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
@@ -377,12 +403,32 @@ class DocumentPipeline:
             page_count=int(row.get("page_count") or 0),
             confidence=float(validation.confidence_score),
             manual_review_required=bool(validation.manual_review_required),
-            document_id=UUID(str(row["id"])) if row.get("id") else None,
+            document_id=document_id,
+            form201=self._form201_from_raw(raw),
+            creditors=self._creditors_from_raw(raw),
             validation=validation,
         )
 
     def get_document_status(self, document_id: UUID) -> dict | None:
         return self._db.get_document(document_id)
+
+    def build_job_status(self, document_id: UUID) -> JobStatusResponse | None:
+        row = self.get_document_status(document_id)
+        if not row:
+            return None
+        raw = self._coerce_mapping(row.get("raw_extraction"))
+        validation = self._validation_from_cached_row(row, raw)
+        if self._db.has_pending_manual_review(document_id):
+            validation = validation.model_copy(update={"manual_review_required": True})
+        filing = row.get("filing_type")
+        return JobStatusResponse(
+            document_id=document_id,
+            status="completed" if raw else "pending",
+            parser_version=str(row.get("parser_version", "")),
+            filing_type=FilingType(filing) if filing else None,
+            manual_review_required=validation.manual_review_required,
+            result=raw if raw else None,
+        )
 
     def list_review_queue(
         self, *, limit: int = 50, offset: int = 0, status: str | None = None

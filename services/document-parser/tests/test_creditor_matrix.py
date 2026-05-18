@@ -18,3 +18,9 @@ def test_extract_creditors_from_text() -> None:
     assert len(rows) >= 2
     names = {row.creditor_name for row in rows}
     assert any("Acme" in name for name in names)
+    assert not any("list of creditors" in name.lower() for name in names)
+
+
+def test_skips_header_only_block() -> None:
+    rows = extract_creditor_matrix("List of Creditors\n\nOfficial Form 204")
+    assert rows == []

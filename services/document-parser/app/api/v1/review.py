@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.security import verify_api_key
-from app.models.schemas import FilingType, JobStatusResponse, ReviewQueueItem, ReviewQueueResponse
+from app.models.schemas import JobStatusResponse, ReviewQueueItem, ReviewQueueResponse
 from app.pipeline.router import DocumentPipeline
 
 router = APIRouter(tags=["review"])
@@ -43,18 +43,7 @@ async def get_job_status(
     _: str = Depends(verify_api_key),
 ) -> JobStatusResponse:
     pipeline = DocumentPipeline()
-    row = pipeline.get_document_status(document_id)
-    if not row:
-        from fastapi import HTTPException
-
+    status = pipeline.build_job_status(document_id)
+    if not status:
         raise HTTPException(status_code=404, detail="Document not found")
-    raw = row.get("raw_extraction")
-    filing = row.get("filing_type")
-    return JobStatusResponse(
-        document_id=document_id,
-        status="completed" if raw else "pending",
-        parser_version=str(row.get("parser_version", "")),
-        filing_type=FilingType(filing) if filing else None,
-        manual_review_required=False,
-        result=raw if isinstance(raw, dict) else None,
-    )
+    return status
