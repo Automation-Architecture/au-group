@@ -112,7 +112,9 @@ class SupabaseClient:
         return rows[0]
 
     def upsert_document(self, payload: dict[str, Any]) -> dict[str, Any]:
-        upsert_body = {k: v for k, v in payload.items() if k != "id"}
+        upsert_body = {
+            k: v for k, v in payload.items() if k != "id" and v is not None
+        }
         rows = self._request(
             "POST",
             "documents",
@@ -277,8 +279,7 @@ class SupabaseClient:
         parser_version: str,
         raw_extraction: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
-            "bankruptcy_id": str(bankruptcy_id) if bankruptcy_id else None,
+        payload: dict[str, Any] = {
             "s3_key": s3_key,
             "content_sha256": content_sha256,
             "page_count": page_count,
@@ -286,5 +287,9 @@ class SupabaseClient:
             "parse_mode": parse_mode.value,
             "ocr_used": ocr_used,
             "parser_version": parser_version,
-            "raw_extraction": raw_extraction,
         }
+        if bankruptcy_id is not None:
+            payload["bankruptcy_id"] = str(bankruptcy_id)
+        if raw_extraction is not None:
+            payload["raw_extraction"] = raw_extraction
+        return payload
