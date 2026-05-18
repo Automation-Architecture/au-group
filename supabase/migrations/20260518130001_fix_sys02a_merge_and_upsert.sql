@@ -75,6 +75,82 @@ set creditor_id = d.keeper_id
 from duplicates d
 where bc.creditor_id = d.id;
 
+-- Re-link zoom_info_contacts before deleting duplicate creditors.
+with normalized as (
+  select
+    id,
+    row_number() over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as rn,
+    first_value(id) over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as keeper_id
+  from public.creditors
+),
+duplicates as (
+  select id, keeper_id
+  from normalized
+  where rn > 1
+)
+update public.zoom_info_contacts z
+set creditor_id = d.keeper_id
+from duplicates d
+where z.creditor_id = d.id;
+
+-- Re-link salesforce_accounts; drop rows that would violate keeper uniqueness.
+with normalized as (
+  select
+    id,
+    row_number() over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as rn,
+    first_value(id) over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as keeper_id
+  from public.creditors
+),
+duplicates as (
+  select id, keeper_id
+  from normalized
+  where rn > 1
+)
+delete from public.salesforce_accounts sa
+using duplicates d
+where sa.creditor_id = d.id
+  and exists (
+    select 1
+    from public.salesforce_accounts existing
+    where existing.creditor_id = d.keeper_id
+      and existing.salesforce_account_id = sa.salesforce_account_id
+  );
+
+with normalized as (
+  select
+    id,
+    row_number() over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as rn,
+    first_value(id) over (
+      partition by lower(trim(name)), lower(trim(coalesce(address, '')))
+      order by created_at, id
+    ) as keeper_id
+  from public.creditors
+),
+duplicates as (
+  select id, keeper_id
+  from normalized
+  where rn > 1
+)
+update public.salesforce_accounts sa
+set creditor_id = d.keeper_id
+from duplicates d
+where sa.creditor_id = d.id;
+
 with normalized as (
   select
     id,

@@ -20,9 +20,19 @@ def test_blocks_metadata_ip() -> None:
 
 
 def test_blocks_loopback() -> None:
-    with pytest.raises(ValueError, match="non-public"):
+    with pytest.raises(ValueError, match="non-public|Literal IP"):
         assert_safe_download_url(
             "http://127.0.0.1/file.pdf",
+            allow_document_url=True,
+            allowed_host_suffixes=("example.com",),
+            require_https=False,
+        )
+
+
+def test_blocks_literal_public_ip() -> None:
+    with pytest.raises(ValueError, match="Literal IP"):
+        assert_safe_download_url(
+            "https://93.184.216.34/file.pdf",
             allow_document_url=True,
             allowed_host_suffixes=("example.com",),
             require_https=False,

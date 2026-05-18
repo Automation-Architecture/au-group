@@ -96,9 +96,10 @@ def assert_safe_download_url(
 
     try:
         ipaddress.ip_address(parsed.hostname)
-        return
     except ValueError:
         pass
+    else:
+        raise ValueError("Literal IP addresses are not allowed")
 
     if not _hostname_allowed(parsed.hostname, allowed_host_suffixes):
         raise ValueError("Download host is not allowed")

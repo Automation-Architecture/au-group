@@ -159,8 +159,11 @@ class SupabaseClient:
         return rows[0]
 
     def upsert_document(self, payload: dict[str, Any]) -> dict[str, Any]:
+        explicit_id = payload.get("id")
         upsert_body = {
-            k: v for k, v in payload.items() if k != "id" and v is not None
+            k: v
+            for k, v in payload.items()
+            if v is not None and (k != "id" or explicit_id is not None)
         }
         content_sha256 = upsert_body.get("content_sha256")
         parser_version = upsert_body.get("parser_version")

@@ -27,3 +27,14 @@ def test_production_rejects_short_api_key(monkeypatch: pytest.MonkeyPatch) -> No
     settings = Settings(api_key="too-short", app_env="production")
     with pytest.raises(ValueError, match="at least 32"):
         settings.validate_api_key_strength()
+
+
+def test_get_settings_surfaces_jwt_validation_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("API_KEY", "x" * 32)
+    monkeypatch.setenv("JWT_SECRET", "short")
+    get_settings.cache_clear()
+    with pytest.raises(RuntimeError, match="Invalid configuration"):
+        get_settings()
+    get_settings.cache_clear()

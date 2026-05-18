@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # services/document-parser — stable .env path regardless of process cwd (uvicorn, IDE)
@@ -116,10 +116,18 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     try:
         settings = Settings()
+    except ValidationError as exc:
+        api_key_errors = [e for e in exc.errors() if e.get("loc") == ("api_key",)]
+        if api_key_errors:
+            raise RuntimeError(
+                "API_KEY environment variable is required. "
+                "Set API_KEY in .env (local) or Railway service variables (production)."
+            ) from exc
+        raise RuntimeError(f"Invalid configuration: {exc}") from exc
+
+    try:
         settings.validate_api_key_strength()
-        return settings
-    except Exception as exc:
-        raise RuntimeError(
-            "API_KEY environment variable is required. "
-            "Set API_KEY in .env (local) or Railway service variables (production)."
-        ) from exc
+    except ValueError as exc:
+        raise RuntimeError(f"Invalid API_KEY configuration: {exc}") from exc
+
+    return settings
