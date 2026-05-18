@@ -181,8 +181,33 @@ class SupabaseClient:
             params["status"] = status_filter
             count_params["status"] = status_filter
         rows = self._request("GET", "manual_review_queue", params=params) or []
-        total_rows = self._request("GET", "manual_review_queue", params=count_params) or []
-        return rows, len(total_rows)
+
+        base_url = getattr(self, "_base_url", None)
+        headers = dict(getattr(self, "_headers", {}))
+        if not base_url:
+            settings = get_settings()
+            supabase_url = getattr(settings, "supabase_url", "").rstrip("/")
+            base_url = f"{supabase_url}/rest/v1"
+            supabase_key = getattr(settings, "supabase_key", "")
+            if supabase_key:
+                headers.setdefault("apikey", supabase_key)
+                headers.setdefault("Authorization", f"Bearer {supabase_key}")
+        headers["Prefer"] = "count=exact"
+
+        total = 0
+        response = httpx.head(
+            f"{base_url.rstrip('/')}/manual_review_queue",
+            params=count_params,
+            headers=headers,
+        )
+        response.raise_for_status()
+        content_range = response.headers.get("Content-Range", "")
+        if "/" in content_range:
+            total_text = content_range.rsplit("/", 1)[1]
+            if total_text.isdigit():
+                total = int(total_text)
+
+        return rows, total
 
     def upsert_bankruptcy_from_form201(
         self,
