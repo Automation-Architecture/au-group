@@ -1,0 +1,39 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    api_key: str = "dev-api-key-change-me"
+    parser_version: str = "0.1.0"
+
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+
+    aws_region: str = "us-east-1"
+    s3_bucket: str = "bankruptcy-creditor-docs"
+
+    host: str = "0.0.0.0"
+    # Railway injects PORT; local default 8001
+    port: int = 8001
+    log_level: str = "INFO"
+
+    tesseract_cmd: str | None = None
+    ocr_dpi: int = 300
+    ocr_max_workers: int = 4
+    structured_text_min_chars: int = 50
+    structured_page_coverage: float = 0.8
+    max_pdf_pages: int = 500
+
+    confidence_review_threshold: float = 0.85
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

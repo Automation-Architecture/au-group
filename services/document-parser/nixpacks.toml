@@ -1,0 +1,3 @@
+# Tesseract + Poppler required for OCR and pdf2image
+[phases.setup]
+aptPkgs = ["tesseract-ocr", "poppler-utils", "libgl1"]

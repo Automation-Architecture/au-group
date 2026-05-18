@@ -1,0 +1,20 @@
+from app.extractors.creditor_matrix import extract_creditor_matrix
+
+
+SAMPLE_LIST = """
+List of Creditors
+
+1. Acme Corporation LLC
+123 Main St, Dallas, TX 75001
+$1,234,567.89
+
+2. Jane Smith
+456 Oak Ave, Austin, TX 78701
+"""
+
+
+def test_extract_creditors_from_text() -> None:
+    rows = extract_creditor_matrix(SAMPLE_LIST)
+    assert len(rows) >= 2
+    names = {row.creditor_name for row in rows}
+    assert any("Acme" in name for name in names)

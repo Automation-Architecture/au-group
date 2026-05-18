@@ -1,0 +1,103 @@
+import re
+
+from app.extractors.structured_pdf import StructuredPdfResult
+from app.models.schemas import CreditorRow
+
+ENTITY_SUFFIXES = re.compile(
+    r"\b(LLC|L\.L\.C\.|Inc\.?|Corp\.?|Corporation|Ltd\.?|LP|LLP|Co\.)\b",
+    re.I,
+)
+
+
+def _infer_entity_type(name: str) -> str:
+    if ENTITY_SUFFIXES.search(name):
+        return "company"
+    if re.search(r"\b(and|&)\b", name, re.I) and len(name.split()) >= 3:
+        return "individual"
+    parts = name.split()
+    if len(parts) >= 2 and parts[0][0].isupper() and parts[1][0].isupper():
+        return "individual"
+    return "company"
+
+
+def _parse_claim_amount(value: str | None) -> float | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"[^\d.]", "", value.replace(",", ""))
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _rows_from_tables(structured: StructuredPdfResult) -> list[CreditorRow]:
+    creditors: list[CreditorRow] = []
+    for table in structured.tables:
+        if not table or len(table) < 2:
+            continue
+        header = " ".join(cell or "" for cell in table[0]).lower()
+        if "creditor" not in header and "name" not in header:
+            continue
+        for row in table[1:]:
+            if not row or not any(row):
+                continue
+            name = (row[0] or "").strip()
+            if not name or len(name) < 2:
+                continue
+            address = (row[1] or "").strip() if len(row) > 1 else None
+            amount_raw = row[2] if len(row) > 2 else None
+            creditors.append(
+                CreditorRow(
+                    creditor_name=name,
+                    address=address or None,
+                    claim_amount=_parse_claim_amount(amount_raw or ""),
+                    entity_type=_infer_entity_type(name),
+                )
+            )
+    return creditors
+
+
+def _rows_from_text(text: str) -> list[CreditorRow]:
+    creditors: list[CreditorRow] = []
+    blocks = re.split(r"\n{2,}", text)
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if len(lines) < 1:
+            continue
+        first = lines[0]
+        if len(first) < 3 or first.lower().startswith("creditor"):
+            continue
+        if re.match(r"^\d+\.?\s+", first):
+            first = re.sub(r"^\d+\.?\s+", "", first)
+        address = ", ".join(lines[1:3]) if len(lines) > 1 else None
+        amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block)
+        creditors.append(
+            CreditorRow(
+                creditor_name=first,
+                address=address,
+                claim_amount=_parse_claim_amount(amount_match.group(0) if amount_match else None),
+                entity_type=_infer_entity_type(first),
+            )
+        )
+    return creditors
+
+
+def extract_creditor_matrix(
+    text: str, structured: StructuredPdfResult | None = None
+) -> list[CreditorRow]:
+    creditors: list[CreditorRow] = []
+    if structured:
+        creditors.extend(_rows_from_tables(structured))
+    if not creditors:
+        creditors.extend(_rows_from_text(text))
+    seen: set[str] = set()
+    unique: list[CreditorRow] = []
+    for row in creditors:
+        key = row.creditor_name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique

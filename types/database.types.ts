@@ -19,45 +19,66 @@ export type Database = {
         Row: {
           case_number: string
           chapter_type: Database["public"]["Enums"]["au_group_chapter_type"]
+          city: string | null
           court_district: string
           created_at: string
           debtor_name: string
           estimated_assets: number | null
+          estimated_assets_range: Json | null
           estimated_creditor_count: number | null
+          estimated_creditor_count_range: Json | null
           estimated_liabilities: number | null
+          estimated_liabilities_range: Json | null
+          extraction_confidence_score: number | null
           filing_date: string
           forms_downloaded_at: string | null
           id: string
+          industry_code: string | null
+          manual_review_required: boolean
           state: string
           updated_at: string
         }
         Insert: {
           case_number: string
           chapter_type: Database["public"]["Enums"]["au_group_chapter_type"]
+          city?: string | null
           court_district: string
           created_at?: string
           debtor_name: string
           estimated_assets?: number | null
+          estimated_assets_range?: Json | null
           estimated_creditor_count?: number | null
+          estimated_creditor_count_range?: Json | null
           estimated_liabilities?: number | null
+          estimated_liabilities_range?: Json | null
+          extraction_confidence_score?: number | null
           filing_date: string
           forms_downloaded_at?: string | null
           id?: string
+          industry_code?: string | null
+          manual_review_required?: boolean
           state: string
           updated_at?: string
         }
         Update: {
           case_number?: string
           chapter_type?: Database["public"]["Enums"]["au_group_chapter_type"]
+          city?: string | null
           court_district?: string
           created_at?: string
           debtor_name?: string
           estimated_assets?: number | null
+          estimated_assets_range?: Json | null
           estimated_creditor_count?: number | null
+          estimated_creditor_count_range?: Json | null
           estimated_liabilities?: number | null
+          estimated_liabilities_range?: Json | null
+          extraction_confidence_score?: number | null
           filing_date?: string
           forms_downloaded_at?: string | null
           id?: string
+          industry_code?: string | null
+          manual_review_required?: boolean
           state?: string
           updated_at?: string
         }
@@ -309,6 +330,204 @@ export type Database = {
           },
         ]
       }
+      creditor_matrix_extractions: {
+        Row: {
+          bankruptcy_id: string | null
+          confidence_score: number | null
+          created_at: string
+          creditor_count: number
+          document_id: string | null
+          id: string
+          manual_review_required: boolean
+          parser_version: string
+        }
+        Insert: {
+          bankruptcy_id?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          creditor_count?: number
+          document_id?: string | null
+          id?: string
+          manual_review_required?: boolean
+          parser_version: string
+        }
+        Update: {
+          bankruptcy_id?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          creditor_count?: number
+          document_id?: string | null
+          id?: string
+          manual_review_required?: boolean
+          parser_version?: string
+        }
+        Relationships: []
+      }
+      creditor_matrix_rows: {
+        Row: {
+          address: string | null
+          claim_amount: number | null
+          created_at: string
+          creditor_name: string
+          entity_type: string | null
+          extraction_id: string
+          id: string
+        }
+        Insert: {
+          address?: string | null
+          claim_amount?: number | null
+          created_at?: string
+          creditor_name: string
+          entity_type?: string | null
+          extraction_id: string
+          id?: string
+        }
+        Update: {
+          address?: string | null
+          claim_amount?: number | null
+          created_at?: string
+          creditor_name?: string
+          entity_type?: string | null
+          extraction_id?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      documents: {
+        Row: {
+          bankruptcy_id: string | null
+          content_sha256: string
+          created_at: string
+          filing_type: Database["public"]["Enums"]["au_group_filing_type"]
+          id: string
+          ocr_used: boolean
+          page_count: number
+          parse_mode: Database["public"]["Enums"]["au_group_parse_mode"]
+          parser_version: string
+          raw_extraction: Json | null
+          s3_key: string
+          updated_at: string
+        }
+        Insert: {
+          bankruptcy_id?: string | null
+          content_sha256: string
+          created_at?: string
+          filing_type?: Database["public"]["Enums"]["au_group_filing_type"]
+          id?: string
+          ocr_used?: boolean
+          page_count?: number
+          parse_mode?: Database["public"]["Enums"]["au_group_parse_mode"]
+          parser_version: string
+          raw_extraction?: Json | null
+          s3_key: string
+          updated_at?: string
+        }
+        Update: {
+          bankruptcy_id?: string | null
+          content_sha256?: string
+          created_at?: string
+          filing_type?: Database["public"]["Enums"]["au_group_filing_type"]
+          id?: string
+          ocr_used?: boolean
+          page_count?: number
+          parse_mode?: Database["public"]["Enums"]["au_group_parse_mode"]
+          parser_version?: string
+          raw_extraction?: Json | null
+          s3_key?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      form201_extractions: {
+        Row: {
+          bankruptcy_id: string | null
+          city: string | null
+          confidence_score: number | null
+          court_district: string | null
+          created_at: string
+          debtor_name: string | null
+          document_id: string | null
+          estimated_assets: Json | null
+          estimated_creditor_count: Json | null
+          estimated_liabilities: Json | null
+          id: string
+          industry_code: string | null
+          manual_review_required: boolean
+          parser_version: string
+          raw_extraction: Json | null
+          state: string | null
+        }
+        Insert: {
+          bankruptcy_id?: string | null
+          city?: string | null
+          confidence_score?: number | null
+          court_district?: string | null
+          created_at?: string
+          debtor_name?: string | null
+          document_id?: string | null
+          estimated_assets?: Json | null
+          estimated_creditor_count?: Json | null
+          estimated_liabilities?: Json | null
+          id?: string
+          industry_code?: string | null
+          manual_review_required?: boolean
+          parser_version: string
+          raw_extraction?: Json | null
+          state?: string | null
+        }
+        Update: {
+          bankruptcy_id?: string | null
+          city?: string | null
+          confidence_score?: number | null
+          court_district?: string | null
+          created_at?: string
+          debtor_name?: string | null
+          document_id?: string | null
+          estimated_assets?: Json | null
+          estimated_creditor_count?: Json | null
+          estimated_liabilities?: Json | null
+          id?: string
+          industry_code?: string | null
+          manual_review_required?: boolean
+          parser_version?: string
+          raw_extraction?: Json | null
+          state?: string | null
+        }
+        Relationships: []
+      }
+      manual_review_queue: {
+        Row: {
+          assigned_to: string | null
+          bankruptcy_id: string | null
+          created_at: string
+          document_id: string | null
+          id: string
+          review_reason: string
+          status: Database["public"]["Enums"]["au_group_review_status"]
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          bankruptcy_id?: string | null
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          review_reason: string
+          status?: Database["public"]["Enums"]["au_group_review_status"]
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          bankruptcy_id?: string | null
+          created_at?: string
+          document_id?: string | null
+          id?: string
+          review_reason?: string
+          status?: Database["public"]["Enums"]["au_group_review_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       zoom_info_contacts: {
         Row: {
           company_employee_count: number | null
@@ -368,7 +587,20 @@ export type Database = {
     }
     Enums: {
       au_group_chapter_type: "11" | "7" | "11-Subchapter-V"
-      au_group_job_status: "pending" | "running" | "completed" | "failed"
+      au_group_filing_type:
+        | "FORM_201"
+        | "CREDITOR_MATRIX"
+        | "SCHEDULE"
+        | "SOFA"
+        | "UNKNOWN"
+      au_group_job_status:
+        | "pending"
+        | "running"
+        | "completed"
+        | "failed"
+        | "manual_review_required"
+      au_group_parse_mode: "structured" | "ocr"
+      au_group_review_status: "pending" | "in_review" | "resolved" | "rejected"
       au_group_job_type:
         | "pacer_poll"
         | "document_parse"
@@ -483,7 +715,22 @@ export const Constants = {
   public: {
     Enums: {
       au_group_chapter_type: ["11", "7", "11-Subchapter-V"],
-      au_group_job_status: ["pending", "running", "completed", "failed"],
+      au_group_filing_type: [
+        "FORM_201",
+        "CREDITOR_MATRIX",
+        "SCHEDULE",
+        "SOFA",
+        "UNKNOWN",
+      ],
+      au_group_job_status: [
+        "pending",
+        "running",
+        "completed",
+        "failed",
+        "manual_review_required",
+      ],
+      au_group_parse_mode: ["structured", "ocr"],
+      au_group_review_status: ["pending", "in_review", "resolved", "rejected"],
       au_group_job_type: ["pacer_poll", "document_parse", "zoom_info_enrich", "salesforce_push"],
       au_group_schedule_f_status: [
         "monitoring",

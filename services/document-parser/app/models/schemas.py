@@ -1,0 +1,150 @@
+from enum import Enum
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel, Field
+
+
+class FilingType(str, Enum):
+    FORM_201 = "FORM_201"
+    CREDITOR_MATRIX = "CREDITOR_MATRIX"
+    SCHEDULE = "SCHEDULE"
+    SOFA = "SOFA"
+    UNKNOWN = "UNKNOWN"
+
+
+class ParseMode(str, Enum):
+    STRUCTURED = "structured"
+    OCR = "ocr"
+
+
+class UsdRange(BaseModel):
+    min_usd: float | None = None
+    max_usd: float | None = None
+
+
+class CountRange(BaseModel):
+    min: int | None = None
+    max: int | None = None
+
+
+class Form201Data(BaseModel):
+    debtor_name: str | None = None
+    city: str | None = None
+    state: str | None = None
+    court_district: str | None = None
+    industry_code: str | None = None
+    estimated_assets: UsdRange | None = None
+    estimated_liabilities: UsdRange | None = None
+    estimated_creditor_count: CountRange | None = None
+
+
+class CreditorRow(BaseModel):
+    creditor_name: str
+    address: str | None = None
+    claim_amount: float | None = None
+    entity_type: str | None = None
+
+
+class ValidationResult(BaseModel):
+    confidence_score: float
+    manual_review_required: bool
+    missing_fields: list[str] = Field(default_factory=list)
+    level: str = "high"
+
+
+class DocumentSource(BaseModel):
+    document_url: str | None = None
+    s3_key: str | None = None
+    bankruptcy_id: UUID | None = None
+    docket_hint: FilingType | None = None
+    force: bool = False
+
+
+class ParseOcrRequest(DocumentSource):
+    pass
+
+
+class ParseStructuredRequest(DocumentSource):
+    pass
+
+
+class ParseDocumentRequest(DocumentSource):
+    pass
+
+
+class ExtractForm201Request(BaseModel):
+    bankruptcy_id: UUID
+    s3_key: str
+    docket_hint: FilingType | None = None
+    force: bool = False
+
+
+class ExtractCreditorMatrixRequest(BaseModel):
+    bankruptcy_id: UUID
+    s3_key: str
+    docket_hint: FilingType | None = None
+    force: bool = False
+
+
+class ParseTextResponse(BaseModel):
+    text: str
+    page_count: int
+    ocr_used: bool
+    confidence: float | None = None
+    parse_mode: ParseMode
+    document_id: UUID | None = None
+
+
+class ExtractForm201Response(BaseModel):
+    filing_type: FilingType
+    form201: Form201Data
+    validation: ValidationResult
+    document_id: UUID | None = None
+
+
+class ExtractCreditorMatrixResponse(BaseModel):
+    filing_type: FilingType
+    creditors: list[CreditorRow]
+    validation: ValidationResult
+    document_id: UUID | None = None
+    creditor_count: int = 0
+
+
+class ParseDocumentResponse(BaseModel):
+    filing_type: FilingType
+    parse_mode: ParseMode
+    ocr_used: bool
+    page_count: int
+    confidence: float
+    manual_review_required: bool
+    document_id: UUID | None = None
+    form201: Form201Data | None = None
+    creditors: list[CreditorRow] | None = None
+    validation: ValidationResult | None = None
+
+
+class ReviewQueueItem(BaseModel):
+    id: UUID
+    bankruptcy_id: UUID | None
+    document_id: UUID | None
+    review_reason: str
+    status: str
+    assigned_to: str | None
+    created_at: str
+
+
+class ReviewQueueResponse(BaseModel):
+    items: list[ReviewQueueItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class JobStatusResponse(BaseModel):
+    document_id: UUID
+    status: str
+    parser_version: str
+    filing_type: FilingType | None
+    manual_review_required: bool
+    result: dict[str, Any] | None = None
