@@ -162,12 +162,55 @@ class SupabaseClient:
         upsert_body = {
             k: v for k, v in payload.items() if k != "id" and v is not None
         }
+        content_sha256 = upsert_body.get("content_sha256")
+        parser_version = upsert_body.get("parser_version")
+
+        existing_document: dict[str, Any] | None = None
+        if content_sha256 and parser_version:
+            existing_document = self.find_document_by_hash(
+                content_sha256, parser_version
+            )
+
+        if existing_document:
+            existing_bankruptcy_id = existing_document.get("bankruptcy_id")
+            incoming_bankruptcy_id = upsert_body.get("bankruptcy_id")
+
+            if (
+                existing_bankruptcy_id is not None
+                and incoming_bankruptcy_id is not None
+                and existing_bankruptcy_id != incoming_bankruptcy_id
+            ):
+                logger.warning(
+                    "Refusing to merge document for content_sha256=%s parser_version=%s "
+                    "because the existing document is already associated with a different "
+                    "bankruptcy_id",
+                    content_sha256,
+                    parser_version,
+                )
+                return existing_document
+
+            if existing_bankruptcy_id is not None:
+                upsert_body["bankruptcy_id"] = existing_bankruptcy_id
+
+            rows = self._request(
+                "PATCH",
+                "documents",
+                params={
+                    "id": f"eq.{existing_document['id']}",
+                    "select": "*",
+                },
+                json=upsert_body,
+                prefer="return=representation",
+            )
+            if isinstance(rows, list) and rows:
+                return rows[0]
+            return existing_document
+
         rows = self._request(
             "POST",
             "documents",
-            params={"on_conflict": "content_sha256,parser_version"},
             json=upsert_body,
-            prefer="resolution=merge-duplicates,return=representation",
+            prefer="return=representation",
         )
         if isinstance(rows, list) and rows:
             return rows[0]
