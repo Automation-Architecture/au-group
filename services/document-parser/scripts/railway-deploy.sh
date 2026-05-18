@@ -48,8 +48,8 @@ fi
 
 if [[ -z "${API_KEY:-}" ]]; then
   API_KEY="$(openssl rand -hex 32)"
-  echo "Generated API_KEY (save this for n8n X-API-Key): ${API_KEY}"
   set_var API_KEY "$API_KEY"
+  echo "Generated API_KEY and stored in Railway variables (retrieve from Railway dashboard; not logged here)."
 fi
 
 set_var SUPABASE_URL "${SUPABASE_URL:-https://umivttszdnsrosbqryia.supabase.co}"

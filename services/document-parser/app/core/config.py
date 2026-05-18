@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -10,7 +11,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    api_key: str = "dev-api-key-change-me"
+    api_key: str
     parser_version: str = "0.1.0"
 
     supabase_url: str = ""
@@ -33,7 +34,20 @@ class Settings(BaseSettings):
 
     confidence_review_threshold: float = 0.85
 
+    @field_validator("api_key")
+    @classmethod
+    def validate_api_key(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("API_KEY must be set to a non-empty value")
+        return value.strip()
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except Exception as exc:
+        raise RuntimeError(
+            "API_KEY environment variable is required. "
+            "Set API_KEY in .env (local) or Railway service variables (production)."
+        ) from exc
