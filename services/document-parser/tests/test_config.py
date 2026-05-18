@@ -21,3 +21,9 @@ def test_settings_reads_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("API_KEY", "secret-from-env")
     settings = Settings()
     assert settings.api_key == "secret-from-env"
+
+
+def test_production_rejects_short_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(api_key="too-short", app_env="production")
+    with pytest.raises(ValueError, match="at least 32"):
+        settings.validate_api_key_strength()

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.core.security import verify_api_key
+from app.core.security import verify_auth
 from app.models.schemas import (
     ExtractCreditorMatrixRequest,
     ExtractCreditorMatrixResponse,
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/extract", tags=["extract"])
 @router.post("/form201", response_model=ExtractForm201Response)
 async def extract_form201(
     body: ExtractForm201Request,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ExtractForm201Response:
     pipeline = DocumentPipeline()
     return pipeline.extract_form201(
@@ -29,7 +29,7 @@ async def extract_form201(
 @router.post("/creditor-matrix", response_model=ExtractCreditorMatrixResponse)
 async def extract_creditor_matrix(
     body: ExtractCreditorMatrixRequest,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ExtractCreditorMatrixResponse:
     pipeline = DocumentPipeline()
     return pipeline.extract_creditor_matrix(

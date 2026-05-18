@@ -14,6 +14,8 @@ HEADER_PATTERN = re.compile(
     re.I,
 )
 
+NUMBERED_LINE_START = re.compile(r"^\d+\.\s+")
+
 
 def _infer_entity_type(name: str) -> str:
     if ENTITY_SUFFIXES.search(name):
@@ -93,6 +95,51 @@ def _rows_from_text(text: str) -> list[CreditorRow]:
     return creditors
 
 
+def _block_to_creditor_row(lines: list[str]) -> CreditorRow | None:
+    if not lines:
+        return None
+    first = lines[0]
+    if len(first) < 3 or HEADER_PATTERN.search(first):
+        return None
+    name = re.sub(r"^\d+\.?\s+", "", first)
+    if not name or len(name) < 2:
+        return None
+    address = ", ".join(lines[1:3]) if len(lines) > 1 else None
+    block_text = "\n".join(lines)
+    amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block_text)
+    return CreditorRow(
+        creditor_name=name,
+        address=address,
+        claim_amount=_parse_claim_amount(amount_match.group(0) if amount_match else None),
+        entity_type=_infer_entity_type(name),
+    )
+
+
+def _rows_from_numbered_lines(text: str) -> list[CreditorRow]:
+    """Fallback when pdfplumber flattens paragraphs to single newlines."""
+    creditors: list[CreditorRow] = []
+    current_lines: list[str] = []
+
+    def flush() -> None:
+        row = _block_to_creditor_row(current_lines)
+        if row:
+            creditors.append(row)
+
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if NUMBERED_LINE_START.match(line):
+            if current_lines:
+                flush()
+            current_lines = [line]
+        elif current_lines:
+            current_lines.append(line)
+    if current_lines:
+        flush()
+    return creditors
+
+
 def extract_creditor_matrix(
     text: str, structured: StructuredPdfResult | None = None
 ) -> list[CreditorRow]:
@@ -101,6 +148,8 @@ def extract_creditor_matrix(
         creditors.extend(_rows_from_tables(structured))
     if not creditors:
         creditors.extend(_rows_from_text(text))
+    if not creditors:
+        creditors.extend(_rows_from_numbered_lines(text))
     seen: set[str] = set()
     unique: list[CreditorRow] = []
     for row in creditors:

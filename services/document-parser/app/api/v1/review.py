@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.security import verify_api_key
+from app.core.security import verify_auth
 from app.models.schemas import JobStatusResponse, ReviewQueueItem, ReviewQueueResponse
 from app.pipeline.router import DocumentPipeline
 
@@ -14,7 +14,7 @@ async def list_review_queue(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     status: str | None = None,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ReviewQueueResponse:
     pipeline = DocumentPipeline()
     rows, total = pipeline.list_review_queue(limit=limit, offset=offset, status=status)
@@ -40,7 +40,7 @@ async def list_review_queue(
 @router.get("/jobs/{document_id}", response_model=JobStatusResponse)
 async def get_job_status(
     document_id: UUID,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> JobStatusResponse:
     pipeline = DocumentPipeline()
     status = pipeline.build_job_status(document_id)

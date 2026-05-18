@@ -2,7 +2,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.s3_validation import validate_s3_key
 
 
 class FilingType(str, Enum):
@@ -60,6 +62,13 @@ class DocumentSource(BaseModel):
     docket_hint: FilingType | None = None
     force: bool = False
 
+    @field_validator("s3_key")
+    @classmethod
+    def validate_source_s3_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return validate_s3_key(value, operation="read")
+
 
 class ParseOcrRequest(DocumentSource):
     pass
@@ -79,12 +88,22 @@ class ExtractForm201Request(BaseModel):
     docket_hint: FilingType | None = None
     force: bool = False
 
+    @field_validator("s3_key")
+    @classmethod
+    def validate_extract_s3_key(cls, value: str) -> str:
+        return validate_s3_key(value, operation="read")
+
 
 class ExtractCreditorMatrixRequest(BaseModel):
     bankruptcy_id: UUID
     s3_key: str
     docket_hint: FilingType | None = None
     force: bool = False
+
+    @field_validator("s3_key")
+    @classmethod
+    def validate_matrix_s3_key(cls, value: str) -> str:
+        return validate_s3_key(value, operation="read")
 
 
 class ParseTextResponse(BaseModel):
@@ -148,3 +167,14 @@ class JobStatusResponse(BaseModel):
     filing_type: FilingType | None
     manual_review_required: bool
     result: dict[str, Any] | None = None
+
+
+class LoginRequest(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int

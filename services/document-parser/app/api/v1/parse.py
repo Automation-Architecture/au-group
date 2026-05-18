@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
-from app.core.security import verify_api_key
+from app.core.config import get_settings
+from app.core.security import verify_auth
+from app.core.rate_limit import limiter
 from app.models.schemas import (
     ParseDocumentRequest,
     ParseDocumentResponse,
@@ -12,11 +14,15 @@ from app.pipeline.router import DocumentPipeline
 
 router = APIRouter(prefix="/parse", tags=["parse"])
 
+_parse_rate_limit = lambda: get_settings().rate_limit_parse  # noqa: E731
+
 
 @router.post("/ocr", response_model=ParseTextResponse)
+@limiter.limit(_parse_rate_limit)
 async def parse_ocr(
+    request: Request,
     body: ParseOcrRequest,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ParseTextResponse:
     pipeline = DocumentPipeline()
     return pipeline.parse_ocr(
@@ -27,9 +33,11 @@ async def parse_ocr(
 
 
 @router.post("/structured", response_model=ParseTextResponse)
+@limiter.limit(_parse_rate_limit)
 async def parse_structured(
+    request: Request,
     body: ParseStructuredRequest,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ParseTextResponse:
     pipeline = DocumentPipeline()
     return pipeline.parse_structured(
@@ -39,9 +47,11 @@ async def parse_structured(
 
 
 @router.post("/document", response_model=ParseDocumentResponse)
+@limiter.limit(_parse_rate_limit)
 async def parse_document(
+    request: Request,
     body: ParseDocumentRequest,
-    _: str = Depends(verify_api_key),
+    _auth=Depends(verify_auth),
 ) -> ParseDocumentResponse:
     pipeline = DocumentPipeline()
     return pipeline.parse_document(

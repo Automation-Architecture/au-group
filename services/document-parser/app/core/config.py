@@ -1,12 +1,17 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# services/document-parser — stable .env path regardless of process cwd (uvicorn, IDE)
+SERVICE_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = SERVICE_ROOT / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE if ENV_FILE.is_file() else None,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -18,7 +23,11 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = ""
 
     aws_region: str = "us-east-1"
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
     s3_bucket: str = "bankruptcy-creditor-docs"
+    # Supabase Storage S3: https://<project-ref>.storage.supabase.co/storage/v1/s3
+    s3_endpoint: str | None = None
 
     host: str = "0.0.0.0"
     # Railway injects PORT; local default 8001
@@ -34,6 +43,26 @@ class Settings(BaseSettings):
 
     confidence_review_threshold: float = 0.85
     allow_local_file_urls: bool = False
+    local_file_root: str | None = None
+
+    app_env: str = "development"
+    expose_openapi: bool = False
+
+    allow_document_url: bool = False
+    allowed_download_host_suffixes: str = ""
+    max_download_bytes: int = 52_428_800
+    http_download_timeout_sec: float = 30.0
+    http_max_redirects: int = 3
+
+    rate_limit_enabled: bool = True
+    rate_limit_default: str = "60/minute"
+    rate_limit_parse: str = "10/minute"
+
+    jwt_secret: str | None = None
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
+    auth_username: str | None = None
+    auth_password: str | None = None
 
     @field_validator("api_key")
     @classmethod
@@ -42,11 +71,53 @@ class Settings(BaseSettings):
             raise ValueError("API_KEY must be set to a non-empty value")
         return value.strip()
 
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() == "production"
+
+    @property
+    def download_host_suffixes(self) -> tuple[str, ...]:
+        return tuple(
+            s.strip().lower().lstrip(".")
+            for s in self.allowed_download_host_suffixes.split(",")
+            if s.strip()
+        )
+
+    @property
+    def require_https_downloads(self) -> bool:
+        return self.is_production
+
+    def validate_api_key_strength(self) -> None:
+        if self.is_production and len(self.api_key) < 32:
+            raise ValueError("API_KEY must be at least 32 characters in production")
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def validate_jwt_secret(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            return None
+        if len(stripped) < 32:
+            raise ValueError("JWT_SECRET must be at least 32 characters when set")
+        return stripped
+
+    @field_validator("auth_username", "auth_password")
+    @classmethod
+    def strip_optional_credential(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        return stripped or None
+
 
 @lru_cache
 def get_settings() -> Settings:
     try:
-        return Settings()
+        settings = Settings()
+        settings.validate_api_key_strength()
+        return settings
     except Exception as exc:
         raise RuntimeError(
             "API_KEY environment variable is required. "

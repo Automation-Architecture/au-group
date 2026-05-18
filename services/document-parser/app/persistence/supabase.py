@@ -1,10 +1,11 @@
 import logging
+import re
 from typing import Any
 from uuid import UUID
 
 import httpx
 
-from app.core.config import get_settings
+from app.core.config import ENV_FILE, get_settings
 from app.models.schemas import (
     CreditorRow,
     Form201Data,
@@ -15,6 +16,12 @@ from app.models.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+_CONTENT_RANGE_TOTAL = re.compile(r"/(\d+)$")
+
+
+class SupabaseUnavailableError(RuntimeError):
+    """Supabase REST/RPC unreachable or returned an error."""
 
 
 class SupabaseClient:
@@ -50,21 +57,61 @@ class SupabaseClient:
         if prefer:
             headers["Prefer"] = prefer
         url = f"{self._base}/{path.lstrip('/')}"
-        with httpx.Client(timeout=60.0) as client:
-            response = client.request(
-                method,
-                url,
-                headers=headers,
-                params=params,
-                json=json,
-            )
-            if response.status_code >= 400:
-                raise RuntimeError(
-                    f"Supabase {method} {path} failed: {response.status_code} {response.text}"
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    params=params,
+                    json=json,
                 )
-            if response.status_code == 204 or not response.content:
-                return None
-            return response.json()
+        except httpx.ConnectError as exc:
+            raise SupabaseUnavailableError(
+                "Cannot reach Supabase. Check SUPABASE_URL in "
+                f"{ENV_FILE} (or service env) and restart the server after changes."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise SupabaseUnavailableError(
+                f"Supabase request failed: {exc}"
+            ) from exc
+        if response.status_code >= 400:
+            raise SupabaseUnavailableError(
+                f"Supabase {method} {path} failed: {response.status_code} {response.text}"
+            )
+        if response.status_code == 204 or not response.content:
+            return None
+        return response.json()
+
+    def _count_rows(self, path: str, *, filter_params: dict[str, str] | None = None) -> int:
+        if not self._enabled:
+            return 0
+        params: dict[str, str] = {"select": "id", "limit": "1"}
+        if filter_params:
+            params.update(filter_params)
+        headers = dict(self._headers)
+        headers["Prefer"] = "count=exact"
+        url = f"{self._base}/{path.lstrip('/')}"
+        try:
+            with httpx.Client(timeout=60.0) as client:
+                response = client.get(url, headers=headers, params=params)
+        except httpx.ConnectError as exc:
+            raise SupabaseUnavailableError(
+                "Cannot reach Supabase. Check SUPABASE_URL in "
+                f"{ENV_FILE} (or service env) and restart the server after changes."
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise SupabaseUnavailableError(f"Supabase request failed: {exc}") from exc
+        if response.status_code >= 400:
+            raise SupabaseUnavailableError(
+                f"Supabase GET {path} count failed: {response.status_code} {response.text}"
+            )
+        content_range = response.headers.get("content-range", "")
+        match = _CONTENT_RANGE_TOTAL.search(content_range)
+        if match:
+            return int(match.group(1))
+        body = response.json() if response.content else []
+        return len(body) if isinstance(body, list) else 0
 
     def get_document(self, document_id: UUID) -> dict[str, Any] | None:
         rows = self._request(
@@ -173,16 +220,14 @@ class SupabaseClient:
             "limit": str(limit),
             "offset": str(offset),
         }
-        count_params: dict[str, str] = {
-            "select": "id",
-        }
+        filter_params: dict[str, str] = {}
         if status:
             status_filter = f"eq.{status}"
             params["status"] = status_filter
-            count_params["status"] = status_filter
+            filter_params["status"] = status_filter
         rows = self._request("GET", "manual_review_queue", params=params) or []
-        total_rows = self._request("GET", "manual_review_queue", params=count_params) or []
-        return rows, len(total_rows)
+        total = self._count_rows("manual_review_queue", filter_params=filter_params or None)
+        return rows, total
 
     def upsert_bankruptcy_from_form201(
         self,

@@ -23,5 +23,7 @@ if [[ -f .env ]]; then
   source .env
   set +a
 fi
+# Swagger at /docs (override with EXPOSE_OPENAPI=false in .env for prod-like local runs)
+export EXPOSE_OPENAPI="${EXPOSE_OPENAPI:-true}"
 
 exec uvicorn app.main:app --host "${HOST:-0.0.0.0}" --port "${PORT:-8001}" --reload

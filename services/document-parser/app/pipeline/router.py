@@ -1,10 +1,14 @@
 import json
 import logging
+import tempfile
 from pathlib import Path
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from app.classifiers.filing_type import classify_filing_type
 from app.core.config import get_settings
+from app.core.s3_validation import validate_s3_key
+from app.core.url_safety import download_url_to_path
 from app.extractors.creditor_matrix import extract_creditor_matrix
 from app.extractors.form201 import extract_form201
 from app.extractors.structured_pdf import StructuredPdfResult, extract_structured_pdf, probe_text_density
@@ -39,15 +43,58 @@ class DocumentPipeline:
         self._db = SupabaseClient()
         self._ocr = TesseractOcrEngine()
 
+    def _download_http_to_temp(self, document_url: str) -> Path:
+        parsed = urlparse(document_url)
+        suffix = Path(parsed.path).suffix or ".pdf"
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp_path = Path(tmp.name)
+        tmp.close()
+        settings = self._settings
+        try:
+            download_url_to_path(
+                document_url,
+                tmp_path,
+                max_bytes=settings.max_download_bytes,
+                timeout_sec=settings.http_download_timeout_sec,
+                max_redirects=settings.http_max_redirects,
+                allow_document_url=settings.allow_document_url,
+                allowed_host_suffixes=settings.download_host_suffixes,
+                require_https=settings.require_https_downloads,
+            )
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        return tmp_path
+
     def _resolve_pdf(self, *, s3_key: str | None, document_url: str | None) -> tuple[Path, str]:
         if s3_key:
+            validate_s3_key(s3_key, operation="read")
             return self._s3.download_to_temp(s3_key), s3_key
-        if document_url and document_url.startswith("file://"):
-            if not self._settings.allow_local_file_urls:
-                raise ValueError("file:// URLs are disabled in this environment")
-            path = Path(document_url.removeprefix("file://")).resolve()
-            return path, str(path)
+        if document_url:
+            if document_url.startswith("file://"):
+                if not self._settings.allow_local_file_urls:
+                    raise ValueError("file:// URLs are disabled in this environment")
+                path = Path(document_url.removeprefix("file://")).resolve()
+                root = self._settings.local_file_root
+                if root:
+                    root_path = Path(root).resolve()
+                    try:
+                        path.relative_to(root_path)
+                    except ValueError as exc:
+                        raise ValueError("Local file path is outside allowed directory") from exc
+                if not path.is_file():
+                    raise FileNotFoundError("Local file not found")
+                return path, str(path)
+            if document_url.startswith(("http://", "https://")):
+                path = self._download_http_to_temp(document_url)
+                return path, document_url
         raise ValueError("s3_key or document_url is required")
+
+    @staticmethod
+    def _should_unlink_temp(*, s3_key: str | None, document_url: str | None) -> bool:
+        if s3_key:
+            return True
+        return bool(document_url and document_url.startswith(("http://", "https://")))
 
     def _choose_parse_mode(self, path: Path) -> ParseMode:
         page_count, coverage = probe_text_density(
@@ -91,7 +138,7 @@ class DocumentPipeline:
                 parse_mode=ParseMode.STRUCTURED,
             )
         finally:
-            if s3_key:
+            if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
                 path.unlink(missing_ok=True)
 
     def parse_ocr(
@@ -119,7 +166,7 @@ class DocumentPipeline:
                 parse_mode=ParseMode.OCR,
             )
         finally:
-            if s3_key:
+            if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
                 path.unlink(missing_ok=True)
 
     def extract_form201(
@@ -345,7 +392,7 @@ class DocumentPipeline:
                 validation=validation,
             )
         finally:
-            if s3_key:
+            if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
                 path.unlink(missing_ok=True)
 
     def _coerce_mapping(self, value: object) -> dict:

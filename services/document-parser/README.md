@@ -27,8 +27,35 @@ chmod +x scripts/dev.sh
 ```
 
 - Health: `GET http://localhost:8001/health`
-- OpenAPI: `http://localhost:8001/docs`
-- All parse routes require header `X-API-Key`
+- OpenAPI (local only): set `EXPOSE_OPENAPI=true` then open `http://localhost:8001/docs`
+- Parse routes accept **`X-API-Key`** (n8n) or **`Authorization: Bearer`** (after login)
+
+### Authentication
+
+**n8n / automation** — static API key:
+
+```http
+X-API-Key: <API_KEY>
+```
+
+**Swagger / manual clients** — login for a short-lived JWT:
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{"username": "<AUTH_USERNAME>", "password": "<AUTH_PASSWORD>"}
+```
+
+Response: `{ "access_token": "...", "token_type": "bearer", "expires_in": 3600 }`
+
+Then call APIs with:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+Set `JWT_SECRET` (≥32 chars), `AUTH_USERNAME`, and `AUTH_PASSWORD` in `.env` to enable login.
 
 ## Production (systemd)
 
@@ -68,6 +95,9 @@ Set in **Variables** (or sync from a shared Railway environment):
 | Variable | Required | Example |
 |----------|----------|---------|
 | `API_KEY` | yes | long random secret (n8n sends as `X-API-Key`) |
+| `JWT_SECRET` | no | ≥32 chars; enables `/auth/login` |
+| `AUTH_USERNAME` | no | Login username (with `JWT_SECRET`) |
+| `AUTH_PASSWORD` | no | Login password (with `JWT_SECRET`) |
 | `SUPABASE_URL` | yes | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | service role key |
 | `S3_BUCKET` | yes | `bankruptcy-creditor-docs` |
@@ -76,8 +106,24 @@ Set in **Variables** (or sync from a shared Railway environment):
 | `AWS_SECRET_ACCESS_KEY` | yes | — |
 | `PARSER_VERSION` | no | `0.1.0` |
 | `LOG_LEVEL` | no | `INFO` |
+| `APP_ENV` | yes (prod) | `production` |
+| `EXPOSE_OPENAPI` | yes (prod) | `false` — do not expose `/docs` publicly |
+| `ALLOW_DOCUMENT_URL` | no | `true` only if n8n pastes external PDF URLs |
+| `ALLOWED_DOWNLOAD_HOST_SUFFIXES` | if URLs enabled | `uscourts.gov,pacer.uscourts.gov` (comma-separated) |
+| `RATE_LIMIT_ENABLED` | no | `true` on public Railway |
+| `ALLOW_LOCAL_FILE_URLS` | yes (prod) | `false` |
 
 Railway sets `PORT` automatically — do not override it.
+
+### Security checklist (production)
+
+1. **`API_KEY`** — `openssl rand -hex 32`; store only in Railway + n8n credentials; rotate if leaked.
+2. **S3 IAM** — `GetObject` on `raw-documents/*` only; `PutObject` on `ocr-outputs/*` and `parsed-outputs/*`.
+3. **n8n uploads** — Supabase Storage keys must match `raw-documents/{case_number}/{id}.pdf`.
+4. **Pasted URLs** — set `ALLOW_DOCUMENT_URL=true` and `ALLOWED_DOWNLOAD_HOST_SUFFIXES` to court/PACER domains only.
+5. **No public OpenAPI** — `EXPOSE_OPENAPI=false` on Railway.
+6. **Apply migrations** — including [`20260518130000_document_parser_rls_policies.sql`](../../supabase/migrations/20260518130000_document_parser_rls_policies.sql).
+7. **Edge (recommended)** — Cloudflare or similar in front of Railway for WAF / optional IP allowlist on n8n egress.
 
 ### 4. Build and start
 
@@ -86,10 +132,10 @@ Railway reads [`railway.toml`](railway.toml):
 - **Start:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - **Health check:** `GET /health`
 
-After deploy, open the generated URL:
+After deploy, verify:
 
 - `https://<your-service>.up.railway.app/health`
-- `https://<your-service>.up.railway.app/docs`
+- `/docs` should **not** be reachable when `EXPOSE_OPENAPI=false`
 
 ### 5. Apply Supabase migration first
 
@@ -116,6 +162,8 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 | Build fails on `opencv` / `pdf2image` | Confirm `nixpacks.toml` is present; redeploy. |
 | `tesseract not found` | Same — apt packages must install on build. |
 | 403 on API | Check `X-API-Key` matches `API_KEY` in Railway. |
+| 400 on pasted URL | Set `ALLOW_DOCUMENT_URL=true` and add host to `ALLOWED_DOWNLOAD_HOST_SUFFIXES`. |
+| 400 on `s3_key` | Key must be `raw-documents/{case_number}/{file}.pdf`. |
 | S3 errors | Verify IAM keys and bucket name; bucket must be reachable from Railway (public internet). |
 | Timeouts on large PDFs | Increase n8n HTTP timeout or use `GET /api/v1/jobs/{document_id}` poll pattern. |
 
@@ -123,6 +171,7 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | `/api/v1/auth/login` | Issue JWT access token (username/password) |
 | POST | `/api/v1/parse/document` | Full pipeline (route → classify → extract → validate) |
 | POST | `/api/v1/parse/ocr` | OCR only |
 | POST | `/api/v1/parse/structured` | Structured PDF text only |
@@ -130,14 +179,22 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 | POST | `/api/v1/extract/creditor-matrix` | Creditor matrix extraction |
 | GET | `/api/v1/review-queue` | Manual review queue |
 | GET | `/api/v1/jobs/{document_id}` | Job status poll (n8n timeouts) |
+| GET | `/health/ready` | Readiness probe (Supabase + S3; 503 if deps down) |
 
 ## Tests
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -q
+
+# Unit tests (mocked pipeline — runs in CI)
+pytest tests/ --ignore=tests/integration -q
+
+# Live integration tests (requires .env with Supabase, S3, API_KEY)
+pytest tests/integration/ -m integration -v
 ```
+
+For integration tests, copy `.env.example` to `.env` and optionally set `INTEGRATION_BANKRUPTCY_ID` to an existing test bankruptcy UUID. Do not point integration tests at production case numbers.
 
 ## Deferred (Phase 2)
 
