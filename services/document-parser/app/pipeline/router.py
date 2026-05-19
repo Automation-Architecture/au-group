@@ -7,6 +7,11 @@ from uuid import UUID, uuid4
 
 from app.classifiers.filing_type import classify_filing_type
 from app.core.config import get_settings
+from app.core.exceptions import (
+    BackgroundJobBusyError,
+    BankruptcyIdRequiredError,
+    DocumentProcessingError,
+)
 from app.core.s3_validation import validate_s3_key
 from app.core.url_safety import download_url_to_path
 from app.extractors.creditor_matrix import extract_creditor_matrix
@@ -27,6 +32,15 @@ from app.models.schemas import (
 from app.ocr.tesseract_engine import TesseractOcrEngine
 from app.persistence.s3 import S3Client
 from app.persistence.supabase import SupabaseClient
+from app.pipeline.background_jobs import release_background_slot, try_acquire_background_slot
+from app.pipeline.job_status import (
+    JOB_STATUS_FAILED,
+    JOB_STATUS_PROCESSING,
+    failed_job_raw,
+    job_status_from_raw,
+    mark_raw_completed,
+    processing_placeholder_raw,
+)
 from app.validation.engine import (
     should_review_for_error,
     validate_creditor_matrix,
@@ -74,14 +88,17 @@ class DocumentPipeline:
             if document_url.startswith("file://"):
                 if not self._settings.allow_local_file_urls:
                     raise ValueError("file:// URLs are disabled in this environment")
-                path = Path(document_url.removeprefix("file://")).resolve()
+                if self._settings.is_production:
+                    raise ValueError("file:// URLs are disabled in production")
                 root = self._settings.local_file_root
-                if root:
-                    root_path = Path(root).resolve()
-                    try:
-                        path.relative_to(root_path)
-                    except ValueError as exc:
-                        raise ValueError("Local file path is outside allowed directory") from exc
+                if not root:
+                    raise ValueError("LOCAL_FILE_ROOT must be set when file:// URLs are enabled")
+                path = Path(document_url.removeprefix("file://")).resolve()
+                root_path = Path(root).resolve()
+                try:
+                    path.relative_to(root_path)
+                except ValueError as exc:
+                    raise ValueError("Local file path is outside allowed directory") from exc
                 if not path.is_file():
                     raise FileNotFoundError("Local file not found")
                 return path, str(path)
@@ -177,14 +194,14 @@ class DocumentPipeline:
         docket_hint: FilingType | None = None,
         force: bool = False,
     ) -> ExtractForm201Response:
-        result = self.parse_document(
+        result, _, _, _, _, _ = self.parse_document(
             bankruptcy_id=bankruptcy_id,
             s3_key=s3_key,
             docket_hint=docket_hint or FilingType.FORM_201,
             force=force,
         )
         if result.form201 is None:
-            refreshed_result = self.parse_document(
+            refreshed_result, _, _, _, _, _ = self.parse_document(
                 bankruptcy_id=bankruptcy_id,
                 s3_key=s3_key,
                 docket_hint=docket_hint or FilingType.FORM_201,
@@ -213,7 +230,7 @@ class DocumentPipeline:
         docket_hint: FilingType | None = None,
         force: bool = False,
     ) -> ExtractCreditorMatrixResponse:
-        result = self.parse_document(
+        result, _, _, _, _, _ = self.parse_document(
             bankruptcy_id=bankruptcy_id,
             s3_key=s3_key,
             docket_hint=docket_hint or FilingType.CREDITOR_MATRIX,
@@ -229,6 +246,34 @@ class DocumentPipeline:
             creditor_count=len(creditors),
         )
 
+    def _lookup_cached_document(
+        self,
+        content_hash: str,
+        *,
+        force: bool,
+        bankruptcy_id: UUID | None = None,
+    ) -> ParseDocumentResponse | None:
+        existing = self._db.find_document_by_hash(
+            content_hash, self._settings.parser_version
+        )
+        if not existing:
+            return None
+        raw = self._coerce_mapping(existing.get("raw_extraction"))
+        if job_status_from_raw(raw) == JOB_STATUS_PROCESSING:
+            if force:
+                raise DocumentProcessingError(
+                    "Document is still processing; poll GET /api/v1/jobs/{document_id} "
+                    "before forcing a re-parse"
+                )
+            return self._response_from_cached_row(existing)
+        if not force:
+            if bankruptcy_id and not existing.get("bankruptcy_id"):
+                return None
+            return self._response_from_cached_row(existing)
+        if bankruptcy_id and not existing.get("bankruptcy_id"):
+            return None
+        return None
+
     def parse_document(
         self,
         *,
@@ -237,17 +282,163 @@ class DocumentPipeline:
         document_url: str | None = None,
         docket_hint: FilingType | None = None,
         force: bool = False,
-    ) -> ParseDocumentResponse:
+        async_mode: bool = False,
+    ) -> tuple[ParseDocumentResponse, bool, Path | None, str | None, str | None, bool]:
+        """Returns (response, schedule_background, temp_path, content_hash, key, release_slot)."""
+        if self._settings.require_bankruptcy_id and bankruptcy_id is None:
+            raise BankruptcyIdRequiredError()
+
         path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
+        content_hash: str | None = None
+        schedule_background = False
+        release_slot = False
         try:
             content_hash = S3Client.sha256_file(path)
-            if not force:
-                existing = self._db.find_document_by_hash(
-                    content_hash, self._settings.parser_version
-                )
-                if existing:
-                    return self._response_from_cached_row(existing)
+            cached = self._lookup_cached_document(
+                content_hash, force=force, bankruptcy_id=bankruptcy_id
+            )
+            if cached is not None:
+                return cached, False, None, None, None, False
 
+            if async_mode and self._settings.async_parse_enabled:
+                if not try_acquire_background_slot(self._settings.async_parse_max_concurrent):
+                    raise BackgroundJobBusyError()
+                release_slot = True
+                document_id = uuid4()
+                doc_payload = SupabaseClient.document_payload(
+                    bankruptcy_id=bankruptcy_id,
+                    s3_key=key,
+                    content_sha256=content_hash,
+                    page_count=0,
+                    filing_type=FilingType.UNKNOWN,
+                    parse_mode=ParseMode.STRUCTURED,
+                    ocr_used=False,
+                    parser_version=self._settings.parser_version,
+                    raw_extraction=processing_placeholder_raw(),
+                )
+                doc_payload["id"] = str(document_id)
+                saved = self._db.upsert_document(doc_payload)
+                if saved.get("id"):
+                    document_id = UUID(str(saved["id"]))
+                schedule_background = True
+                return (
+                    self._processing_response(document_id=document_id),
+                    True,
+                    path,
+                    content_hash,
+                    key,
+                    True,
+                )
+
+            result = self._parse_document_sync(
+                path=path,
+                key=key,
+                content_hash=content_hash,
+                bankruptcy_id=bankruptcy_id,
+                docket_hint=docket_hint,
+                force=force,
+                document_id=None,
+            )
+            return result, False, None, None, None, False
+        except Exception:
+            if release_slot:
+                release_background_slot(self._settings.async_parse_max_concurrent)
+            if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
+                path.unlink(missing_ok=True)
+            raise
+        finally:
+            if not schedule_background and self._should_unlink_temp(
+                s3_key=s3_key, document_url=document_url
+            ):
+                path.unlink(missing_ok=True)
+
+    def run_parse_document_background(
+        self,
+        *,
+        document_id: UUID,
+        bankruptcy_id: UUID | None,
+        s3_key: str | None,
+        document_url: str | None,
+        docket_hint: FilingType | None,
+        temp_path: Path | None = None,
+        content_hash: str | None = None,
+        release_slot: bool = True,
+    ) -> None:
+        path: Path | None = temp_path
+        key = s3_key or document_url or ""
+        try:
+            if path is None or not path.is_file():
+                path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
+            hash_value = content_hash or S3Client.sha256_file(path)
+            self._parse_document_sync(
+                path=path,
+                key=key,
+                content_hash=hash_value,
+                bankruptcy_id=bankruptcy_id,
+                docket_hint=docket_hint,
+                force=True,
+                document_id=document_id,
+            )
+        except Exception as exc:
+            logger.exception(
+                "background_parse_failed document_id=%s", document_id, exc_info=exc
+            )
+            self._mark_job_failed(document_id, str(exc))
+        finally:
+            if release_slot:
+                release_background_slot(self._settings.async_parse_max_concurrent)
+            if path and self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
+                path.unlink(missing_ok=True)
+
+    def resolve_manual_review(
+        self, review_id: UUID, *, resolved_by: str | None = None
+    ) -> dict:
+        row = self._db.get_manual_review(review_id)
+        if not row:
+            raise FileNotFoundError("Review item not found")
+        return self._db.resolve_manual_review(review_id, resolved_by=resolved_by)
+
+    def _mark_job_failed(self, document_id: UUID, error: str) -> None:
+        row = self._db.get_document(document_id)
+        if not row:
+            return
+        raw = self._coerce_mapping(row.get("raw_extraction"))
+        started_at = raw.get("started_at") if isinstance(raw.get("started_at"), str) else None
+        payload = SupabaseClient.document_payload(
+            bankruptcy_id=UUID(str(row["bankruptcy_id"]))
+            if row.get("bankruptcy_id")
+            else None,
+            s3_key=str(row.get("s3_key", "")),
+            content_sha256=str(row.get("content_sha256", "")),
+            page_count=int(row.get("page_count") or 0),
+            filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
+            parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
+            ocr_used=bool(row.get("ocr_used")),
+            parser_version=str(row.get("parser_version", self._settings.parser_version)),
+            raw_extraction=failed_job_raw(error=error, started_at=started_at),
+        )
+        self._db.upsert_document(payload)
+
+    @staticmethod
+    def _processing_response(*, document_id: UUID) -> ParseDocumentResponse:
+        return ParseDocumentResponse(
+            status="processing",
+            document_id=document_id,
+            manual_review_required=False,
+        )
+
+    def _parse_document_sync(
+        self,
+        *,
+        path: Path,
+        key: str,
+        content_hash: str,
+        bankruptcy_id: UUID | None,
+        docket_hint: FilingType | None,
+        force: bool,
+        document_id: UUID | None,
+    ) -> ParseDocumentResponse:
+        try:
             parse_mode = self._choose_parse_mode(path)
             text, page_count, ocr_used, ocr_confidence, structured = self._extract_text(
                 path, parse_mode
@@ -265,7 +456,7 @@ class DocumentPipeline:
             else:
                 validation = should_review_for_error("unknown_filing_type")
 
-            document_id = uuid4()
+            active_document_id = document_id or uuid4()
             bankruptcy = (
                 self._db.get_bankruptcy(bankruptcy_id) if bankruptcy_id else None
             )
@@ -273,11 +464,11 @@ class DocumentPipeline:
 
             if ocr_used:
                 self._s3.put_text(
-                    self._s3.ocr_output_key(case_number, str(document_id)),
+                    self._s3.ocr_output_key(case_number, str(active_document_id)),
                     text,
                 )
 
-            parsed_key = self._s3.parsed_output_key(case_number, str(document_id))
+            parsed_key = self._s3.parsed_output_key(case_number, str(active_document_id))
             self._s3.put_json(
                 parsed_key,
                 json.dumps(
@@ -292,6 +483,21 @@ class DocumentPipeline:
                 ),
             )
 
+            raw_extraction = mark_raw_completed(
+                {
+                    "text_preview": text[:2000],
+                    "filing_type": filing_type.value,
+                    "ocr_confidence": ocr_confidence,
+                    "parsed_s3_key": parsed_key,
+                    "validation": validation.model_dump(),
+                    "manual_review_required": validation.manual_review_required,
+                    "form201": form201.model_dump() if form201 else None,
+                    "creditors": [c.model_dump() for c in creditors]
+                    if creditors
+                    else None,
+                }
+            )
+
             doc_payload = SupabaseClient.document_payload(
                 bankruptcy_id=bankruptcy_id,
                 s3_key=key,
@@ -301,26 +507,20 @@ class DocumentPipeline:
                 parse_mode=parse_mode,
                 ocr_used=ocr_used,
                 parser_version=self._settings.parser_version,
-                raw_extraction={
-                    "text_preview": text[:2000],
-                    "filing_type": filing_type.value,
-                    "ocr_confidence": ocr_confidence,
-                    "parsed_s3_key": parsed_key,
-                    "validation": validation.model_dump(),
-                    "manual_review_required": validation.manual_review_required,
-                    "form201": form201.model_dump() if form201 else None,
-                    "creditors": [c.model_dump() for c in creditors] if creditors else None,
-                },
+                raw_extraction=raw_extraction,
             )
-            doc_payload["id"] = str(document_id)
+            doc_payload["id"] = str(active_document_id)
             saved = self._db.upsert_document(doc_payload)
             if saved.get("id"):
-                document_id = UUID(str(saved["id"]))
+                active_document_id = UUID(str(saved["id"]))
+
+            if force:
+                self._db.delete_parse_artifacts_for_document(active_document_id)
 
             if form201 and bankruptcy_id:
-                self._db.insert_form201_extraction(
+                self._db.replace_form201_extraction(
                     SupabaseClient.form201_to_row(
-                        document_id,
+                        active_document_id,
                         bankruptcy_id,
                         form201,
                         validation.confidence_score,
@@ -338,37 +538,38 @@ class DocumentPipeline:
 
             if creditors and bankruptcy_id:
                 extraction_id = uuid4()
-                self._db.insert_creditor_matrix_extraction(
+                matrix_rows = [
+                    {
+                        "extraction_id": str(extraction_id),
+                        "creditor_name": row.creditor_name,
+                        "address": row.address,
+                        "claim_amount": row.claim_amount,
+                        "entity_type": row.entity_type,
+                    }
+                    for row in creditors
+                ]
+                self._db.replace_creditor_matrix_extraction(
                     {
                         "id": str(extraction_id),
-                        "document_id": str(document_id),
+                        "document_id": str(active_document_id),
                         "bankruptcy_id": str(bankruptcy_id),
                         "creditor_count": len(creditors),
                         "confidence_score": validation.confidence_score,
                         "manual_review_required": validation.manual_review_required,
                         "parser_version": self._settings.parser_version,
-                    }
-                )
-                self._db.insert_creditor_matrix_rows(
-                    [
-                        {
-                            "extraction_id": str(extraction_id),
-                            "creditor_name": row.creditor_name,
-                            "address": row.address,
-                            "claim_amount": row.claim_amount,
-                            "entity_type": row.entity_type,
-                        }
-                        for row in creditors
-                    ]
+                    },
+                    matrix_rows,
                 )
                 if not validation.manual_review_required:
                     self._db.merge_creditors(bankruptcy_id, creditors)
 
-            if validation.manual_review_required:
+            if validation.manual_review_required and not self._db.has_pending_manual_review(
+                active_document_id
+            ):
                 self._db.insert_manual_review(
                     {
                         "bankruptcy_id": str(bankruptcy_id) if bankruptcy_id else None,
-                        "document_id": str(document_id),
+                        "document_id": str(active_document_id),
                         "review_reason": ",".join(validation.missing_fields)
                         or "low_confidence",
                         "status": "pending",
@@ -379,21 +580,32 @@ class DocumentPipeline:
             if ocr_used:
                 confidence = min(confidence, ocr_confidence)
 
+            if bankruptcy_id:
+                self._db.upsert_case_status(
+                    bankruptcy_id,
+                    has_creditor_matrix=(
+                        filing_type == FilingType.CREDITOR_MATRIX and bool(creditors)
+                    ),
+                    lifecycle_stage="parsed",
+                )
+
             return ParseDocumentResponse(
+                status="completed",
                 filing_type=filing_type,
                 parse_mode=parse_mode,
                 ocr_used=ocr_used,
                 page_count=page_count,
                 confidence=confidence,
                 manual_review_required=validation.manual_review_required,
-                document_id=document_id,
+                document_id=active_document_id,
                 form201=form201,
                 creditors=creditors,
                 validation=validation,
             )
-        finally:
-            if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
-                path.unlink(missing_ok=True)
+        except Exception as exc:
+            if document_id is not None:
+                self._mark_job_failed(document_id, str(exc))
+            raise
 
     def _coerce_mapping(self, value: object) -> dict:
         if isinstance(value, dict):
@@ -452,11 +664,28 @@ class DocumentPipeline:
 
     def _response_from_cached_row(self, row: dict) -> ParseDocumentResponse:
         raw = self._coerce_mapping(row.get("raw_extraction"))
-        validation = self._validation_from_cached_row(row, raw)
         document_id = UUID(str(row["id"])) if row.get("id") else None
+        job_status = job_status_from_raw(raw)
+
+        if job_status == JOB_STATUS_PROCESSING:
+            if document_id is None:
+                raise ValueError("Processing document row is missing id")
+            return self._processing_response(document_id=document_id)
+
+        if job_status == JOB_STATUS_FAILED:
+            error = raw.get("job_error")
+            return ParseDocumentResponse(
+                status="failed",
+                document_id=document_id,
+                error=str(error) if error is not None else "parse failed",
+                manual_review_required=False,
+            )
+
+        validation = self._validation_from_cached_row(row, raw)
         if document_id and self._db.has_pending_manual_review(document_id):
             validation = validation.model_copy(update={"manual_review_required": True})
         return ParseDocumentResponse(
+            status="completed",
             filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
             parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
             ocr_used=bool(row.get("ocr_used")),
@@ -477,10 +706,34 @@ class DocumentPipeline:
         if not row:
             return None
         raw = self._coerce_mapping(row.get("raw_extraction"))
+        job_status = job_status_from_raw(raw)
+        filing = row.get("filing_type")
+
+        if job_status == JOB_STATUS_PROCESSING:
+            return JobStatusResponse(
+                document_id=document_id,
+                status="processing",
+                parser_version=str(row.get("parser_version", "")),
+                filing_type=FilingType(filing) if filing else None,
+                manual_review_required=False,
+                result=raw or None,
+            )
+
+        if job_status == JOB_STATUS_FAILED:
+            error = raw.get("job_error")
+            return JobStatusResponse(
+                document_id=document_id,
+                status="failed",
+                parser_version=str(row.get("parser_version", "")),
+                filing_type=FilingType(filing) if filing else None,
+                manual_review_required=False,
+                result=raw or None,
+                error=str(error) if error is not None else "parse failed",
+            )
+
         validation = self._validation_from_cached_row(row, raw)
         if self._db.has_pending_manual_review(document_id):
             validation = validation.model_copy(update={"manual_review_required": True})
-        filing = row.get("filing_type")
         return JobStatusResponse(
             document_id=document_id,
             status="completed" if raw else "pending",

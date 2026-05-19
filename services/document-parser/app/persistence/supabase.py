@@ -6,6 +6,7 @@ from uuid import UUID
 import httpx
 
 from app.core.config import ENV_FILE, get_settings
+from app.persistence.review_status import validate_review_queue_status
 from app.models.schemas import (
     CreditorRow,
     Form201Data,
@@ -232,11 +233,52 @@ class SupabaseClient:
         )
         return bool(rows)
 
+    def _delete_creditor_matrix_for_document(self, document_id: UUID) -> None:
+        doc_filter = f"eq.{document_id}"
+        extractions = self._request(
+            "GET",
+            "creditor_matrix_extractions",
+            params={"document_id": doc_filter, "select": "id"},
+        )
+        if isinstance(extractions, list):
+            for row in extractions:
+                extraction_id = row.get("id")
+                if extraction_id:
+                    self._request(
+                        "DELETE",
+                        "creditor_matrix_rows",
+                        params={"extraction_id": f"eq.{extraction_id}"},
+                    )
+        self._request(
+            "DELETE",
+            "creditor_matrix_extractions",
+            params={"document_id": doc_filter},
+        )
+
+    def delete_parse_artifacts_for_document(self, document_id: UUID) -> None:
+        doc_filter = f"eq.{document_id}"
+        self._delete_creditor_matrix_for_document(document_id)
+        self._request(
+            "DELETE",
+            "form201_extractions",
+            params={"document_id": doc_filter},
+        )
+
     def insert_form201_extraction(self, payload: dict[str, Any]) -> dict[str, Any]:
         rows = self._request("POST", "form201_extractions", json=payload)
         if isinstance(rows, list) and rows:
             return rows[0]
         return payload
+
+    def replace_form201_extraction(self, payload: dict[str, Any]) -> dict[str, Any]:
+        document_id = payload.get("document_id")
+        if document_id:
+            self._request(
+                "DELETE",
+                "form201_extractions",
+                params={"document_id": f"eq.{document_id}"},
+            )
+        return self.insert_form201_extraction(payload)
 
     def insert_creditor_matrix_extraction(
         self, payload: dict[str, Any]
@@ -251,15 +293,52 @@ class SupabaseClient:
             return
         self._request("POST", "creditor_matrix_rows", json=rows)
 
+    def replace_creditor_matrix_extraction(
+        self, extraction_payload: dict[str, Any], row_payloads: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        document_id = extraction_payload.get("document_id")
+        if document_id:
+            self._delete_creditor_matrix_for_document(UUID(str(document_id)))
+        saved = self.insert_creditor_matrix_extraction(extraction_payload)
+        if row_payloads:
+            self.insert_creditor_matrix_rows(row_payloads)
+        return saved
+
     def insert_manual_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         rows = self._request("POST", "manual_review_queue", json=payload)
         if isinstance(rows, list) and rows:
             return rows[0]
         return payload
 
+    def get_manual_review(self, review_id: UUID) -> dict[str, Any] | None:
+        rows = self._request(
+            "GET",
+            "manual_review_queue",
+            params={
+                "id": f"eq.{review_id}",
+                "select": "*",
+                "limit": "1",
+            },
+        )
+        if not rows:
+            return None
+        return rows[0]
+
+    def resolve_manual_review(
+        self, review_id: UUID, *, resolved_by: str | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"p_review_id": str(review_id)}
+        if resolved_by:
+            payload["p_resolved_by"] = resolved_by
+        result = self._rpc("au_group_resolve_manual_review", payload)
+        if not isinstance(result, dict):
+            raise RuntimeError("resolve_manual_review returned unexpected payload")
+        return result
+
     def list_manual_review(
         self, *, limit: int = 50, offset: int = 0, status: str | None = None
     ) -> tuple[list[dict[str, Any]], int]:
+        status = validate_review_queue_status(status)
         params: dict[str, str] = {
             "select": "*",
             "order": "created_at.desc",
@@ -315,6 +394,39 @@ class SupabaseClient:
         }
         result = self._rpc("au_group_merge_creditor_matrix", payload)
         return int(result) if result is not None else len(creditors)
+
+    def upsert_case_status(
+        self,
+        bankruptcy_id: UUID,
+        *,
+        has_creditor_matrix: bool | None = None,
+        has_schedule_f: bool | None = None,
+        enrichment_completed: bool | None = None,
+        outreach_ready: bool | None = None,
+        lifecycle_stage: str | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {"p_bankruptcy_id": str(bankruptcy_id)}
+        if has_creditor_matrix is not None:
+            payload["p_has_creditor_matrix"] = has_creditor_matrix
+        if has_schedule_f is not None:
+            payload["p_has_schedule_f"] = has_schedule_f
+        if enrichment_completed is not None:
+            payload["p_enrichment_completed"] = enrichment_completed
+        if outreach_ready is not None:
+            payload["p_outreach_ready"] = outreach_ready
+        if lifecycle_stage is not None:
+            payload["p_lifecycle_stage"] = lifecycle_stage
+        self._rpc("au_group_upsert_case_status", payload)
+
+    def link_document_bankruptcy(self, document_id: UUID, bankruptcy_id: UUID) -> dict[str, Any]:
+        result = self._rpc(
+            "au_group_link_document_bankruptcy",
+            {
+                "p_document_id": str(document_id),
+                "p_bankruptcy_id": str(bankruptcy_id),
+            },
+        )
+        return result if isinstance(result, dict) else {}
 
     def _rpc(self, name: str, payload: dict[str, Any]) -> Any:
         if not self._enabled:

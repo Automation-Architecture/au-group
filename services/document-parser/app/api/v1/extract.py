@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
+from app.core.config import get_settings
 from app.core.security import verify_auth
+from app.core.rate_limit import limiter
 from app.models.schemas import (
     ExtractCreditorMatrixRequest,
     ExtractCreditorMatrixResponse,
@@ -11,9 +13,13 @@ from app.pipeline.router import DocumentPipeline
 
 router = APIRouter(prefix="/extract", tags=["extract"])
 
+_extract_rate_limit = lambda: get_settings().rate_limit_extract  # noqa: E731
+
 
 @router.post("/form201", response_model=ExtractForm201Response)
+@limiter.limit(_extract_rate_limit)
 async def extract_form201(
+    request: Request,
     body: ExtractForm201Request,
     _auth=Depends(verify_auth),
 ) -> ExtractForm201Response:
@@ -27,7 +33,9 @@ async def extract_form201(
 
 
 @router.post("/creditor-matrix", response_model=ExtractCreditorMatrixResponse)
+@limiter.limit(_extract_rate_limit)
 async def extract_creditor_matrix(
+    request: Request,
     body: ExtractCreditorMatrixRequest,
     _auth=Depends(verify_auth),
 ) -> ExtractCreditorMatrixResponse:

@@ -79,7 +79,7 @@ class ParseStructuredRequest(DocumentSource):
 
 
 class ParseDocumentRequest(DocumentSource):
-    pass
+    async_mode: bool = False
 
 
 class ExtractForm201Request(BaseModel):
@@ -131,16 +131,18 @@ class ExtractCreditorMatrixResponse(BaseModel):
 
 
 class ParseDocumentResponse(BaseModel):
-    filing_type: FilingType
-    parse_mode: ParseMode
-    ocr_used: bool
-    page_count: int
-    confidence: float
-    manual_review_required: bool
+    status: str = "completed"
+    filing_type: FilingType = FilingType.UNKNOWN
+    parse_mode: ParseMode = ParseMode.STRUCTURED
+    ocr_used: bool = False
+    page_count: int = 0
+    confidence: float = 0.0
+    manual_review_required: bool = False
     document_id: UUID | None = None
     form201: Form201Data | None = None
     creditors: list[CreditorRow] | None = None
     validation: ValidationResult | None = None
+    error: str | None = None
 
 
 class ReviewQueueItem(BaseModel):
@@ -167,6 +169,19 @@ class JobStatusResponse(BaseModel):
     filing_type: FilingType | None
     manual_review_required: bool
     result: dict[str, Any] | None = None
+    error: str | None = None
+
+
+class ResolveReviewRequest(BaseModel):
+    resolved_by: str | None = None
+
+
+class ResolveReviewResponse(BaseModel):
+    review_id: UUID
+    document_id: UUID | None
+    bankruptcy_id: UUID | None
+    status: str
+    bankruptcy_manual_review_required: bool | None = None
 
 
 class LoginRequest(BaseModel):

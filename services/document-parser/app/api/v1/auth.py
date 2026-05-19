@@ -1,19 +1,23 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
 from app.core.config import get_settings
 from app.core.logging import log_event
+from app.core.rate_limit import limiter
 from app.core.tokens import create_access_token
 from app.models.schemas import LoginRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
+_login_rate_limit = lambda: get_settings().rate_limit_login  # noqa: E731
+
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest) -> TokenResponse:
+@limiter.limit(_login_rate_limit)
+async def login(request: Request, body: LoginRequest) -> TokenResponse:
     settings = get_settings()
     if not settings.jwt_secret:
         raise HTTPException(

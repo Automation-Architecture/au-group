@@ -57,6 +57,15 @@ class Settings(BaseSettings):
     rate_limit_enabled: bool = True
     rate_limit_default: str = "60/minute"
     rate_limit_parse: str = "10/minute"
+    rate_limit_login: str = "5/minute"
+    rate_limit_extract: str = "10/minute"
+    rate_limit_review: str = "30/minute"
+
+    async_parse_enabled: bool = True
+    async_parse_max_concurrent: int = 2
+
+    # When true, POST /parse/document requires bankruptcy_id (production default).
+    require_bankruptcy_id: bool = True
 
     jwt_secret: str | None = None
     jwt_algorithm: str = "HS256"

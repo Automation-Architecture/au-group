@@ -73,6 +73,21 @@ sudo systemctl start document-parser
 
 Deploy updates: `./scripts/deploy.sh`
 
+## `REQUIRE_BANKRUPTCY_ID`
+
+When `REQUIRE_BANKRUPTCY_ID=true` (default), `POST /api/v1/parse/document` returns **400** without `bankruptcy_id`. n8n SYS-01 must pass the bankruptcy UUID into SYS-02.
+
+Orphan rows (documents parsed before this fix): `scripts/backfill_orphan_documents.py` (requires `SUPABASE_*`, `API_KEY`).
+
+## Supabase migrations
+
+After pulling, apply migrations (includes manual review resolve RPC):
+
+```bash
+supabase db push
+# or apply supabase/migrations/20260519120000_manual_review_resolve.sql in the dashboard
+```
+
 ## Deploy on Railway
 
 Railway runs the app with **Nixpacks** (no Dockerfile). OCR needs system packages — `nixpacks.toml` installs Tesseract and Poppler.
@@ -165,20 +180,21 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 | 400 on pasted URL | Set `ALLOW_DOCUMENT_URL=true` and add host to `ALLOWED_DOWNLOAD_HOST_SUFFIXES`. |
 | 400 on `s3_key` | Key must be `raw-documents/{case_number}/{file}.pdf`. |
 | S3 errors | Verify IAM keys and bucket name; bucket must be reachable from Railway (public internet). |
-| Timeouts on large PDFs | Increase n8n HTTP timeout or use `GET /api/v1/jobs/{document_id}` poll pattern. |
+| Timeouts on large PDFs | Use `"async_mode": true` on parse/document, then poll `GET /api/v1/jobs/{document_id}`. |
 
 ## API endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/api/v1/auth/login` | Issue JWT access token (username/password) |
-| POST | `/api/v1/parse/document` | Full pipeline (route → classify → extract → validate) |
+| POST | `/api/v1/parse/document` | Full pipeline; `async_mode: true` → **202** + poll jobs |
 | POST | `/api/v1/parse/ocr` | OCR only |
 | POST | `/api/v1/parse/structured` | Structured PDF text only |
 | POST | `/api/v1/extract/form201` | Form 201 extraction |
 | POST | `/api/v1/extract/creditor-matrix` | Creditor matrix extraction |
 | GET | `/api/v1/review-queue` | Manual review queue |
-| GET | `/api/v1/jobs/{document_id}` | Job status poll (n8n timeouts) |
+| POST | `/api/v1/review/{review_id}/resolve` | Mark review done; clear bankruptcy flag if no pending items |
+| GET | `/api/v1/jobs/{document_id}` | Job status poll (`processing` / `completed` / `failed`) |
 | GET | `/health/ready` | Readiness probe (Supabase + S3; 503 if deps down) |
 
 ## Tests

@@ -49,27 +49,18 @@ class TestReviewQueue:
             )
             assert response.status_code == expected_status
 
-    def test_sql_injection_in_status_filter_does_not_crash(
+    def test_invalid_status_filter_returns_400(
         self,
         client: TestClient,
         auth_headers: dict[str, str],
-        patch_pipeline,
     ) -> None:
-        captured: dict = {}
-
-        def _list(self, **kwargs: object) -> tuple[list, int]:
-            captured.update(kwargs)
-            return ([], 0)
-
-        patch_pipeline("list_review_queue", _list)
         response = client.get(
             "/api/v1/review-queue",
             params={"status": "pending' OR '1'='1"},
             headers=auth_headers,
         )
-        assert response.status_code == 200
-        assert captured.get("status") == "pending' OR '1'='1"
-        assert response.json()["items"] == []
+        assert response.status_code == 400
+        assert "Invalid status" in response.json()["detail"]
 
     def test_empty_queue(
         self,
@@ -136,3 +127,67 @@ class TestJobStatus:
         response = client.get(f"/api/v1/jobs/{document_id}", headers=auth_headers)
         assert response.status_code == 200
         assert response.json()["manual_review_required"] is True
+
+    def test_processing_job_status(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        document_id,
+        patch_pipeline,
+    ) -> None:
+        status = sample_job_status_response(document_id=document_id).model_copy(
+            update={"status": "processing", "manual_review_required": False}
+        )
+        patch_pipeline("build_job_status", lambda self, _: status)
+        response = client.get(f"/api/v1/jobs/{document_id}", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.json()["status"] == "processing"
+
+
+class TestResolveReview:
+    def test_resolve_happy_path(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        patch_pipeline,
+    ) -> None:
+        review_id = uuid4()
+        bankruptcy_id = uuid4()
+        document_id = uuid4()
+
+        patch_pipeline(
+            "resolve_manual_review",
+            lambda self, rid, **kwargs: {
+                "review_id": str(review_id),
+                "document_id": str(document_id),
+                "bankruptcy_id": str(bankruptcy_id),
+                "status": "resolved",
+                "bankruptcy_manual_review_required": False,
+            },
+        )
+
+        response = client.post(
+            f"/api/v1/review/{review_id}/resolve",
+            json={"resolved_by": "keith"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "resolved"
+        assert body["bankruptcy_manual_review_required"] is False
+
+    def test_resolve_not_found(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        patch_pipeline,
+    ) -> None:
+        def _raise_not_found(self, review_id: object, **kwargs: object) -> None:
+            raise FileNotFoundError("Review item not found")
+
+        patch_pipeline("resolve_manual_review", _raise_not_found)
+        response = client.post(
+            f"/api/v1/review/{uuid4()}/resolve",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404

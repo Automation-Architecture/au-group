@@ -144,7 +144,10 @@ class TestParseDocument:
         patch_pipeline,
     ) -> None:
         mock_response = sample_parse_document_response()
-        patch_pipeline("parse_document", lambda self, **kwargs: mock_response)
+        patch_pipeline(
+            "parse_document",
+            lambda self, **kwargs: (mock_response, False, None, None, None, False),
+        )
 
         response = client.post(
             "/api/v1/parse/document",
@@ -158,11 +161,33 @@ class TestParseDocument:
         )
         assert response.status_code == 200
         body = response.json()
+        assert body["status"] == "completed"
         assert body["filing_type"] == "FORM_201"
         assert body["manual_review_required"] is False
         assert body["form201"]["debtor_name"] == "Acme Corp"
         assert body["validation"]["confidence_score"] == pytest.approx(0.92)
         assert "password" not in body
+
+    def test_missing_bankruptcy_id_returns_400_when_required(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        monkeypatch.setattr(settings, "require_bankruptcy_id", True)
+        get_settings.cache_clear()
+
+        response = client.post(
+            "/api/v1/parse/document",
+            json={"s3_key": "raw-documents/24-10001/form201.pdf"},
+            headers=auth_headers,
+        )
+        get_settings.cache_clear()
+        assert response.status_code == 400
+        assert "bankruptcy_id" in response.json()["detail"].lower()
 
     def test_invalid_bankruptcy_id_returns_422(
         self, client: TestClient, auth_headers: dict[str, str]
@@ -201,7 +226,10 @@ class TestParseDocument:
     ) -> None:
         """Same mocked pipeline output twice yields identical JSON (contract for n8n)."""
         mock_response = sample_parse_document_response()
-        patch_pipeline("parse_document", lambda self, **kwargs: mock_response)
+        patch_pipeline(
+            "parse_document",
+            lambda self, **kwargs: (mock_response, False, None, None, None, False),
+        )
         payload = {
             "bankruptcy_id": str(bankruptcy_id),
             "s3_key": "raw-documents/1/form201.pdf",
@@ -212,6 +240,45 @@ class TestParseDocument:
         assert first.status_code == 200
         assert second.status_code == 200
         assert first.json() == second.json()
+
+    def test_async_mode_returns_202_with_document_id(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        document_id,
+        patch_pipeline,
+    ) -> None:
+        from app.models.schemas import ParseDocumentResponse
+
+        processing = ParseDocumentResponse(
+            status="processing",
+            document_id=document_id,
+        )
+        patch_pipeline(
+            "parse_document",
+            lambda self, **kwargs: (
+                processing,
+                True,
+                None,
+                "abc123",
+                "raw-documents/1/large.pdf",
+                True,
+            ),
+        )
+
+        response = client.post(
+            "/api/v1/parse/document",
+            json={
+                "bankruptcy_id": str(uuid4()),
+                "s3_key": "raw-documents/24-10001/large.pdf",
+                "async_mode": True,
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "processing"
+        assert body["document_id"] == str(document_id)
 
 
 class TestParsePerformance:

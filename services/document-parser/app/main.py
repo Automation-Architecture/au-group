@@ -13,6 +13,11 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, log_event
 from app.core.rate_limit import limiter
 from app.core.readiness import run_readiness_checks
+from app.core.exceptions import (
+    BackgroundJobBusyError,
+    BankruptcyIdRequiredError,
+    DocumentProcessingError,
+)
 from app.persistence.supabase import SupabaseUnavailableError
 
 configure_logging()
@@ -44,6 +49,15 @@ app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
     start = time.perf_counter()
     response = await call_next(request)
@@ -58,6 +72,30 @@ async def metrics_middleware(request: Request, call_next):
             duration_ms=round(elapsed_ms, 2),
         )
     return response
+
+
+@app.exception_handler(BankruptcyIdRequiredError)
+async def bankruptcy_id_required_handler(
+    request: Request, exc: BankruptcyIdRequiredError
+) -> JSONResponse:
+    logger.warning("bad_request path=%s", request.url.path, exc_info=exc)
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(DocumentProcessingError)
+async def document_processing_handler(
+    request: Request, exc: DocumentProcessingError
+) -> JSONResponse:
+    logger.warning("conflict path=%s", request.url.path, exc_info=exc)
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(BackgroundJobBusyError)
+async def background_busy_handler(
+    request: Request, exc: BackgroundJobBusyError
+) -> JSONResponse:
+    logger.warning("rate_limited path=%s", request.url.path, exc_info=exc)
+    return JSONResponse(status_code=429, content={"detail": str(exc)})
 
 
 @app.exception_handler(ValueError)

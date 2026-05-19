@@ -25,16 +25,19 @@ def _load_dotenv_file() -> None:
 
 
 _load_dotenv_file()
+# Test credentials must win over services/document-parser/.env (setdefault would not override).
+os.environ["AUTH_USERNAME"] = "test-user"
+os.environ["AUTH_PASSWORD"] = "test-password"
 # Fallback when .env is missing (unit tests).
 os.environ.setdefault("API_KEY", "test-api-key-for-pytest-suite-only-do-not-use-in-prod")
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("EXPOSE_OPENAPI", "false")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-characters-long")
-os.environ.setdefault("AUTH_USERNAME", "test-user")
-os.environ.setdefault("AUTH_PASSWORD", "test-password")
 
 from app.core.config import get_settings  # noqa: E402
+
+get_settings.cache_clear()
 from app.main import app  # noqa: E402
 from app.models.schemas import (  # noqa: E402
     CreditorRow,
@@ -106,6 +109,7 @@ def sample_parse_document_response(*, document_id: UUID | None = None) -> ParseD
         level="high",
     )
     return ParseDocumentResponse(
+        status="completed",
         filing_type=FilingType.FORM_201,
         parse_mode=ParseMode.STRUCTURED,
         ocr_used=False,
