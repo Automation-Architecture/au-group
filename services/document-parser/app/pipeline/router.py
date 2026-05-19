@@ -186,6 +186,22 @@ class DocumentPipeline:
             if self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
                 path.unlink(missing_ok=True)
 
+    @staticmethod
+    def _validation_for_form201(
+        result: ParseDocumentResponse, form201: Form201Data
+    ) -> ValidationResult:
+        if result.validation is not None:
+            return result.validation
+        return validate_form201(form201, ocr_used=result.ocr_used)
+
+    @staticmethod
+    def _validation_for_creditor_matrix(
+        result: ParseDocumentResponse, creditors: list[CreditorRow]
+    ) -> ValidationResult:
+        if result.validation is not None:
+            return result.validation
+        return validate_creditor_matrix(creditors)
+
     def extract_form201(
         self,
         *,
@@ -200,6 +216,19 @@ class DocumentPipeline:
             docket_hint=docket_hint or FilingType.FORM_201,
             force=force,
         )
+        if result.status == "processing":
+            if result.document_id is None:
+                raise DocumentProcessingError(
+                    "Document is still processing; poll job status before extract/form201"
+                )
+            raise DocumentProcessingError(
+                "Document is still processing; poll GET /api/v1/jobs/"
+                f"{result.document_id} before calling POST /api/v1/extract/form201"
+            )
+        # Re-parse only when extraction is missing (mis-classified filing, empty extract,
+        # or cache without form201 in raw_extraction). Validation is always derived on read
+        # via _validation_from_cached_row or _validation_for_form201; do not force re-parse
+        # for missing validation alone.
         if result.form201 is None:
             refreshed_result, _, _, _, _, _ = self.parse_document(
                 bankruptcy_id=bankruptcy_id,
@@ -214,7 +243,7 @@ class DocumentPipeline:
         if form201 is None:
             raise ValueError("parse_document() did not return form201 data")
 
-        validation = result.validation or validate_form201(form201, ocr_used=result.ocr_used)
+        validation = self._validation_for_form201(result, form201)
         return ExtractForm201Response(
             filing_type=result.filing_type,
             form201=form201,
@@ -236,8 +265,17 @@ class DocumentPipeline:
             docket_hint=docket_hint or FilingType.CREDITOR_MATRIX,
             force=force,
         )
+        if result.status == "processing":
+            if result.document_id is None:
+                raise DocumentProcessingError(
+                    "Document is still processing; poll job status before extract/creditor-matrix"
+                )
+            raise DocumentProcessingError(
+                "Document is still processing; poll GET /api/v1/jobs/"
+                f"{result.document_id} before calling POST /api/v1/extract/creditor-matrix"
+            )
         creditors = result.creditors or []
-        validation = result.validation or validate_creditor_matrix(creditors)
+        validation = self._validation_for_creditor_matrix(result, creditors)
         return ExtractCreditorMatrixResponse(
             filing_type=result.filing_type,
             creditors=creditors,
@@ -580,7 +618,11 @@ class DocumentPipeline:
                     matrix_rows,
                 )
                 if not validation.manual_review_required:
-                    self._db.merge_creditors(bankruptcy_id, creditors)
+                    self._db.merge_creditors(
+                        bankruptcy_id,
+                        creditors,
+                        confidence_score=validation.confidence_score,
+                    )
 
             if validation.manual_review_required and not self._db.has_pending_manual_review(
                 active_document_id

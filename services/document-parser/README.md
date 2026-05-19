@@ -192,8 +192,8 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 | POST | `/api/v1/parse/document` | Full pipeline; `async_mode: true` → **202** + poll jobs |
 | POST | `/api/v1/parse/ocr` | OCR only |
 | POST | `/api/v1/parse/structured` | Structured PDF text only |
-| POST | `/api/v1/extract/form201` | Form 201 extraction |
-| POST | `/api/v1/extract/creditor-matrix` | Creditor matrix extraction |
+| POST | `/api/v1/extract/form201` | Form 201 extraction (full parse; **409** if document still processing) |
+| POST | `/api/v1/extract/creditor-matrix` | Creditor matrix extraction (**409** if document still processing) |
 | GET | `/api/v1/review-queue` | Manual review queue |
 | POST | `/api/v1/review/{review_id}/resolve` | Mark review done; clear bankruptcy flag if no pending items |
 | GET | `/api/v1/jobs/{document_id}` | Job status poll (`processing` / `completed` / `failed`) |

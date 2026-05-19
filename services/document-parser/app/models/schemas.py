@@ -46,6 +46,8 @@ class CreditorRow(BaseModel):
     address: str | None = None
     claim_amount: float | None = None
     entity_type: str | None = None
+    original_name: str | None = None
+    confidence_score: float | None = None
 
 
 class ValidationResult(BaseModel):

@@ -10,7 +10,7 @@ SYS-02 is an **orchestrator only** (FR-1.2, FR-1.3 via parser, FR-3.3 HITL). It 
 
 | Owns | Does not own |
 |------|----------------|
-| `processing_jobs` (`document_parse`) | `form201_extractions` inserts (parser writes) |
+| `processing_jobs` (`document_intelligence`) | `form201_extractions` inserts (parser writes) |
 | `pipeline_executions` | `bankruptcies` insert on intake (SYS-01) |
 | HTTP to document-parser | Schedule F detect/process (SYS-06/07) |
 | Branch → SYS-03 or stop on manual review | Direct PACER API (SYS-01B / SYS-06) |
@@ -39,7 +39,7 @@ See [document-parse.md](../workflows/document-parse.md) and [services/document-p
 
 ```
 Execute Workflow (from SYS-01)
-  → Create processing_jobs (running)
+  → Create processing_jobs (job_type: document_intelligence, status: running)
   → pipeline_executions (started)
   → Load bankruptcies
   → For each document in job_payload:

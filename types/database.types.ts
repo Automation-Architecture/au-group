@@ -365,6 +365,7 @@ export type Database = {
           address: string | null
           claim_amount: number | null
           claim_date: string | null
+          confidence_score: number | null
           created_at: string
           id: string
           is_company: boolean
@@ -374,6 +375,7 @@ export type Database = {
           name: string
           nature_of_claim: string | null
           normalized_name: string | null
+          original_name: string | null
           source_bankruptcy_id: string | null
           updated_at: string
         }
@@ -381,6 +383,7 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          confidence_score?: number | null
           created_at?: string
           id?: string
           is_company?: boolean
@@ -390,6 +393,7 @@ export type Database = {
           name: string
           nature_of_claim?: string | null
           normalized_name?: string | null
+          original_name?: string | null
           source_bankruptcy_id?: string | null
           updated_at?: string
         }
@@ -397,6 +401,7 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          confidence_score?: number | null
           created_at?: string
           id?: string
           is_company?: boolean
@@ -406,6 +411,7 @@ export type Database = {
           name?: string
           nature_of_claim?: string | null
           normalized_name?: string | null
+          original_name?: string | null
           source_bankruptcy_id?: string | null
           updated_at?: string
         }
@@ -1011,7 +1017,11 @@ export type Database = {
       au_group_jsonb_midpoint_count: { Args: { range: Json }; Returns: number }
       au_group_jsonb_midpoint_usd: { Args: { range: Json }; Returns: number }
       au_group_merge_creditor_matrix: {
-        Args: { p_bankruptcy_id: string; p_creditors: Json }
+        Args: {
+          p_bankruptcy_id: string
+          p_confidence_score?: number
+          p_creditors: Json
+        }
         Returns: number
       }
       au_group_upsert_bankruptcy_from_form201: {
@@ -1048,6 +1058,7 @@ export type Database = {
       au_group_job_type:
         | "pacer_poll"
         | "document_parse"
+        | "document_intelligence"
         | "zoom_info_enrich"
         | "salesforce_push"
       au_group_parse_mode: "structured" | "ocr"
@@ -1218,6 +1229,7 @@ export const Constants = {
       au_group_job_type: [
         "pacer_poll",
         "document_parse",
+        "document_intelligence",
         "zoom_info_enrich",
         "salesforce_push",
       ],

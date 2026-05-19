@@ -5,10 +5,16 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+from app.models.schemas import FilingType, Form201Data, ParseDocumentResponse, ParseMode
+from app.validation.engine import validate_form201
 from tests.conftest import (
     sample_extract_creditor_matrix_response,
     sample_extract_form201_response,
 )
+
+
+def _parse_document_tuple(response: ParseDocumentResponse) -> tuple:
+    return response, False, None, None, None, False
 
 
 class TestExtractForm201:
@@ -73,6 +79,83 @@ class TestExtractForm201:
             headers=auth_headers,
         )
         assert response.status_code == 422
+
+    def test_still_processing_returns_409(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        bankruptcy_id,
+        patch_pipeline,
+    ) -> None:
+        document_id = uuid4()
+
+        def fake_parse_document(self, **kwargs: object) -> tuple:
+            return _parse_document_tuple(
+                ParseDocumentResponse(
+                    status="processing",
+                    document_id=document_id,
+                    manual_review_required=False,
+                )
+            )
+
+        patch_pipeline("parse_document", fake_parse_document)
+
+        response = client.post(
+            "/api/v1/extract/form201",
+            json={
+                "bankruptcy_id": str(bankruptcy_id),
+                "s3_key": "raw-documents/1/form201.pdf",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 409
+        assert "still processing" in response.json()["detail"]
+        assert str(document_id) in response.json()["detail"]
+
+    def test_validation_null_does_not_trigger_second_parse(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        bankruptcy_id,
+        patch_pipeline,
+    ) -> None:
+        form201 = Form201Data(debtor_name="Acme Corp", state="TX")
+        calls: list[dict] = []
+
+        def fake_parse_document(self, **kwargs: object) -> tuple:
+            calls.append(dict(kwargs))
+            return _parse_document_tuple(
+                ParseDocumentResponse(
+                    status="completed",
+                    filing_type=FilingType.FORM_201,
+                    parse_mode=ParseMode.STRUCTURED,
+                    ocr_used=False,
+                    page_count=1,
+                    confidence=0.0,
+                    manual_review_required=False,
+                    document_id=uuid4(),
+                    form201=form201,
+                    validation=None,
+                )
+            )
+
+        patch_pipeline("parse_document", fake_parse_document)
+
+        response = client.post(
+            "/api/v1/extract/form201",
+            json={
+                "bankruptcy_id": str(bankruptcy_id),
+                "s3_key": "raw-documents/1/form201.pdf",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        assert len(calls) == 1
+        expected = validate_form201(form201, ocr_used=False)
+        body = response.json()
+        assert body["validation"]["confidence_score"] == pytest.approx(
+            expected.confidence_score
+        )
 
     def test_pipeline_value_error_returns_400(
         self, client: TestClient, auth_headers: dict[str, str], bankruptcy_id, patch_pipeline

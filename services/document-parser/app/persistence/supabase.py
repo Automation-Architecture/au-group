@@ -387,14 +387,20 @@ class SupabaseClient:
         return bankruptcy_id
 
     def merge_creditors(
-        self, bankruptcy_id: UUID, creditors: list[CreditorRow]
+        self,
+        bankruptcy_id: UUID,
+        creditors: list[CreditorRow],
+        *,
+        confidence_score: float | None = None,
     ) -> int:
         if not creditors:
             return 0
-        payload = {
+        payload: dict[str, Any] = {
             "p_bankruptcy_id": str(bankruptcy_id),
             "p_creditors": [c.model_dump() for c in creditors],
         }
+        if confidence_score is not None:
+            payload["p_confidence_score"] = confidence_score
         result = self._rpc("au_group_merge_creditor_matrix", payload)
         return int(result) if result is not None else len(creditors)
 

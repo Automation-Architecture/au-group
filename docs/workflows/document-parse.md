@@ -37,7 +37,7 @@ Login requires `JWT_SECRET`, `AUTH_USERNAME`, `AUTH_PASSWORD` on the parser serv
 
 Supabase insert into `processing_jobs`:
 
-- `job_type`: `document_parse`
+- `job_type`: `document_intelligence` (legacy: `document_parse`)
 - `status`: `running`
 - `bankruptcy_id`: from trigger
 
@@ -190,7 +190,13 @@ For large PDFs, prefer async parse:
 1. `POST /api/v1/parse/document` with `"async_mode": true`
 2. Poll `GET /api/v1/jobs/{document_id}` until terminal (step 3b)
 3. Alternative for small files: `"async_mode": false` and wait for **200**
-4. Alternative split: `/parse/ocr` then `/extract/form201` (sync, two steps)
+4. `POST /api/v1/extract/form201` — runs the full parse pipeline (not OCR-only output). Prefer step 1–2 for n8n; use extract for ad-hoc or tooling calls.
+
+### Extract endpoints (`/extract/form201`, `/extract/creditor-matrix`)
+
+- **Validation without re-OCR:** Responses always include `validation`. If the cached parse omitted it, the parser recomputes validation from extracted fields (`validate_form201` / `validate_creditor_matrix`) without `force: true` re-parse.
+- **Re-parse:** `extract/form201` calls `parse_document` with `force: true` only when `form201` is missing on a **terminal** row (`completed` or `failed`). It does **not** re-parse because `validation` is null.
+- **While async job is processing:** Do not call extract until poll returns `completed`. If the document is still `processing`, extract returns **409** with a message to poll `GET /api/v1/jobs/{document_id}` first (same rule as `force: true` on `/parse/document`).
 
 ## Idempotency
 
