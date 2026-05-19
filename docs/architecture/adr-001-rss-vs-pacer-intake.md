@@ -17,9 +17,10 @@ RSS alone does **not** satisfy FR-1.1. PACER poll remains required for productio
 
 ## Consequences
 
-- `processing_jobs.job_type = pacer_poll` must reach terminal status (`completed` / `failed`) — never leave `running` indefinitely.
+- `processing_jobs.job_type = pacer_poll` must reach terminal status (`completed` / `failed`) — never leave `running` indefinitely. **Do not** create fake `pacer_poll` `completed` rows from SYS-01 RSS-only runs; use a dedicated **SYS-01B** nightly workflow when PACER is implemented.
 - SYS-01 must pass `bankruptcy_id` and S3 keys to SYS-02 before document parse.
 - Weekly Schedule F docket scans (SYS-06) use PACER/CM-ECF, not RSS.
+- **SYS-02** orchestrates `document_parse` only; Schedule F belongs in **SYS-06** (detect) and **SYS-07** (approve/download). See [sys-02-orchestration.md](./sys-02-orchestration.md).
 
 ## Alternatives considered
 

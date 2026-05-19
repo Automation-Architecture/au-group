@@ -196,6 +196,9 @@ class SupabaseClient:
             if existing_bankruptcy_id is not None:
                 upsert_body["bankruptcy_id"] = existing_bankruptcy_id
 
+            # Never PATCH primary key when merging an existing row by hash/version.
+            upsert_body.pop("id", None)
+
             rows = self._request(
                 "PATCH",
                 "documents",
@@ -226,7 +229,7 @@ class SupabaseClient:
             "manual_review_queue",
             params={
                 "document_id": f"eq.{document_id}",
-                "status": "eq.pending",
+                "status": "in.(pending,in_review)",
                 "select": "id",
                 "limit": "1",
             },

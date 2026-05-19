@@ -246,6 +246,21 @@ class DocumentPipeline:
             creditor_count=len(creditors),
         )
 
+    def _resolve_document_id(
+        self,
+        *,
+        document_id: UUID | None,
+        content_hash: str,
+    ) -> UUID:
+        if document_id is not None:
+            return document_id
+        existing = self._db.find_document_by_hash(
+            content_hash, self._settings.parser_version
+        )
+        if existing and existing.get("id"):
+            return UUID(str(existing["id"]))
+        return uuid4()
+
     def _lookup_cached_document(
         self,
         content_hash: str,
@@ -304,7 +319,9 @@ class DocumentPipeline:
                 if not try_acquire_background_slot(self._settings.async_parse_max_concurrent):
                     raise BackgroundJobBusyError()
                 release_slot = True
-                document_id = uuid4()
+                document_id = self._resolve_document_id(
+                    document_id=None, content_hash=content_hash
+                )
                 doc_payload = SupabaseClient.document_payload(
                     bankruptcy_id=bankruptcy_id,
                     s3_key=key,
@@ -456,7 +473,9 @@ class DocumentPipeline:
             else:
                 validation = should_review_for_error("unknown_filing_type")
 
-            active_document_id = document_id or uuid4()
+            active_document_id = self._resolve_document_id(
+                document_id=document_id, content_hash=content_hash
+            )
             bankruptcy = (
                 self._db.get_bankruptcy(bankruptcy_id) if bankruptcy_id else None
             )

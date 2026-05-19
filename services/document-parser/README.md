@@ -127,6 +127,8 @@ Set in **Variables** (or sync from a shared Railway environment):
 | `ALLOWED_DOWNLOAD_HOST_SUFFIXES` | if URLs enabled | `uscourts.gov,pacer.uscourts.gov` (comma-separated) |
 | `RATE_LIMIT_ENABLED` | no | `true` on public Railway |
 | `ALLOW_LOCAL_FILE_URLS` | yes (prod) | `false` |
+| `REQUIRE_BANKRUPTCY_ID` | yes | `true` — blocks parse without `bankruptcy_id` |
+| `ASYNC_PARSE_ENABLED` | no | `true` — use with n8n poll loop on `GET /jobs/{id}` |
 
 Railway sets `PORT` automatically — do not override it.
 

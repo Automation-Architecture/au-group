@@ -6,6 +6,23 @@ Orchestration uses **HTTP** to the document-parser service. n8n owns `pipeline_e
 
 **Important:** Parser `documents.id` is the job id for polling. Store it on `processing_jobs` (e.g. in `payload.document_id` or a dedicated column) so retries and support can correlate n8n ↔ parser.
 
+**Workflow IDs:** SYS-01 `pVPVaIbUixU95f43` → SYS-02 `qwVPSlI3L1RMsw9V` → SYS-03 `j26cimQ4S7kN67IP`. Target architecture: [sys-02-orchestration.md](../architecture/sys-02-orchestration.md).
+
+## SYS-02 must not
+
+- Direct Supabase **insert** into `bankruptcies`, `form201_extractions`, or `creditors` (parser + RPCs own that).
+- Schedule F detect/process nodes (use SYS-06 / SYS-07).
+- `Route Job Type` branches for `schedule_f_detect` / `schedule_f_process` on the active path.
+
+## Authentication
+
+| Caller | How |
+|--------|-----|
+| **n8n** | `X-API-Key: {{DOCUMENT_PARSER_API_KEY}}` on Parse + Poll nodes |
+| **Humans / Swagger** | `POST /api/v1/auth/login` then `Authorization: Bearer {access_token}` |
+
+Login requires `JWT_SECRET`, `AUTH_USERNAME`, `AUTH_PASSWORD` on the parser service ([README](../../services/document-parser/README.md)).
+
 ## Prerequisites
 
 - Form 201 / Form 204 PDF in S3 (`raw-documents/{case_number}/...`)
@@ -154,6 +171,17 @@ When step 4 stops on `manual_review_required`:
    | **C — Human-only** | Case closed without automation | Leave `processing_jobs` as `manual_review_required`; no auto resume |
 
 Document the chosen policy in your n8n workflow comments. Policy **A** is typical after a false-positive review flag.
+
+## Verification checklist (2026-05-19)
+
+| Check | Result |
+|-------|--------|
+| SYS-02 active path | 23 nodes — document parse + async poll only |
+| SYS-01 handoff | `Queue Document Parse` passes `bankruptcy_id`, `job_payload` |
+| `schedule_f_queue` | `status=monitoring` at intake |
+| Unit tests | `pytest tests/test_api_parse.py` — `bankruptcy_id` guard + async 202 |
+| Railway `/health` | `https://au-group.railway.app/health` → 200 |
+| Railway `/api/v1/*` | **Redeploy required** — routes return 404 on current deploy; push latest `services/document-parser` and confirm env from `.env.railway.example` |
 
 ## Timeout handling
 
