@@ -243,7 +243,7 @@ CREATE TABLE salesforce_accounts (
 
 CREATE TABLE processing_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    job_type VARCHAR(50) NOT NULL,  -- 'pacer_poll', 'document_parse', 'zoom_info_enrich', 'salesforce_push'
+    job_type VARCHAR(50) NOT NULL,  -- 'pacer_poll', 'document_intelligence', 'document_parse', 'zoom_info_enrich', 'salesforce_push'
     status VARCHAR(20) NOT NULL,  -- 'pending', 'running', 'completed', 'failed'
     bankruptcy_id UUID REFERENCES bankruptcies(id),
     retry_count INTEGER DEFAULT 0,

@@ -1,0 +1,44 @@
+name: document-parser
+
+on:
+  push:
+    paths:
+      - "services/document-parser/**"
+      - ".github/workflows/document-parser.yml"
+  pull_request:
+    paths:
+      - "services/document-parser/**"
+      - ".github/workflows/document-parser.yml"
+
+jobs:
+  test-and-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/document-parser
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: services/document-parser/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pip-audit
+
+      - name: Dependency audit
+        run: pip-audit -r requirements.txt
+
+      - name: Run tests
+        env:
+          API_KEY: test-api-key-for-ci-suite-only-do-not-use-in-production
+          APP_ENV: development
+          RATE_LIMIT_ENABLED: "false"
+          JWT_SECRET: test-jwt-secret-at-least-32-characters-long
+          AUTH_USERNAME: test-user
+          AUTH_PASSWORD: test-password
+        run: pytest tests/ -q --ignore=tests/integration

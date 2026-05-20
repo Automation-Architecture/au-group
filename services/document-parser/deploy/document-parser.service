@@ -1,0 +1,17 @@
+[Unit]
+Description=AU Group Document Parser (SYS-02A)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/au-group/services/document-parser
+EnvironmentFile=/opt/au-group/services/document-parser/.env
+Environment=PYTHONPATH=/opt/au-group/services/document-parser
+ExecStart=/opt/au-group/services/document-parser/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8001
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
