@@ -31,7 +31,7 @@ Human-in-the-loop gating on PACER document purchases ($0.10/page) controls cost.
 
 ## Deployed stack
 
-- **Database:** Supabase Postgres — migrations prefixed `au_group_*` and `sys02_*`
+- **Database:** Supabase Postgres — migrations in [`supabase/migrations/`](./supabase/migrations/) are timestamp-prefixed (e.g. `20260215180000_au_group_bankruptcy_pipeline.sql`, `20260518120000_sys02a_document_intelligence.sql`); identifiers include `au_group_` and `sys02a_`
 - **Document parser:** FastAPI on Railway (`services/document-parser/`), Python 3.11, Tesseract + pdfplumber + spaCy
 - **Orchestration:** n8n (workflows specified in `docs/workflows/`, `docs/n8n/`)
 - **Storage:** Supabase Storage / S3 for raw PDFs and parsed outputs
