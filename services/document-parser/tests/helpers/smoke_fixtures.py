@@ -52,6 +52,7 @@ def smoke_api_env(dummy_pdf_paths: dict[str, Path]) -> Generator[FakeSupabaseCli
 
     FakeSupabaseClient._documents.clear()
     FakeSupabaseClient._reviews.clear()
+    FakeSupabaseClient.merge_creditors_call_count = 0
     fake_db = FakeSupabaseClient()
 
     def _download_to_temp(self: S3Client, s3_key: str) -> Path:

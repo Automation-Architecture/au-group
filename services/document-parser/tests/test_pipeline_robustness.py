@@ -1,7 +1,14 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from app.core.exceptions import DocumentProcessingError
+from app.models.schemas import (
+    CreditorRow,
+    FilingType,
+    ParseDocumentResponse,
+    ParseMode,
+    ValidationResult,
+)
 from app.pipeline.job_status import processing_placeholder_raw
 from app.pipeline.router import DocumentPipeline
 
@@ -53,3 +60,96 @@ def test_invalid_review_status_raises() -> None:
 
     with pytest.raises(ValueError, match="Invalid status"):
         validate_review_queue_status("pending' OR '1'='1")
+
+
+def test_backfill_creditor_merge_calls_merge() -> None:
+    pipeline = DocumentPipeline()
+    pipeline._db._enabled = True
+    bankruptcy_id = uuid4()
+    creditors = [CreditorRow(creditor_name="Acme Corp")]
+    response = ParseDocumentResponse(
+        status="completed",
+        filing_type=FilingType.CREDITOR_MATRIX,
+        parse_mode=ParseMode.STRUCTURED,
+        ocr_used=False,
+        page_count=1,
+        confidence=0.92,
+        manual_review_required=False,
+        creditors=creditors,
+        validation=ValidationResult(
+            confidence_score=0.92,
+            manual_review_required=False,
+        ),
+    )
+    merge_calls: list[tuple[UUID, int]] = []
+
+    def fake_merge(
+        bid: UUID,
+        rows: list[CreditorRow],
+        *,
+        confidence_score: float | None = None,
+    ) -> int:
+        merge_calls.append((bid, len(rows)))
+        return len(rows)
+
+    pipeline._db.merge_creditors = fake_merge  # type: ignore[method-assign]
+    pipeline._backfill_creditor_merge(bankruptcy_id=bankruptcy_id, response=response)
+
+    assert merge_calls == [(bankruptcy_id, 1)]
+
+
+def test_backfill_creditor_merge_skips_manual_review() -> None:
+    pipeline = DocumentPipeline()
+    pipeline._db._enabled = True
+    merge_calls: list[UUID] = []
+
+    def fake_merge(bid: UUID, _rows: list[CreditorRow], **_: object) -> int:
+        merge_calls.append(bid)
+        return 0
+
+    pipeline._db.merge_creditors = fake_merge  # type: ignore[method-assign]
+    pipeline._backfill_creditor_merge(
+        bankruptcy_id=uuid4(),
+        response=ParseDocumentResponse(
+            status="completed",
+            filing_type=FilingType.CREDITOR_MATRIX,
+            parse_mode=ParseMode.STRUCTURED,
+            ocr_used=False,
+            page_count=1,
+            confidence=0.5,
+            manual_review_required=True,
+            creditors=[CreditorRow(creditor_name="Acme Corp")],
+            validation=ValidationResult(
+                confidence_score=0.5,
+                manual_review_required=True,
+            ),
+        ),
+    )
+    assert merge_calls == []
+
+
+def test_backfill_creditor_merge_swallows_merge_errors() -> None:
+    pipeline = DocumentPipeline()
+    pipeline._db._enabled = True
+
+    def failing_merge(_bid: UUID, _rows: list[CreditorRow], **_: object) -> int:
+        raise RuntimeError("RPC au_group_merge_creditor_matrix failed")
+
+    pipeline._db.merge_creditors = failing_merge  # type: ignore[method-assign]
+    pipeline._backfill_creditor_merge(
+        bankruptcy_id=uuid4(),
+        response=ParseDocumentResponse(
+            status="completed",
+            filing_type=FilingType.CREDITOR_MATRIX,
+            parse_mode=ParseMode.STRUCTURED,
+            ocr_used=False,
+            page_count=1,
+            confidence=0.92,
+            manual_review_required=False,
+            creditors=[CreditorRow(creditor_name="Acme Corp")],
+            validation=ValidationResult(
+                confidence_score=0.92,
+                manual_review_required=False,
+            ),
+        ),
+    )

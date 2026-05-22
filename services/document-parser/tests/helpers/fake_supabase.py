@@ -15,9 +15,11 @@ class FakeSupabaseClient(SupabaseClient):
 
     _documents: dict[str, dict[str, Any]] = {}
     _reviews: list[dict[str, Any]] = []
+    merge_creditors_call_count: int = 0
 
     def __init__(self) -> None:
         self._enabled = True
+        FakeSupabaseClient.merge_creditors_call_count = 0
 
     def get_bankruptcy(self, bankruptcy_id: UUID) -> dict[str, Any] | None:
         return {
@@ -43,6 +45,15 @@ class FakeSupabaseClient(SupabaseClient):
         return None
 
     def upsert_document(self, payload: dict[str, Any]) -> dict[str, Any]:
+        content_sha256 = payload.get("content_sha256")
+        parser_version = payload.get("parser_version")
+        if content_sha256 and parser_version:
+            existing = self.find_document_by_hash(content_sha256, parser_version)
+            if existing:
+                doc_id = str(existing["id"])
+                row = {**existing, **payload, "id": doc_id}
+                self._documents[doc_id] = row
+                return row
         doc_id = str(payload.get("id") or uuid4())
         row = {**payload, "id": doc_id}
         self._documents[doc_id] = row
@@ -132,6 +143,7 @@ class FakeSupabaseClient(SupabaseClient):
         *,
         confidence_score: float | None = None,
     ) -> int:
+        FakeSupabaseClient.merge_creditors_call_count += 1
         return len(creditors)
 
     def upsert_case_status(self, bankruptcy_id: UUID, **kwargs: Any) -> None:

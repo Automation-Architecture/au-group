@@ -95,13 +95,17 @@ class DocumentPipeline:
                 logger,
                 "creditor_merge_backfill",
                 bankruptcy_id=str(bankruptcy_id),
+                creditor_count=len(response.creditors),
                 merged_count=merged,
+                confidence_score=response.validation.confidence_score,
             )
         except Exception as exc:
             logger.warning(
-                "creditor_merge_backfill_failed bankruptcy_id=%s: %s",
+                "creditor_merge_backfill_failed bankruptcy_id=%s creditor_count=%s: %s",
                 bankruptcy_id,
+                len(response.creditors),
                 exc,
+                exc_info=True,
             )
 
     def _download_http_to_temp(self, document_url: str) -> Path:

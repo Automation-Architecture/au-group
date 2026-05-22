@@ -99,3 +99,10 @@
 - **Gap:** Unit tests mocked `DocumentPipeline`; integration tests need live `.env` and are skipped in `ci-parser`.
 - **Added:** `tests/test_api_dummy_pdf_smoke.py` — real PyMuPDF dummy PDFs (`pdf_fixtures.py`), fake S3 download + in-memory Supabase (`fake_supabase.py`). Covers health, auth, parse/*, extract/*, review-queue, jobs.
 - **CI:** `ci-parser.yml` runs `pytest -m smoke` after main suite.
+
+## Architect audit follow-ups (2026-05-22)
+
+- **`SUPABASE_HTTP_TIMEOUT_SEC`** in `Settings` (default 60s); `SupabaseClient` uses it for REST/RPC/count.
+- **`_backfill_creditor_merge`:** success logs `creditor_count` + `confidence_score`; failures log `exc_info` and creditor count.
+- **Tests:** unit tests in `test_pipeline_robustness.py`; smoke `test_parse_document_creditor_matrix_cache_triggers_merge_backfill` (second parse without `force` asserts merge on cache hit).
+- **`FakeSupabaseClient`:** hash-keyed `upsert_document` + `merge_creditors_call_count` for smoke assertions.

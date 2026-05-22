@@ -105,6 +105,36 @@ class TestSmokeParseWithDummyPdfs:
         assert body["form201"] is not None
         assert body["form201"].get("debtor_name")
 
+    def test_parse_document_creditor_matrix_cache_triggers_merge_backfill(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        smoke_bankruptcy_id: UUID,
+        smoke_api_env: FakeSupabaseClient,
+    ) -> None:
+        payload = {
+            "bankruptcy_id": str(smoke_bankruptcy_id),
+            "s3_key": SMOKE_MATRIX_KEY,
+            "docket_hint": "CREDITOR_MATRIX",
+        }
+        first = client.post(
+            "/api/v1/parse/document",
+            json={**payload, "force": True},
+            headers=auth_headers,
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["status"] == "completed"
+
+        FakeSupabaseClient.merge_creditors_call_count = 0
+        second = client.post(
+            "/api/v1/parse/document",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert second.status_code == 200, second.text
+        assert second.json()["status"] == "completed"
+        assert FakeSupabaseClient.merge_creditors_call_count >= 1
+
     def test_parse_document_creditor_matrix_s3(
         self,
         client: TestClient,

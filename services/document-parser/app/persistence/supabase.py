@@ -32,6 +32,7 @@ class SupabaseClient:
             self._headers: dict[str, str] = {}
             return
         self._enabled = True
+        self._http_timeout = settings.supabase_http_timeout_sec
         self._base = settings.supabase_url.rstrip("/") + "/rest/v1"
         self._headers = {
             "apikey": settings.supabase_service_role_key,
@@ -56,7 +57,7 @@ class SupabaseClient:
             headers["Prefer"] = prefer
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            with httpx.Client(timeout=60.0) as client:
+            with httpx.Client(timeout=self._http_timeout) as client:
                 response = client.request(
                     method,
                     url,
@@ -89,7 +90,7 @@ class SupabaseClient:
         headers["Prefer"] = "count=exact"
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            with httpx.Client(timeout=60.0) as client:
+            with httpx.Client(timeout=self._http_timeout) as client:
                 response = client.get(url, headers=headers, params=params)
         except httpx.ConnectError as exc:
             raise SupabaseUnavailableError(
@@ -432,7 +433,7 @@ class SupabaseClient:
         if not self._enabled:
             return None
         url = get_settings().supabase_url.rstrip("/") + f"/rest/v1/rpc/{name}"
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=self._http_timeout) as client:
             try:
                 response = client.post(url, headers=self._headers, json=payload)
             except httpx.ConnectError as exc:
