@@ -43,7 +43,7 @@ jobs:
       run:
         working-directory: services/document-parser
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
@@ -75,7 +75,7 @@ jobs:
       run:
         working-directory: services/document-parser
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
