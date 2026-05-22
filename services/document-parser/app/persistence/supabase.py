@@ -433,7 +433,12 @@ class SupabaseClient:
             return None
         url = get_settings().supabase_url.rstrip("/") + f"/rest/v1/rpc/{name}"
         with httpx.Client(timeout=60.0) as client:
-            response = client.post(url, headers=self._headers, json=payload)
+            try:
+                response = client.post(url, headers=self._headers, json=payload)
+            except httpx.ConnectError as exc:
+                raise SupabaseUnavailableError(f"RPC {name} connection failed") from exc
+            except httpx.HTTPError as exc:
+                raise SupabaseUnavailableError(f"RPC {name} request failed") from exc
             if response.status_code >= 400:
                 raise SupabaseUnavailableError(
                     f"RPC {name} failed: {response.status_code} {response.text}"
