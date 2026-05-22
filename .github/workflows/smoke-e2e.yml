@@ -71,7 +71,7 @@ jobs:
           curl -fsS "${API_BASE_URL%/}/health"
           curl -fsS "${API_BASE_URL%/}/health/ready" || true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
