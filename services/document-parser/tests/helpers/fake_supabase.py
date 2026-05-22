@@ -67,7 +67,7 @@ class FakeSupabaseClient(SupabaseClient):
         return extraction_payload
 
     def insert_manual_review(self, payload: dict[str, Any]) -> dict[str, Any]:
-        row = {**payload, "id": str(uuid4())}
+        row = {**payload, "id": str(payload.get("id") or uuid4())}
         self._reviews.append(row)
         return row
 
@@ -91,17 +91,30 @@ class FakeSupabaseClient(SupabaseClient):
     def resolve_manual_review(
         self, review_id: UUID, *, resolved_by: str | None = None
     ) -> dict[str, Any]:
-        row = self.get_manual_review(review_id)
-        if not row:
-            raise FileNotFoundError("Review item not found")
-        row = {**row, "status": "resolved", "resolved_by": resolved_by}
-        # Update the in-memory store so subsequent reads see the resolved status
         rid = str(review_id)
-        for i, r in enumerate(self._reviews):
-            if r.get("id") == rid:
-                self._reviews[i] = row
-                break
-        return row
+        for index, row in enumerate(self._reviews):
+            if row.get("id") != rid:
+                continue
+            if row.get("status") not in ("pending", "in_review", "resolved"):
+                raise FileNotFoundError("Review item not found")
+            if row.get("status") in ("pending", "in_review"):
+                assigned_to = resolved_by or row.get("assigned_to")
+                updated_row = {
+                    **row,
+                    "status": "resolved",
+                    "assigned_to": assigned_to,
+                }
+                self._reviews[index] = updated_row
+            else:
+                updated_row = row
+            return {
+                "review_id": updated_row["id"],
+                "document_id": updated_row.get("document_id"),
+                "bankruptcy_id": updated_row.get("bankruptcy_id"),
+                "status": updated_row["status"],
+                "bankruptcy_manual_review_required": False,
+            }
+        raise FileNotFoundError("Review item not found")
 
     def upsert_bankruptcy_from_form201(
         self,

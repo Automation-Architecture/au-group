@@ -6,11 +6,12 @@ Uses tests/helpers/pdf_fixtures.py text PDFs and in-memory persistence from fake
 
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from tests.conftest import TEST_AUTH_PASSWORD, TEST_AUTH_USERNAME
+from tests.helpers.fake_supabase import FakeSupabaseClient
 from tests.helpers.smoke_fixtures import (
     SMOKE_FORM201_KEY,
     SMOKE_MATRIX_KEY,
@@ -197,6 +198,41 @@ class TestSmokeReviewAndJobs:
         assert "items" in body
         assert "total" in body
         assert isinstance(body["items"], list)
+
+    def test_resolve_review(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        smoke_bankruptcy_id: UUID,
+        smoke_api_env: FakeSupabaseClient,
+    ) -> None:
+        review_id = uuid4()
+        document_id = uuid4()
+        smoke_api_env.insert_manual_review(
+            {
+                "id": str(review_id),
+                "bankruptcy_id": str(smoke_bankruptcy_id),
+                "document_id": str(document_id),
+                "review_reason": "low_confidence",
+                "status": "pending",
+            }
+        )
+
+        response = client.post(
+            f"/api/v1/review/{review_id}/resolve",
+            json={"resolved_by": "smoke-ci"},
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["review_id"] == str(review_id)
+        assert body["status"] == "resolved"
+        assert body["document_id"] == str(document_id)
+
+        stored = smoke_api_env.get_manual_review(review_id)
+        assert stored is not None
+        assert stored["status"] == "resolved"
+        assert stored["assigned_to"] == "smoke-ci"
 
     def test_job_status_after_parse(
         self,
