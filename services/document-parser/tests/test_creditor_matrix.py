@@ -1,6 +1,5 @@
 from app.extractors.creditor_matrix import extract_creditor_matrix
 
-
 SAMPLE_LIST = """
 List of Creditors
 

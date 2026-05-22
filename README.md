@@ -1,78 +1,194 @@
-# aaa-discovery
+# AU Group — Bankruptcy Creditor Intelligence
 
-The canonical home of the **AAA Discovery** Claude Code skill — the 15-step sequence that turns a closed sale into a fully ticketed, team-reviewed, client-informed project ready for engineers to build.
+AI-powered bankruptcy intake: monitor filings, parse court documents, enrich creditors, and push leads to Salesforce. Orchestrated by **n8n**; document parsing runs in a dedicated **FastAPI** service (SYS-02A).
 
-## n8n-MCP Integration
+| Area | Path |
+|------|------|
+| Document parser API (SYS-02A) | [`services/document-parser/`](./services/document-parser/) |
+| n8n workflows | [`workflows/`](./workflows/) |
+| Supabase schema | [`supabase/migrations/`](./supabase/migrations/) |
+| Architecture | [`docs/architecture/`](./docs/architecture/) |
+| Project config | [`project.config.yaml`](./project.config.yaml) |
 
-This project now includes **n8n-MCP** integration for AI-powered n8n workflow assistance. See:
-- `n8n-mcp-setup.md` - Complete setup guide
-- `n8n-mcp-quick-ref.md` - Quick reference commands
-- `docs/n8n-mcp-integration.md` - Integration overview
-- `.cursor/rules/n8n-mcp-integration.mdc` - **Cursor rule (always active)**
+## Running the API locally
 
-The MCP provides access to 1,650+ n8n nodes, 2,352 workflow templates, and direct instance management tools.
+The document parser is a Python FastAPI app. It listens on **port 8001** by default and is called by n8n over HTTP.
 
-**Configuration**: The Cursor rule ensures all AI interactions with n8n automatically use the MCP tools instead of manual methods. The rule is always active for this project.
+### Prerequisites
 
-## What lives here
-
-| Path | What it is |
-|---|---|
-| [`SKILL.md`](./SKILL.md) | The skill itself — read this first. Defines the 15 steps, output-location conventions, common pitfalls. |
-| [`references/`](./references/) | One reference file per step (`step-01-...md` through `step-15-...md`). The skill body delegates here for full playbooks, commands, and verification checks. |
-| [`templates/`](./templates/) | Bundled templates the skill uses (e.g. `project-brief.md`). |
-| [`docs/why.md`](./docs/why.md) | The throughput framing, target (≤ 5 business days), slip signals, and how throughput is measured. |
-| [`docs/throughput-log.md`](./docs/throughput-log.md) | Append-only ledger of every Discovery run's wall-clock — ground truth for whether the workflow is moving the bottleneck. |
-
-## How it's installed
-
-This repo is the **canonical source of truth**. The runtime install is a hard copy at `~/.claude/skills/aaa-discovery/`. After editing the skill in this repo, sync the install (see _Sync_ below) and reload Claude Code.
-
-The old project-scoped location at `<aaa-client-dashboard>/.claude/skills/aaa-discovery` is a symlink back to this repo for backwards compatibility.
-
-## Sync
-
-After editing files in this repo, run:
+**macOS**
 
 ```bash
-./sync.sh             # sync to ~/.claude/skills/aaa-discovery/
-./sync.sh --dry-run   # preview what would change without touching files
+brew install python@3.11 tesseract poppler
 ```
 
-Then restart Claude Code so the skill reloads.
+**Ubuntu 22.04**
 
-The script wraps `rsync` with the canonical exclusions (`.git`, `README.md`, `docs/`, `sync.sh`, `.gitignore`) so you don't accidentally drop repo metadata or human-facing docs into the runtime install.
+```bash
+sudo apt-get update
+sudo apt-get install -y python3.11-venv tesseract-ocr poppler-utils libgl1
+```
 
-## Editing rules
+### Start the server
 
-- **SKILL.md is the entry point.** Every behavior change starts here, then cascades into `references/` if the relevant step needs detail.
-- **Reference files are step-scoped.** `step-NN-<name>.md` names are stable — Jira links, the dashboard, and other docs reference them.
-- **Versioning matters.** Bump the skill description's step count if you add or remove steps. The pitfalls list (in `SKILL.md`) is append-only — record gotchas as they happen on real projects.
+```bash
+cd services/document-parser
+cp .env.example .env   # fill in Supabase, S3, API_KEY (see below)
+chmod +x scripts/dev.sh
+./scripts/dev.sh
+```
 
-## Trigger
+`dev.sh` creates a venv, installs dependencies, loads `.env`, enables OpenAPI at `/docs`, and runs uvicorn with `--reload`.
 
-Invoke from any project directory with `/aaa-discovery` whenever a new client engagement starts. Don't run discovery freehand — the canonical sequence catches things ad-hoc work misses.
+### Verify
 
-## Worked example
+| Check | URL / command |
+|-------|----------------|
+| Health | `curl http://localhost:8001/health` |
+| Readiness (Supabase + S3) | `curl http://localhost:8001/health/ready` |
+| OpenAPI UI | `http://localhost:8001/docs` (set `EXPOSE_OPENAPI=true` in `.env`; default in dev) |
 
-The first end-to-end run of this flow was the **Kidneyhood Zendesk AI Agent** project ([`Automation-Architecture/kidneyhood-zendesk-agent`](https://github.com/Automation-Architecture/kidneyhood-zendesk-agent)). Use it as a reference for what the artifacts look like in practice — not just what the templates promise.
+### Required `.env` values (minimum)
 
-| Step(s) | Artifact | Where to look |
-|---|---|---|
-| 3, 9 | Project brief (v1.5 by close of discovery) | [`spec/project-brief.md`](https://github.com/Automation-Architecture/kidneyhood-zendesk-agent/blob/main/spec/project-brief.md) |
-| 5, 9 | PRD | [`spec/prd.md`](https://github.com/Automation-Architecture/kidneyhood-zendesk-agent/blob/main/spec/prd.md) |
-| 11 | Tech spec | [`spec/tech-spec.md`](https://github.com/Automation-Architecture/kidneyhood-zendesk-agent/blob/main/spec/tech-spec.md) |
-| 12 | Jira board | `KHZ` project on `automationarchitecture.atlassian.net` (9 Epics + 60 Tasks at discovery close) |
-| 15 | Client handoff email | [`client-comms/email-to-lee-discovery-handoff.md`](https://github.com/Automation-Architecture/kidneyhood-zendesk-agent/blob/main/client-comms/email-to-lee-discovery-handoff.md) |
+Copy from [`.env.example`](./services/document-parser/.env.example) and set at least:
 
-A few caveats worth knowing before treating this run as canonical:
+| Variable | Purpose |
+|----------|---------|
+| `API_KEY` | Long random secret — n8n sends this as `X-API-Key` |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key (server-side only) |
+| `S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | Read/write court PDFs in storage |
 
-- **No `GRILL_SESSION.md`.** The KH run predates the bundled grill-session template — both rounds happened ad-hoc in chat. Future runs use `templates/GRILL_SESSION.md` to capture decisions in-repo.
-- **Project key churn (`KZA` → `KHZ`).** This is pitfall #1 in `SKILL.md`. The KH run is what taught us to sweep for it.
-- **DOCX path discipline learned mid-flight.** Early DOCX got generated into the repo; we cleaned them out and moved generation directly into `Client Docs/`. The final state matches the convention; the git history shows the migration.
+Optional for Swagger/manual testing: `JWT_SECRET` (≥32 chars), `AUTH_USERNAME`, `AUTH_PASSWORD` — then use `POST /api/v1/auth/login` and `Authorization: Bearer <token>`.
 
-Treat the artifact shapes as the reference, not the process — the process is what `SKILL.md` and the `references/` files describe today, refined from the KH lessons.
+### Call the API
 
-## Template / external distribution
+**n8n / automation** — static API key:
 
-A generalized, org-neutral version of this skill is available for external distribution at [`Automation-Architecture/aaa-discovery-template`](https://github.com/Automation-Architecture/aaa-discovery-template) (public). That repo replaces all AAA-specific values with placeholders and includes an `install.sh` for end users. When making substantive improvements to the skill (new steps, refined reference files, new pitfalls), port them to the template as well.
+```http
+POST http://localhost:8001/api/v1/parse/document
+X-API-Key: <API_KEY>
+Content-Type: application/json
+
+{"bankruptcy_id": "<uuid>", "s3_key": "raw-documents/<case>/<file>.pdf"}
+```
+
+With `ASYNC_PARSE_ENABLED=true`, the parse endpoint returns **202**; poll `GET /api/v1/jobs/{document_id}` until `completed` or `failed`.
+
+**Swagger / curl** — login first (when JWT vars are set), then use `Authorization: Bearer <access_token>` on protected routes.
+
+### Supabase migrations
+
+Apply schema before parsing against a real project:
+
+```bash
+supabase db push
+```
+
+Or apply migrations from [`supabase/migrations/`](./supabase/migrations/) in the Supabase dashboard.
+
+### Tests
+
+```bash
+cd services/document-parser
+source .venv/bin/activate
+pytest tests/ --ignore=tests/integration -q
+```
+
+Full service docs (production systemd/Railway, endpoint table, troubleshooting): **[`services/document-parser/README.md`](./services/document-parser/README.md)**.
+
+## n8n workflows
+
+Instance: [`automationarchitecture.app.n8n.cloud`](https://automationarchitecture.app.n8n.cloud). Workflow JSON lives under [`workflows/`](./workflows/). CI validates **manifest CD workflows** plus **every file in `workflows/pulled/`** (no cloud call in GitHub Actions).
+
+### Pull all workflows from the AU Group project folder
+
+After you change workflows in the n8n UI, pull them into the repo before opening a PR. The script uses the **same API credentials as Cursor `n8n-mcp`** (`N8N_API_URL` + `N8N_API_KEY`).
+
+**1. Credentials** (pick one — script checks in this order):
+
+| Source | Notes |
+|--------|--------|
+| `.env.local` at repo root | Gitignored; good for explicit keys |
+| Shell `export` | `N8N_API_URL` + `N8N_API_KEY` |
+| `.cursor/mcp.json` | **Auto-used** if Cursor `n8n-mcp` is already configured (no export needed) |
+
+```bash
+# Only if you do NOT use .cursor/mcp.json:
+cat >> .env.local <<'EOF'
+N8N_API_URL=https://automationarchitecture.app.n8n.cloud
+N8N_API_KEY=your-n8n-api-key
+EOF
+```
+
+Create an API key in n8n: **Settings → API**. Deploy/smoke use `N8N_BASE_URL` instead of `N8N_API_URL`; the pull script accepts either name.
+
+**2. Pull** (scope: [AU Group folder](https://automationarchitecture.app.n8n.cloud/projects/JNBCQ8yj8IGyBMFc/folders/AGAjejcdoBye7tlv/workflows) — see [`workflows/n8n-pull.config.yaml`](./workflows/n8n-pull.config.yaml)):
+
+```bash
+chmod +x scripts/n8n/pull-folder-workflows.sh
+
+# Preview which workflows will be exported (no files written)
+./scripts/n8n/pull-folder-workflows.sh --dry-run
+
+# Write JSON under workflows/pulled/ + index.yaml (archived workflows skipped)
+./scripts/n8n/pull-folder-workflows.sh
+```
+
+**3. Commit** (if the pull should land in git):
+
+```bash
+git add workflows/pulled/
+git commit -m "chore(n8n): pull AU Group workflows from cloud"
+```
+
+To refresh only the **three CD workflows** (`SYS-01`, `SYS-02`, `SYS-03`) into `workflows/` root (not `pulled/`):
+
+```bash
+export N8N_BASE_URL=https://automationarchitecture.app.n8n.cloud
+export N8N_API_KEY=your-n8n-api-key
+./scripts/n8n/export-workflows.sh
+```
+
+More detail: [`workflows/README.md`](./workflows/README.md).
+
+### n8n-MCP in Cursor
+
+For AI-assisted edits in the IDE (not bulk export):
+
+- [`n8n-mcp-setup.md`](./n8n-mcp-setup.md) — setup
+- [`n8n-mcp-quick-ref.md`](./n8n-mcp-quick-ref.md) — commands
+- [`docs/n8n-mcp-integration.md`](./docs/n8n-mcp-integration.md) — overview
+- [`.cursor/rules/n8n-mcp-integration.mdc`](./.cursor/rules/n8n-mcp-integration.mdc) — Cursor rule (always active)
+- [n8n-skills](https://github.com/czlonkowski/n8n-skills) — `/plugin install czlonkowski/n8n-skills`; CI runs deterministic rules in [`docs/ci/n8n-skills.md`](docs/ci/n8n-skills.md)
+- [n8n-skills](https://github.com/czlonkowski/n8n-skills) — `/plugin install czlonkowski/n8n-skills` (CI runs deterministic rules in [`docs/ci/n8n-skills.md`](docs/ci/n8n-skills.md))
+
+## Repo layout (high level)
+
+| Path | What it is |
+|------|------------|
+| `services/document-parser/` | FastAPI OCR + extraction API |
+| `workflows/` | n8n workflow JSON; `pulled/` = full folder export via pull script |
+| `supabase/` | Postgres migrations and types |
+| `docs/` | Architecture, workflows, project specs |
+| `types/database.types.ts` | Generated Supabase types |
+| `export/aaa-client-dashboard/au-group/` | AAA client dashboard transfer package |
+
+## CI/CD
+
+| Topic | Doc |
+|-------|-----|
+| Requirements → gates | [`docs/ci/requirements-traceability.md`](docs/ci/requirements-traceability.md) |
+| Environments & secrets | [`docs/ci/environments.md`](docs/ci/environments.md) |
+| Rollback | [`docs/ci/rollback.md`](docs/ci/rollback.md) |
+| n8n workflow-as-code | [`workflows/README.md`](workflows/README.md), [`tests/n8n/`](tests/n8n/), [`docs/ci/n8n-skills.md`](docs/ci/n8n-skills.md) |
+| vbsec security (CI) | [`docs/ci/vbsec.md`](docs/ci/vbsec.md) — all 21 [vbsec](https://github.com/tanviet12/vbsec) rules (gitleaks, bandit, pip-audit, npm audit, patterns) |
+| Branch protection setup | [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md) |
+
+PRs run [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (parser, **Playwright E2E**, Supabase migrations, n8n JSON, dashboard export, **vbsec security**). Merges to `main` can deploy the document-parser to **Railway**, push **Supabase** migrations, and promote **n8n** workflows when those paths change.
+
+Playwright tests live in [`e2e/`](e2e/) (health, OpenAPI `/docs`). Local: start parser with `EXPOSE_OPENAPI=true`, then `cd e2e && npm test`.
+
+## Jira
+
+Board: [KD — AU Group](https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451) (`jira_project_key: KD` in `project.config.yaml`).

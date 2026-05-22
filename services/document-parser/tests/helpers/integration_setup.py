@@ -8,7 +8,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
-
 from app.persistence.s3 import S3Client
 from tests.helpers.integration_env import IntegrationEnv
 

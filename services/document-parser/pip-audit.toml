@@ -1,0 +1,4 @@
+# pip-audit config (CI: pip-audit -r requirements.txt)
+# PYSEC-2025-183 / CVE-2025-45768: disputed weak-encryption finding; PyJWT maintainer
+# rejects it; OSV lists no fixed version (2.12.1 still affected). Revisit when pyjwt ships a fix.
+ignore-vulnerabilities = ["PYSEC-2025-183", "CVE-2025-45768"]

@@ -4,7 +4,7 @@ from types import MethodType
 from uuid import uuid4
 
 import pytest
-
+from app.core.exceptions import DocumentProcessingError
 from app.models.schemas import (
     FilingType,
     Form201Data,
@@ -12,7 +12,6 @@ from app.models.schemas import (
     ParseMode,
     ValidationResult,
 )
-from app.core.exceptions import DocumentProcessingError
 from app.pipeline.router import DocumentPipeline
 from app.validation.engine import validate_form201
 

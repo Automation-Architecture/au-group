@@ -4,9 +4,8 @@ from uuid import uuid4
 
 import jwt
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core.config import get_settings
+from fastapi.testclient import TestClient
 from tests.conftest import sample_job_status_response, sample_review_queue_row
 
 

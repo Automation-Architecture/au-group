@@ -1,6 +1,5 @@
-from fastapi.testclient import TestClient
-
 from app.core.config import get_settings
+from fastapi.testclient import TestClient
 
 
 def test_health(client: TestClient) -> None:

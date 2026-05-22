@@ -12,11 +12,17 @@ from app.core.exceptions import (
     BankruptcyIdRequiredError,
     DocumentProcessingError,
 )
+from app.core.logging import log_event
+from app.core.request_context import bind_request_id, reset_request_id
 from app.core.s3_validation import validate_s3_key
 from app.core.url_safety import download_url_to_path
 from app.extractors.creditor_matrix import extract_creditor_matrix
 from app.extractors.form201 import extract_form201
-from app.extractors.structured_pdf import StructuredPdfResult, extract_structured_pdf, probe_text_density
+from app.extractors.structured_pdf import (
+    StructuredPdfResult,
+    extract_structured_pdf,
+    probe_text_density,
+)
 from app.models.schemas import (
     CreditorRow,
     ExtractCreditorMatrixResponse,
@@ -418,7 +424,9 @@ class DocumentPipeline:
         temp_path: Path | None = None,
         content_hash: str | None = None,
         release_slot: bool = True,
+        correlation_id: str | None = None,
     ) -> None:
+        ctx_token = bind_request_id(correlation_id) if correlation_id else None
         path: Path | None = temp_path
         key = s3_key or document_url or ""
         try:
@@ -435,8 +443,11 @@ class DocumentPipeline:
                 document_id=document_id,
             )
         except Exception as exc:
-            logger.exception(
-                "background_parse_failed document_id=%s", document_id, exc_info=exc
+            log_event(
+                logger,
+                "background_parse_failed",
+                document_id=str(document_id),
+                error=str(exc),
             )
             self._mark_job_failed(document_id, str(exc))
         finally:
@@ -444,6 +455,8 @@ class DocumentPipeline:
                 release_background_slot(self._settings.async_parse_max_concurrent)
             if path and self._should_unlink_temp(s3_key=s3_key, document_url=document_url):
                 path.unlink(missing_ok=True)
+            if ctx_token is not None:
+                reset_request_id(ctx_token)
 
     def resolve_manual_review(
         self, review_id: UUID, *, resolved_by: str | None = None

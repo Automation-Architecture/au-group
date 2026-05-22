@@ -1,0 +1,20 @@
+name: CI — AAA dashboard export
+
+on:
+  workflow_call:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install CI dependencies
+        run: pip install -r scripts/ci/requirements-ci.txt
+
+      - name: Validate export package
+        run: python scripts/ci/validate-export-package.py

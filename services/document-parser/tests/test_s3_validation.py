@@ -1,7 +1,6 @@
 """S3 key validation tests."""
 
 import pytest
-
 from app.core.s3_validation import validate_s3_key
 
 

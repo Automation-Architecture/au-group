@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from app.core.url_safety import assert_safe_download_url, download_url_to_path
 
 

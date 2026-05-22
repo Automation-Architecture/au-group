@@ -4,10 +4,9 @@ import tempfile
 from pathlib import Path
 
 import boto3
-from botocore.exceptions import ClientError
-
 from app.core.config import get_settings
 from app.core.s3_validation import validate_s3_key
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
-
 from app.core.config import Settings
 from app.persistence.s3 import S3Client, _client_error_to_exception
+from botocore.exceptions import ClientError
 
 
 def test_s3_client_uses_supabase_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:

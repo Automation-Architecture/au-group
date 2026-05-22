@@ -5,10 +5,9 @@ from __future__ import annotations
 import ipaddress
 import socket
 from pathlib import Path
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
-
 from app.core.http_download import browser_like_headers
 
 _BLOCKED_SCHEMES = frozenset({"file", "ftp", "gopher", "data", "javascript"})

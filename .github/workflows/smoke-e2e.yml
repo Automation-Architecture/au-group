@@ -1,0 +1,146 @@
+name: Smoke E2E
+
+on:
+  workflow_call:
+    inputs:
+      strict:
+        description: Fail when required smoke URLs/secrets are missing
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: GitHub Environment for secrets (staging or production)
+        required: false
+        type: string
+        default: staging
+    secrets:
+      PARSER_STAGING_URL:
+        required: false
+      PARSER_PRODUCTION_URL:
+        required: false
+      DOCUMENT_PARSER_API_KEY:
+        required: false
+      N8N_BASE_URL:
+        required: false
+      N8N_API_KEY:
+        required: false
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: Fail when required smoke URLs/secrets are missing
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 12 * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production' || 'staging') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve strict mode
+        id: mode
+        run: |
+          strict="${{ inputs.strict || github.event.inputs.strict || '' }}"
+          if [ -z "${strict}" ]; then
+            if [ "${{ github.event_name }}" = "schedule" ]; then
+              strict="true"
+            else
+              strict="false"
+            fi
+          fi
+          echo "strict=${strict}" >> "$GITHUB_OUTPUT"
+
+      - name: Parser health
+        env:
+          STRICT: ${{ steps.mode.outputs.strict }}
+          API_BASE_URL: ${{ vars.PARSER_PRODUCTION_URL || secrets.PARSER_PRODUCTION_URL || vars.PARSER_STAGING_URL || secrets.PARSER_STAGING_URL }}
+          DOCUMENT_PARSER_API_KEY: ${{ secrets.DOCUMENT_PARSER_API_KEY }}
+        run: |
+          if [ -z "${API_BASE_URL}" ]; then
+            if [ "${STRICT}" = "true" ]; then
+              echo "::error::PARSER_PRODUCTION_URL or PARSER_STAGING_URL must be set for smoke"
+              exit 1
+            fi
+            echo "::warning::PARSER_*_URL not set — skipping parser smoke"
+            exit 0
+          fi
+          curl -fsS "${API_BASE_URL%/}/health"
+          curl -fsS "${API_BASE_URL%/}/health/ready" || true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Playwright E2E against deployed parser
+        env:
+          STRICT: ${{ steps.mode.outputs.strict }}
+          API_BASE_URL: ${{ vars.PARSER_PRODUCTION_URL || secrets.PARSER_PRODUCTION_URL || vars.PARSER_STAGING_URL || secrets.PARSER_STAGING_URL }}
+        run: |
+          if [ -z "${API_BASE_URL}" ]; then
+            if [ "${STRICT}" = "true" ]; then
+              echo "::error::PARSER_*_URL required for Playwright smoke"
+              exit 1
+            fi
+            echo "Playwright smoke skipped (no PARSER_*_URL)"
+            exit 0
+          fi
+          cd e2e
+          npm ci
+          npx playwright install --with-deps chromium
+          PARSER_BASE_URL="${API_BASE_URL}" PLAYWRIGHT_HTML_OPEN=never CI=true npm test
+
+      - name: Parser parse smoke (optional fixture)
+        env:
+          STRICT: ${{ steps.mode.outputs.strict }}
+          API_BASE_URL: ${{ vars.PARSER_PRODUCTION_URL || secrets.PARSER_PRODUCTION_URL }}
+          DOCUMENT_PARSER_API_KEY: ${{ secrets.DOCUMENT_PARSER_API_KEY }}
+          SMOKE_BANKRUPTCY_ID: ${{ vars.SMOKE_BANKRUPTCY_ID }}
+          SMOKE_S3_KEY: ${{ vars.SMOKE_S3_KEY }}
+        run: |
+          if [ -z "${DOCUMENT_PARSER_API_KEY}" ] || [ -z "${SMOKE_BANKRUPTCY_ID}" ] || [ -z "${SMOKE_S3_KEY}" ]; then
+            echo "Parse smoke skipped (set DOCUMENT_PARSER_API_KEY, SMOKE_BANKRUPTCY_ID, SMOKE_S3_KEY)"
+            exit 0
+          fi
+          if [ -z "${API_BASE_URL}" ]; then
+            if [ "${STRICT}" = "true" ]; then
+              echo "::error::PARSER_PRODUCTION_URL required for parse smoke"
+              exit 1
+            fi
+            exit 0
+          fi
+          resp=$(curl -fsS -X POST "${API_BASE_URL%/}/api/v1/parse/document" \
+            -H "X-API-Key: ${DOCUMENT_PARSER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "{\"bankruptcy_id\":\"${SMOKE_BANKRUPTCY_ID}\",\"s3_key\":\"${SMOKE_S3_KEY}\"}")
+          echo "${resp}" | head -c 500
+
+      - name: n8n SYS-02 validation (cloud API)
+        env:
+          STRICT: ${{ steps.mode.outputs.strict }}
+          N8N_BASE_URL: ${{ secrets.N8N_BASE_URL }}
+          N8N_API_KEY: ${{ secrets.N8N_API_KEY }}
+          SYS02_WORKFLOW_ID: qwVPSlI3L1RMsw9V
+        run: |
+          if [ -z "${N8N_BASE_URL}" ] || [ -z "${N8N_API_KEY}" ]; then
+            if [ "${STRICT}" = "true" ]; then
+              echo "::error::N8N_BASE_URL and N8N_API_KEY required for smoke"
+              exit 1
+            fi
+            echo "::warning::n8n secrets not set — skipping"
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/wf.json -w "%{http_code}" \
+            -H "X-N8N-API-KEY: ${N8N_API_KEY}" \
+            "${N8N_BASE_URL%/}/api/v1/workflows/${SYS02_WORKFLOW_ID}")
+          if [ "${code}" != "200" ]; then
+            echo "n8n workflow fetch failed HTTP ${code}"
+            exit 1
+          fi
+          jq -e '.id == "qwVPSlI3L1RMsw9V"' /tmp/wf.json
+          echo "SYS-02 workflow reachable"

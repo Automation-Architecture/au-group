@@ -1,0 +1,180 @@
+name: CI
+
+on:
+  # Every PR (any target branch). Workflow file must exist on the PR base branch (usually main).
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+      - develop
+      - "feat/**"
+      - "feature/**"
+      - "fix/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: write # ci-security + ci-playwright upload-artifact
+  security-events: write # SARIF upload from run-vbsec
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      # Every pull_request runs the full suite; push uses path filters to save minutes
+      parser: ${{ github.event_name == 'pull_request' && 'true' || steps.filter.outputs.parser }}
+      supabase: ${{ github.event_name == 'pull_request' && 'true' || steps.filter.outputs.supabase }}
+      playwright: ${{ github.event_name == 'pull_request' && 'true' || steps.filter.outputs.playwright }}
+      export: ${{ github.event_name == 'pull_request' && 'true' || steps.filter.outputs.export }}
+      code: ${{ steps.code.outputs.any }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            parser:
+              - 'services/document-parser/**'
+              - '.github/workflows/ci-parser.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
+            playwright:
+              - 'e2e/**'
+              - 'scripts/ci/start-parser-for-e2e.sh'
+              - 'services/document-parser/**'
+              - '.github/workflows/ci-playwright.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
+            supabase:
+              - 'supabase/**'
+              - '.github/workflows/ci-supabase.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
+            export:
+              - 'export/aaa-client-dashboard/**'
+              - 'project.config.yaml'
+              - 'scripts/ci/validate-export-package.py'
+              - '.github/workflows/ci-export.yml'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
+
+      - name: Detect code-path changes
+        id: code
+        run: |
+          any=false
+          for flag in \
+            "${{ steps.filter.outputs.parser }}" \
+            "${{ steps.filter.outputs.supabase }}" \
+            "${{ steps.filter.outputs.playwright }}" \
+            "${{ steps.filter.outputs.export }}"; do
+            if [ "${flag}" = "true" ]; then
+              any=true
+              break
+            fi
+          done
+          echo "any=${any}" >> "$GITHUB_OUTPUT"
+
+  parser:
+    needs: changes
+    if: needs.changes.outputs.parser == 'true'
+    uses: ./.github/workflows/ci-parser.yml
+
+  integration:
+    needs: changes
+    if: needs.changes.outputs.parser == 'true'
+    uses: ./.github/workflows/integration-tests.yml
+    with:
+      strict: false
+
+  supabase:
+    needs: changes
+    if: needs.changes.outputs.supabase == 'true'
+    uses: ./.github/workflows/ci-supabase.yml
+
+  playwright:
+    needs: changes
+    if: needs.changes.outputs.playwright == 'true'
+    uses: ./.github/workflows/ci-playwright.yml
+
+  export:
+    needs: changes
+    if: needs.changes.outputs.export == 'true'
+    uses: ./.github/workflows/ci-export.yml
+
+  # Security scan on every PR/push (not path-filtered)
+  security:
+    uses: ./.github/workflows/ci-security.yml
+    with:
+      scope: diff
+
+  all-green:
+    needs: [changes, parser, integration, supabase, playwright, export, security]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require no failed jobs
+        run: |
+          for result in \
+            "${{ needs.parser.result }}" \
+            "${{ needs.integration.result }}" \
+            "${{ needs.supabase.result }}" \
+            "${{ needs.playwright.result }}" \
+            "${{ needs.export.result }}" \
+            "${{ needs.security.result }}"; do
+            if [ "${result}" = "failure" ]; then
+              echo "A required CI job failed"
+              exit 1
+            fi
+          done
+
+      - name: Require all jobs on pull requests
+        if: github.event_name == 'pull_request'
+        run: |
+          require() {
+            local result="$1"
+            local name="$2"
+            if [ "${result}" != "success" ]; then
+              echo "::error::${name} is required on every PR but finished: ${result}"
+              exit 1
+            fi
+          }
+          require "${{ needs.parser.result }}" "parser"
+          require "${{ needs.integration.result }}" "integration"
+          require "${{ needs.supabase.result }}" "supabase"
+          require "${{ needs.playwright.result }}" "playwright"
+          require "${{ needs.export.result }}" "export"
+          require "${{ needs.security.result }}" "security"
+          echo "CI gate passed (full PR suite)"
+
+      - name: Require path-matched jobs succeeded
+        if: github.event_name != 'pull_request'
+        run: |
+          check() {
+            local flag="$1"
+            local result="$2"
+            local name="$3"
+            if [ "${flag}" = "true" ] && [ "${result}" != "success" ]; then
+              echo "::error::${name} was required (path matched) but finished with: ${result}"
+              exit 1
+            fi
+          }
+          check "${{ needs.changes.outputs.parser }}" "${{ needs.parser.result }}" "parser"
+          check "${{ needs.changes.outputs.parser }}" "${{ needs.integration.result }}" "integration"
+          check "${{ needs.changes.outputs.supabase }}" "${{ needs.supabase.result }}" "supabase"
+          check "${{ needs.changes.outputs.playwright }}" "${{ needs.playwright.result }}" "playwright"
+          check "${{ needs.changes.outputs.export }}" "${{ needs.export.result }}" "export"
+          if [ "${{ needs.security.result }}" != "success" ]; then
+            echo "::error::security must succeed on every run"
+            exit 1
+          fi
+          echo "CI gate passed"
+
+      - name: Block trivial pushes to main/develop without code checks
+        if: github.event_name == 'push' && needs.changes.outputs.code != 'true'
+        run: |
+          echo "::warning::Push did not touch parser/supabase/e2e paths — only security ran."

@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 
 import httpx
-from botocore.exceptions import ClientError
-
 from app.core.config import Settings
 from app.persistence.s3 import S3Client
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 

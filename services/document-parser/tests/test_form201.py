@@ -1,7 +1,6 @@
 from app.extractors.form201 import extract_form201
 from app.validation.engine import validate_form201
 
-
 SAMPLE_FORM201 = """
 Official Form 201
 Voluntary Petition

@@ -17,7 +17,6 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-
 from tests.helpers.integration_setup import IntegrationProvisioner
 
 pytestmark = pytest.mark.integration

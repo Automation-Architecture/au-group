@@ -1,7 +1,6 @@
 from uuid import uuid4
 
 import pytest
-
 from app.core.exceptions import DocumentProcessingError
 from app.pipeline.job_status import processing_placeholder_raw
 from app.pipeline.router import DocumentPipeline

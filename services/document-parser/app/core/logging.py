@@ -1,16 +1,17 @@
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import get_settings
+from app.core.request_context import get_request_id
 
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "message": record.getMessage(),
             "logger": record.name,
@@ -33,6 +34,11 @@ def configure_logging() -> None:
 
 
 def log_event(logger: logging.Logger, message: str, **fields: Any) -> None:
+    payload = dict(fields)
+    correlation_id = payload.get("correlation_id") or get_request_id()
+    if correlation_id is not None:
+        payload.setdefault("correlation_id", correlation_id)
+
     record = logger.makeRecord(
         logger.name,
         logging.INFO,
@@ -42,5 +48,5 @@ def log_event(logger: logging.Logger, message: str, **fields: Any) -> None:
         (),
         None,
     )
-    record.extra_fields = fields  # type: ignore[attr-defined]
+    record.extra_fields = payload  # type: ignore[attr-defined]
     logger.handle(record)
