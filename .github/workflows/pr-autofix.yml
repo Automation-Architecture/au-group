@@ -195,7 +195,7 @@ jobs:
           ref: ${{ steps.branch.outputs.ref }}
           fetch-depth: 0
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         if: steps.gate.outputs.run == 'true' && steps.throttle.outputs.skip != 'true' && steps.guard.outputs.can_push == 'true'
         id: paths
         with:
