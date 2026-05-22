@@ -189,7 +189,7 @@ jobs:
           BRANCH=$(gh pr view "${{ steps.pr.outputs.number }}" --repo "${{ github.repository }}" --json headRefName -q .headRefName)
           echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.gate.outputs.run == 'true' && steps.throttle.outputs.skip != 'true' && steps.guard.outputs.can_push == 'true'
         with:
           ref: ${{ steps.branch.outputs.ref }}
