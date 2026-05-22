@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -6,7 +6,7 @@ from app.core.s3_validation import validate_s3_key
 from pydantic import BaseModel, Field, field_validator
 
 
-class FilingType(str, Enum):
+class FilingType(StrEnum):
     FORM_201 = "FORM_201"
     CREDITOR_MATRIX = "CREDITOR_MATRIX"
     SCHEDULE = "SCHEDULE"
@@ -14,7 +14,7 @@ class FilingType(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
-class ParseMode(str, Enum):
+class ParseMode(StrEnum):
     STRUCTURED = "structured"
     OCR = "ocr"
 
