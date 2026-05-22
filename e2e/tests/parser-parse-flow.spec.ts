@@ -1,9 +1,19 @@
 import { test, expect } from "@playwright/test";
 
-const apiKey =
-  process.env.API_KEY ?? "test-api-key-for-ci-suite-only-do-not-use-in-production";
+const requireApiKey = (): string => {
+  const key = process.env.API_KEY;
+  if (!key) {
+    throw new Error(
+      "API_KEY is required. Run scripts/ci/start-parser-for-e2e.sh or set API_KEY in the environment.",
+    );
+  }
+  return key;
+};
 
 test.describe("document-parser parse API flow", () => {
+  test.beforeAll(() => {
+    requireApiKey();
+  });
   test("POST /api/v1/parse/structured requires authentication", async ({
     request,
   }) => {
@@ -17,7 +27,7 @@ test.describe("document-parser parse API flow", () => {
     request,
   }) => {
     const response = await request.post("/api/v1/parse/structured", {
-      headers: { "X-API-Key": apiKey },
+      headers: { "X-API-Key": requireApiKey() },
       data: {},
     });
     expect(response.status()).toBe(400);
@@ -29,7 +39,7 @@ test.describe("document-parser parse API flow", () => {
     request,
   }) => {
     const response = await request.post("/api/v1/parse/structured", {
-      headers: { "X-API-Key": apiKey },
+      headers: { "X-API-Key": requireApiKey() },
       data: { s3_key: "../etc/passwd" },
     });
     expect([400, 422]).toContain(response.status());

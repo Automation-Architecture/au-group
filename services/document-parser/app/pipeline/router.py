@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.exceptions import (
     BackgroundJobBusyError,
     BankruptcyIdRequiredError,
+    BankruptcyNotFoundError,
     DocumentProcessingError,
 )
 from app.core.logging import log_event
@@ -62,6 +63,50 @@ class DocumentPipeline:
         self._s3 = S3Client()
         self._db = SupabaseClient()
         self._ocr = TesseractOcrEngine()
+
+    def _require_bankruptcy(self, bankruptcy_id: UUID | None) -> None:
+        if bankruptcy_id is None or not self._db._enabled:
+            return
+        if self._db.get_bankruptcy(bankruptcy_id) is None:
+            raise BankruptcyNotFoundError(bankruptcy_id)
+
+    def _backfill_creditor_merge(
+        self,
+        *,
+        bankruptcy_id: UUID | None,
+        response: ParseDocumentResponse,
+    ) -> None:
+        """Merge cached matrix creditors into creditors / bankruptcy_creditors when RPC was skipped."""
+        if (
+            not self._db._enabled
+            or bankruptcy_id is None
+            or not response.creditors
+            or response.manual_review_required
+            or response.validation is None
+        ):
+            return
+        try:
+            merged = self._db.merge_creditors(
+                bankruptcy_id,
+                response.creditors,
+                confidence_score=response.validation.confidence_score,
+            )
+            log_event(
+                logger,
+                "creditor_merge_backfill",
+                bankruptcy_id=str(bankruptcy_id),
+                creditor_count=len(response.creditors),
+                merged_count=merged,
+                confidence_score=response.validation.confidence_score,
+            )
+        except Exception as exc:
+            logger.warning(
+                "creditor_merge_backfill_failed bankruptcy_id=%s creditor_count=%s: %s",
+                bankruptcy_id,
+                len(response.creditors),
+                exc,
+                exc_info=True,
+            )
 
     def _download_http_to_temp(self, document_url: str) -> Path:
         parsed = urlparse(document_url)
@@ -120,9 +165,7 @@ class DocumentPipeline:
         return bool(document_url and document_url.startswith(("http://", "https://")))
 
     def _choose_parse_mode(self, path: Path) -> ParseMode:
-        page_count, coverage = probe_text_density(
-            path, self._settings.structured_text_min_chars
-        )
+        page_count, coverage = probe_text_density(path, self._settings.structured_text_min_chars)
         if page_count > self._settings.max_pdf_pages:
             raise ValueError(f"PDF exceeds max pages ({self._settings.max_pdf_pages})")
         if coverage >= self._settings.structured_page_coverage:
@@ -171,6 +214,7 @@ class DocumentPipeline:
         document_url: str | None,
         bankruptcy_id: UUID | None = None,
     ) -> ParseTextResponse:
+        self._require_bankruptcy(bankruptcy_id)
         path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
         try:
             ocr_result = self._ocr.extract_from_pdf(str(path))
@@ -298,9 +342,7 @@ class DocumentPipeline:
     ) -> UUID:
         if document_id is not None:
             return document_id
-        existing = self._db.find_document_by_hash(
-            content_hash, self._settings.parser_version
-        )
+        existing = self._db.find_document_by_hash(content_hash, self._settings.parser_version)
         if existing and existing.get("id"):
             return UUID(str(existing["id"]))
         return uuid4()
@@ -312,9 +354,7 @@ class DocumentPipeline:
         force: bool,
         bankruptcy_id: UUID | None = None,
     ) -> ParseDocumentResponse | None:
-        existing = self._db.find_document_by_hash(
-            content_hash, self._settings.parser_version
-        )
+        existing = self._db.find_document_by_hash(content_hash, self._settings.parser_version)
         if not existing:
             return None
         raw = self._coerce_mapping(existing.get("raw_extraction"))
@@ -346,6 +386,7 @@ class DocumentPipeline:
         """Returns (response, schedule_background, temp_path, content_hash, key, release_slot)."""
         if self._settings.require_bankruptcy_id and bankruptcy_id is None:
             raise BankruptcyIdRequiredError()
+        self._require_bankruptcy(bankruptcy_id)
 
         path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
         content_hash: str | None = None
@@ -357,15 +398,14 @@ class DocumentPipeline:
                 content_hash, force=force, bankruptcy_id=bankruptcy_id
             )
             if cached is not None:
+                self._backfill_creditor_merge(bankruptcy_id=bankruptcy_id, response=cached)
                 return cached, False, None, None, None, False
 
             if async_mode and self._settings.async_parse_enabled:
                 if not try_acquire_background_slot(self._settings.async_parse_max_concurrent):
                     raise BackgroundJobBusyError()
                 release_slot = True
-                document_id = self._resolve_document_id(
-                    document_id=None, content_hash=content_hash
-                )
+                document_id = self._resolve_document_id(document_id=None, content_hash=content_hash)
                 doc_payload = SupabaseClient.document_payload(
                     bankruptcy_id=bankruptcy_id,
                     s3_key=key,
@@ -430,6 +470,7 @@ class DocumentPipeline:
         path: Path | None = temp_path
         key = s3_key or document_url or ""
         try:
+            self._require_bankruptcy(bankruptcy_id)
             if path is None or not path.is_file():
                 path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
             hash_value = content_hash or S3Client.sha256_file(path)
@@ -458,9 +499,7 @@ class DocumentPipeline:
             if ctx_token is not None:
                 reset_request_id(ctx_token)
 
-    def resolve_manual_review(
-        self, review_id: UUID, *, resolved_by: str | None = None
-    ) -> dict:
+    def resolve_manual_review(self, review_id: UUID, *, resolved_by: str | None = None) -> dict:
         row = self._db.get_manual_review(review_id)
         if not row:
             raise FileNotFoundError("Review item not found")
@@ -473,9 +512,7 @@ class DocumentPipeline:
         raw = self._coerce_mapping(row.get("raw_extraction"))
         started_at = raw.get("started_at") if isinstance(raw.get("started_at"), str) else None
         payload = SupabaseClient.document_payload(
-            bankruptcy_id=UUID(str(row["bankruptcy_id"]))
-            if row.get("bankruptcy_id")
-            else None,
+            bankruptcy_id=UUID(str(row["bankruptcy_id"])) if row.get("bankruptcy_id") else None,
             s3_key=str(row.get("s3_key", "")),
             content_sha256=str(row.get("content_sha256", "")),
             page_count=int(row.get("page_count") or 0),
@@ -527,9 +564,7 @@ class DocumentPipeline:
             active_document_id = self._resolve_document_id(
                 document_id=document_id, content_hash=content_hash
             )
-            bankruptcy = (
-                self._db.get_bankruptcy(bankruptcy_id) if bankruptcy_id else None
-            )
+            bankruptcy = self._db.get_bankruptcy(bankruptcy_id) if bankruptcy_id else None
             case_number = bankruptcy["case_number"] if bankruptcy else "unknown"
 
             if ocr_used:
@@ -545,9 +580,7 @@ class DocumentPipeline:
                     {
                         "filing_type": filing_type.value,
                         "form201": form201.model_dump() if form201 else None,
-                        "creditors": [c.model_dump() for c in creditors]
-                        if creditors
-                        else None,
+                        "creditors": [c.model_dump() for c in creditors] if creditors else None,
                         "validation": validation.model_dump(),
                     }
                 ),
@@ -562,9 +595,7 @@ class DocumentPipeline:
                     "validation": validation.model_dump(),
                     "manual_review_required": validation.manual_review_required,
                     "form201": form201.model_dump() if form201 else None,
-                    "creditors": [c.model_dump() for c in creditors]
-                    if creditors
-                    else None,
+                    "creditors": [c.model_dump() for c in creditors] if creditors else None,
                 }
             )
 
@@ -644,8 +675,7 @@ class DocumentPipeline:
                     {
                         "bankruptcy_id": str(bankruptcy_id) if bankruptcy_id else None,
                         "document_id": str(active_document_id),
-                        "review_reason": ",".join(validation.missing_fields)
-                        or "low_confidence",
+                        "review_reason": ",".join(validation.missing_fields) or "low_confidence",
                         "status": "pending",
                     }
                 )

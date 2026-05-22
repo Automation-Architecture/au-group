@@ -115,9 +115,7 @@ def extract_form201(text: str, structured: StructuredPdfResult | None = None) ->
 
     if structured and structured.tables:
         table_text = "\n".join(
-            " ".join(cell or "" for cell in row)
-            for table in structured.tables
-            for row in table
+            " ".join(cell or "" for cell in row) for table in structured.tables for row in table
         )
         assets = assets or _find_usd_range(table_text, "assets")
         liabilities = liabilities or _find_usd_range(table_text, "liabilities")

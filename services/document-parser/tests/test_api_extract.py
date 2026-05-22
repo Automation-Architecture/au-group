@@ -152,9 +152,7 @@ class TestExtractForm201:
         assert len(calls) == 1
         expected = validate_form201(form201, ocr_used=False)
         body = response.json()
-        assert body["validation"]["confidence_score"] == pytest.approx(
-            expected.confidence_score
-        )
+        assert body["validation"]["confidence_score"] == pytest.approx(expected.confidence_score)
 
     def test_pipeline_value_error_returns_400(
         self, client: TestClient, auth_headers: dict[str, str], bankruptcy_id, patch_pipeline

@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     supabase_url: str = ""
     supabase_service_role_key: str = ""
+    supabase_http_timeout_sec: float = 60.0
 
     aws_region: str = "us-east-1"
     aws_access_key_id: str | None = None

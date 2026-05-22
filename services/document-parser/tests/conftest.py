@@ -1,4 +1,5 @@
 import os
+import secrets
 from collections.abc import Callable
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -26,14 +27,17 @@ def _load_dotenv_file() -> None:
 
 _load_dotenv_file()
 # Test credentials must win over services/document-parser/.env (setdefault would not override).
-os.environ["AUTH_USERNAME"] = "test-user"
-os.environ["AUTH_PASSWORD"] = "test-password"
-# Fallback when .env is missing (unit tests).
-os.environ.setdefault("API_KEY", "test-api-key-for-pytest-suite-only-do-not-use-in-prod")
+TEST_AUTH_USERNAME = "test-user"
+TEST_AUTH_PASSWORD = "test-password"
+TEST_API_KEY = os.environ.get("API_KEY") or secrets.token_hex(32)
+TEST_JWT_SECRET = os.environ.get("JWT_SECRET") or secrets.token_hex(32)
+os.environ["AUTH_USERNAME"] = TEST_AUTH_USERNAME
+os.environ["AUTH_PASSWORD"] = TEST_AUTH_PASSWORD
+os.environ["API_KEY"] = TEST_API_KEY
+os.environ["JWT_SECRET"] = TEST_JWT_SECRET
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("EXPOSE_OPENAPI", "false")
-os.environ.setdefault("JWT_SECRET", "test-jwt-secret-at-least-32-characters-long")
 
 from app.core.config import get_settings  # noqa: E402
 
@@ -67,7 +71,7 @@ def auth_headers(api_key: str) -> dict[str, str]:
 def bearer_headers(client: TestClient) -> dict[str, str]:
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test-user", "password": "test-password"},
+        json={"username": TEST_AUTH_USERNAME, "password": TEST_AUTH_PASSWORD},
     )
     assert response.status_code == 200, response.text
     token = response.json()["access_token"]

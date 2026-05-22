@@ -43,12 +43,8 @@ async def list_review_queue(
     items = [
         ReviewQueueItem(
             id=UUID(str(row["id"])),
-            bankruptcy_id=UUID(str(row["bankruptcy_id"]))
-            if row.get("bankruptcy_id")
-            else None,
-            document_id=UUID(str(row["document_id"]))
-            if row.get("document_id")
-            else None,
+            bankruptcy_id=UUID(str(row["bankruptcy_id"])) if row.get("bankruptcy_id") else None,
+            document_id=UUID(str(row["document_id"])) if row.get("document_id") else None,
             review_reason=row.get("review_reason", ""),
             status=row.get("status", "pending"),
             assigned_to=row.get("assigned_to"),
@@ -101,19 +97,13 @@ async def resolve_review(
         raise HTTPException(status_code=404, detail="Review item not found") from exc
     except RuntimeError as exc:
         logger.exception("resolve_manual_review_failed review_id=%s", review_id)
-        raise HTTPException(
-            status_code=503, detail="Service temporarily unavailable"
-        ) from exc
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
 
     bankruptcy_flag = result.get("bankruptcy_manual_review_required")
     return ResolveReviewResponse(
         review_id=UUID(str(result["review_id"])),
-        document_id=UUID(str(result["document_id"]))
-        if result.get("document_id")
-        else None,
-        bankruptcy_id=UUID(str(result["bankruptcy_id"]))
-        if result.get("bankruptcy_id")
-        else None,
+        document_id=UUID(str(result["document_id"])) if result.get("document_id") else None,
+        bankruptcy_id=UUID(str(result["bankruptcy_id"])) if result.get("bankruptcy_id") else None,
         status=str(result.get("status", "resolved")),
         bankruptcy_manual_review_required=bool(bankruptcy_flag)
         if bankruptcy_flag is not None

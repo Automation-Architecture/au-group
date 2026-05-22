@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.core.exceptions import (
     BackgroundJobBusyError,
     BankruptcyIdRequiredError,
+    BankruptcyNotFoundError,
     DocumentProcessingError,
 )
 from app.core.logging import configure_logging, log_event
@@ -110,6 +111,14 @@ async def bankruptcy_id_required_handler(
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
 
+@app.exception_handler(BankruptcyNotFoundError)
+async def bankruptcy_not_found_handler(
+    request: Request, exc: BankruptcyNotFoundError
+) -> JSONResponse:
+    logger.warning("bankruptcy_not_found path=%s", request.url.path, exc_info=exc)
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+
 @app.exception_handler(DocumentProcessingError)
 async def document_processing_handler(
     request: Request, exc: DocumentProcessingError
@@ -119,9 +128,7 @@ async def document_processing_handler(
 
 
 @app.exception_handler(BackgroundJobBusyError)
-async def background_busy_handler(
-    request: Request, exc: BackgroundJobBusyError
-) -> JSONResponse:
+async def background_busy_handler(request: Request, exc: BackgroundJobBusyError) -> JSONResponse:
     logger.warning("rate_limited path=%s", request.url.path, exc_info=exc)
     return JSONResponse(status_code=429, content={"detail": str(exc)})
 

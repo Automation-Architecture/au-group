@@ -100,12 +100,12 @@ async def parse_document(
     try:
         result, schedule_background, temp_path, content_hash, _resolved_key, release_slot = (
             pipeline.parse_document(
-            bankruptcy_id=body.bankruptcy_id,
-            s3_key=body.s3_key,
-            document_url=body.document_url,
-            docket_hint=body.docket_hint,
-            force=body.force,
-            async_mode=body.async_mode,
+                bankruptcy_id=body.bankruptcy_id,
+                s3_key=body.s3_key,
+                document_url=body.document_url,
+                docket_hint=body.docket_hint,
+                force=body.force,
+                async_mode=body.async_mode,
             )
         )
     except DocumentProcessingError as exc:

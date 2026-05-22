@@ -20,7 +20,9 @@ def test_validation_from_cached_row_uses_persisted_flags() -> None:
             "manual_review_required": True,
         },
     }
-    validation = pipeline._validation_from_cached_row(row, pipeline._coerce_mapping(row["raw_extraction"]))
+    validation = pipeline._validation_from_cached_row(
+        row, pipeline._coerce_mapping(row["raw_extraction"])
+    )
     assert validation.manual_review_required is True
     assert validation.confidence_score == 0.72
 

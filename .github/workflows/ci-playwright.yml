@@ -15,6 +15,11 @@ jobs:
         with:
           install-python-deps: "false"
 
+      - name: Generate parser E2E credentials
+        run: |
+          chmod +x scripts/ci/generate-parser-test-env.sh
+          source scripts/ci/generate-parser-test-env.sh
+
       - name: Start document-parser for E2E
         run: |
           chmod +x scripts/ci/start-parser-for-e2e.sh
@@ -36,7 +41,6 @@ jobs:
         working-directory: e2e
         env:
           PARSER_BASE_URL: http://127.0.0.1:8001
-          API_KEY: test-api-key-for-ci-suite-only-do-not-use-in-production
           PLAYWRIGHT_HTML_OPEN: never
           CI: true
         run: npm test

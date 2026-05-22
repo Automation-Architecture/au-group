@@ -32,6 +32,7 @@ class SupabaseClient:
             self._headers: dict[str, str] = {}
             return
         self._enabled = True
+        self._http_timeout = settings.supabase_http_timeout_sec
         self._base = settings.supabase_url.rstrip("/") + "/rest/v1"
         self._headers = {
             "apikey": settings.supabase_service_role_key,
@@ -56,7 +57,7 @@ class SupabaseClient:
             headers["Prefer"] = prefer
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            with httpx.Client(timeout=60.0) as client:
+            with httpx.Client(timeout=self._http_timeout) as client:
                 response = client.request(
                     method,
                     url,
@@ -70,9 +71,7 @@ class SupabaseClient:
                 f"{ENV_FILE} (or service env) and restart the server after changes."
             ) from exc
         except httpx.HTTPError as exc:
-            raise SupabaseUnavailableError(
-                f"Supabase request failed: {exc}"
-            ) from exc
+            raise SupabaseUnavailableError(f"Supabase request failed: {exc}") from exc
         if response.status_code >= 400:
             raise SupabaseUnavailableError(
                 f"Supabase {method} {path} failed: {response.status_code} {response.text}"
@@ -91,7 +90,7 @@ class SupabaseClient:
         headers["Prefer"] = "count=exact"
         url = f"{self._base}/{path.lstrip('/')}"
         try:
-            with httpx.Client(timeout=60.0) as client:
+            with httpx.Client(timeout=self._http_timeout) as client:
                 response = client.get(url, headers=headers, params=params)
         except httpx.ConnectError as exc:
             raise SupabaseUnavailableError(
@@ -168,9 +167,7 @@ class SupabaseClient:
 
         existing_document: dict[str, Any] | None = None
         if content_sha256 and parser_version:
-            existing_document = self.find_document_by_hash(
-                content_sha256, parser_version
-            )
+            existing_document = self.find_document_by_hash(content_sha256, parser_version)
 
         if existing_document:
             existing_bankruptcy_id = existing_document.get("bankruptcy_id")
@@ -280,9 +277,7 @@ class SupabaseClient:
             )
         return self.insert_form201_extraction(payload)
 
-    def insert_creditor_matrix_extraction(
-        self, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def insert_creditor_matrix_extraction(self, payload: dict[str, Any]) -> dict[str, Any]:
         rows = self._request("POST", "creditor_matrix_extractions", json=payload)
         if isinstance(rows, list) and rows:
             return rows[0]
@@ -438,10 +433,15 @@ class SupabaseClient:
         if not self._enabled:
             return None
         url = get_settings().supabase_url.rstrip("/") + f"/rest/v1/rpc/{name}"
-        with httpx.Client(timeout=60.0) as client:
-            response = client.post(url, headers=self._headers, json=payload)
+        with httpx.Client(timeout=self._http_timeout) as client:
+            try:
+                response = client.post(url, headers=self._headers, json=payload)
+            except httpx.ConnectError as exc:
+                raise SupabaseUnavailableError(f"RPC {name} connection failed") from exc
+            except httpx.HTTPError as exc:
+                raise SupabaseUnavailableError(f"RPC {name} request failed") from exc
             if response.status_code >= 400:
-                raise RuntimeError(
+                raise SupabaseUnavailableError(
                     f"RPC {name} failed: {response.status_code} {response.text}"
                 )
             if not response.content:

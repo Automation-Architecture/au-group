@@ -22,6 +22,17 @@ def test_settings_reads_api_key_from_env(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.api_key == "secret-from-env"
 
 
+def test_settings_supabase_http_timeout_default() -> None:
+    settings = Settings(api_key="x" * 32)
+    assert settings.supabase_http_timeout_sec == 60.0
+
+
+def test_settings_supabase_http_timeout_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SUPABASE_HTTP_TIMEOUT_SEC", "90")
+    settings = Settings(api_key="x" * 32)
+    assert settings.supabase_http_timeout_sec == 90.0
+
+
 def test_production_rejects_short_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(api_key="too-short", app_env="production")
     with pytest.raises(ValueError, match="at least 32"):

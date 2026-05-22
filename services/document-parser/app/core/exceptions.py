@@ -18,7 +18,13 @@ class BackgroundJobBusyError(Exception):
 class BankruptcyIdRequiredError(ValueError):
     """Parse requests must include bankruptcy_id when enforcement is enabled."""
 
-    def __init__(
-        self, message: str = "bankruptcy_id is required for document parse"
-    ) -> None:
+    def __init__(self, message: str = "bankruptcy_id is required for document parse") -> None:
         super().__init__(message)
+
+
+class BankruptcyNotFoundError(Exception):
+    """Referenced bankruptcy_id does not exist in Supabase."""
+
+    def __init__(self, bankruptcy_id: object) -> None:
+        super().__init__(f"bankruptcy_id {bankruptcy_id} not found")
+        self.bankruptcy_id = bankruptcy_id
