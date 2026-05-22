@@ -104,7 +104,10 @@ def test_download_enforces_size_limit(tmp_path: Path) -> None:
     mock_client.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("app.core.url_safety.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+        patch(
+            "app.core.url_safety.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 0))],
+        ),
         patch("app.core.url_safety.httpx.Client", return_value=mock_client),
         pytest.raises(ValueError, match="size limit"),
     ):
@@ -138,7 +141,10 @@ def test_download_maps_404_to_file_not_found(tmp_path: Path) -> None:
     mock_client.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("app.core.url_safety.socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+        patch(
+            "app.core.url_safety.socket.getaddrinfo",
+            return_value=[(2, 1, 6, "", ("93.184.216.34", 0))],
+        ),
         patch("app.core.url_safety.httpx.Client", return_value=mock_client),
         pytest.raises(FileNotFoundError),
     ):

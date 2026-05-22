@@ -18,9 +18,7 @@ class BackgroundJobBusyError(Exception):
 class BankruptcyIdRequiredError(ValueError):
     """Parse requests must include bankruptcy_id when enforcement is enabled."""
 
-    def __init__(
-        self, message: str = "bankruptcy_id is required for document parse"
-    ) -> None:
+    def __init__(self, message: str = "bankruptcy_id is required for document parse") -> None:
         super().__init__(message)
 
 

@@ -128,9 +128,7 @@ async def document_processing_handler(
 
 
 @app.exception_handler(BackgroundJobBusyError)
-async def background_busy_handler(
-    request: Request, exc: BackgroundJobBusyError
-) -> JSONResponse:
+async def background_busy_handler(request: Request, exc: BackgroundJobBusyError) -> JSONResponse:
     logger.warning("rate_limited path=%s", request.url.path, exc_info=exc)
     return JSONResponse(status_code=429, content={"detail": str(exc)})
 

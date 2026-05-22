@@ -27,9 +27,7 @@ class IntegrationProvisioner:
             "Prefer": "return=representation",
         }
         self.created_bankruptcy = False
-        self.bankruptcy_id: UUID | None = (
-            UUID(env.bankruptcy_id) if env.bankruptcy_id else None
-        )
+        self.bankruptcy_id: UUID | None = UUID(env.bankruptcy_id) if env.bankruptcy_id else None
         self._run_id = env.run_id
         self._case_number = f"ITEST-{env.run_id[:8]}"
         self.form201_s3_key = f"raw-documents/{self._case_number}/form201.pdf"
@@ -47,9 +45,7 @@ class IntegrationProvisioner:
     ) -> object:
         url = f"{self._base}/{path.lstrip('/')}"
         with httpx.Client(timeout=60.0) as client:
-            response = client.request(
-                method, url, headers=self._headers, params=params, json=json
-            )
+            response = client.request(method, url, headers=self._headers, params=params, json=json)
             if response.status_code >= 400:
                 raise RuntimeError(
                     f"Supabase {method} {path} failed: {response.status_code} {response.text}"

@@ -52,9 +52,7 @@ class TesseractOcrEngine:
 
         page_results: list[OcrPageResult] = []
         worker_count = min(self._max_workers, len(images))
-        tasks = [
-            (index + 1, image, self._tesseract_cmd) for index, image in enumerate(images)
-        ]
+        tasks = [(index + 1, image, self._tesseract_cmd) for index, image in enumerate(images)]
 
         if worker_count <= 1:
             page_results = [_ocr_single_page(task) for task in tasks]

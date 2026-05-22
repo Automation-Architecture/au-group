@@ -47,9 +47,7 @@ def _resolve_host_ips(hostname: str) -> list[ipaddress.IPv4Address | ipaddress.I
     except ValueError:
         pass
     ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
-    for family, _, _, _, sockaddr in socket.getaddrinfo(
-        hostname, None, type=socket.SOCK_STREAM
-    ):
+    for family, _, _, _, sockaddr in socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM):
         addr = sockaddr[0]
         try:
             ip = ipaddress.ip_address(addr)

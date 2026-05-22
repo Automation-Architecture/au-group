@@ -96,10 +96,7 @@ class TestExtractForm201Reparse:
         assert len(calls) == 1
         expected = validate_form201(form201, ocr_used=False)
         assert response.validation.confidence_score == expected.confidence_score
-        assert (
-            response.validation.manual_review_required
-            == expected.manual_review_required
-        )
+        assert response.validation.manual_review_required == expected.manual_review_required
         assert response.validation.missing_fields == expected.missing_fields
 
     def test_raises_when_still_processing(self, pipeline: DocumentPipeline) -> None:
@@ -125,9 +122,7 @@ class TestExtractForm201Reparse:
 
         assert len(calls) == 1
 
-    def test_raises_when_still_no_form201_after_refresh(
-        self, pipeline: DocumentPipeline
-    ) -> None:
+    def test_raises_when_still_no_form201_after_refresh(self, pipeline: DocumentPipeline) -> None:
         empty = _form201_response(form201=None)
 
         def fake_parse_document(self, **kwargs: object) -> tuple:

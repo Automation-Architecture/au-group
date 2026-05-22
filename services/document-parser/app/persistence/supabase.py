@@ -70,9 +70,7 @@ class SupabaseClient:
                 f"{ENV_FILE} (or service env) and restart the server after changes."
             ) from exc
         except httpx.HTTPError as exc:
-            raise SupabaseUnavailableError(
-                f"Supabase request failed: {exc}"
-            ) from exc
+            raise SupabaseUnavailableError(f"Supabase request failed: {exc}") from exc
         if response.status_code >= 400:
             raise SupabaseUnavailableError(
                 f"Supabase {method} {path} failed: {response.status_code} {response.text}"
@@ -168,9 +166,7 @@ class SupabaseClient:
 
         existing_document: dict[str, Any] | None = None
         if content_sha256 and parser_version:
-            existing_document = self.find_document_by_hash(
-                content_sha256, parser_version
-            )
+            existing_document = self.find_document_by_hash(content_sha256, parser_version)
 
         if existing_document:
             existing_bankruptcy_id = existing_document.get("bankruptcy_id")
@@ -280,9 +276,7 @@ class SupabaseClient:
             )
         return self.insert_form201_extraction(payload)
 
-    def insert_creditor_matrix_extraction(
-        self, payload: dict[str, Any]
-    ) -> dict[str, Any]:
+    def insert_creditor_matrix_extraction(self, payload: dict[str, Any]) -> dict[str, Any]:
         rows = self._request("POST", "creditor_matrix_extractions", json=payload)
         if isinstance(rows, list) and rows:
             return rows[0]

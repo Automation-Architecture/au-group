@@ -47,7 +47,9 @@ def live_auth_headers(integration_available: str) -> dict[str, str]:
 
 
 @pytest.fixture(scope="session")
-def integration_context(integration_available: str) -> Generator[IntegrationProvisioner, None, None]:
+def integration_context(
+    integration_available: str,
+) -> Generator[IntegrationProvisioner, None, None]:
     _ = integration_available
     run_id = new_run_id()
     env = load_integration_env(run_id)

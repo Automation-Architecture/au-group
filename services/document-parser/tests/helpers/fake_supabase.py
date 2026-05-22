@@ -95,6 +95,12 @@ class FakeSupabaseClient(SupabaseClient):
         if not row:
             raise FileNotFoundError("Review item not found")
         row = {**row, "status": "resolved", "resolved_by": resolved_by}
+        # Update the in-memory store so subsequent reads see the resolved status
+        rid = str(review_id)
+        for i, r in enumerate(self._reviews):
+            if r.get("id") == rid:
+                self._reviews[i] = row
+                break
         return row
 
     def upsert_bankruptcy_from_form201(
@@ -118,7 +124,5 @@ class FakeSupabaseClient(SupabaseClient):
     def upsert_case_status(self, bankruptcy_id: UUID, **kwargs: Any) -> None:
         return None
 
-    def link_document_bankruptcy(
-        self, document_id: UUID, bankruptcy_id: UUID
-    ) -> dict[str, Any]:
+    def link_document_bankruptcy(self, document_id: UUID, bankruptcy_id: UUID) -> dict[str, Any]:
         return {"document_id": str(document_id), "bankruptcy_id": str(bankruptcy_id)}

@@ -9,9 +9,7 @@ READ_PREFIX = "raw-documents/"
 WRITE_PREFIXES = ("ocr-outputs/", "parsed-outputs/")
 
 # raw-documents/{case_number}/{document_id}.pdf
-_READ_KEY_PATTERN = re.compile(
-    r"^raw-documents/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.pdf$"
-)
+_READ_KEY_PATTERN = re.compile(r"^raw-documents/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.pdf$")
 _WRITE_KEY_PATTERN = re.compile(
     r"^(?:ocr-outputs|parsed-outputs)/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.(?:txt|json)$"
 )

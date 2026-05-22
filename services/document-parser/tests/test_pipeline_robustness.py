@@ -44,9 +44,7 @@ def test_resolve_document_id_prefers_explicit_document_id() -> None:
     pipeline = DocumentPipeline()
     explicit_id = uuid4()
 
-    resolved = pipeline._resolve_document_id(
-        document_id=explicit_id, content_hash="deadbeef"
-    )
+    resolved = pipeline._resolve_document_id(document_id=explicit_id, content_hash="deadbeef")
     assert resolved == explicit_id
 
 
