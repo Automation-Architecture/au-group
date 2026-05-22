@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment || (github.event_name == 'schedule' && 'production' || 'staging') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Resolve strict mode
         id: mode
@@ -71,7 +71,7 @@ jobs:
           curl -fsS "${API_BASE_URL%/}/health"
           curl -fsS "${API_BASE_URL%/}/health/ready" || true
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "20"
           cache: npm
