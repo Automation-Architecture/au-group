@@ -1,0 +1,61 @@
+name: Integration tests (document-parser)
+
+on:
+  workflow_call:
+    inputs:
+      strict:
+        description: Fail when staging integration secrets are missing
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      strict:
+        description: Fail when staging integration secrets are missing
+        required: false
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    environment: staging
+    defaults:
+      run:
+        working-directory: services/document-parser
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup parser CI environment
+        uses: ./.github/actions/setup-parser-ci
+
+      - name: Run integration tests
+        env:
+          STRICT_INPUT: ${{ inputs.strict || github.event.inputs.strict || 'false' }}
+          INTEGRATION_CI_STRICT: ${{ vars.INTEGRATION_CI_STRICT || 'false' }}
+          API_KEY: ${{ secrets.DOCUMENT_PARSER_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          STRICT="${STRICT_INPUT}"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            STRICT=true
+          elif [ "${INTEGRATION_CI_STRICT}" = "true" ]; then
+            STRICT=true
+          fi
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_SERVICE_ROLE_KEY}" ]; then
+            if [ "${STRICT}" = "true" ]; then
+              echo "::error::Integration secrets missing in staging environment."
+              echo "Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (see docs/ci/environments.md)."
+              exit 1
+            fi
+            echo "::warning::Integration secrets not configured — skipping (set vars.INTEGRATION_CI_STRICT=true after adding staging secrets)"
+            exit 0
+          fi
+          pytest tests/ -m integration -q

@@ -1,0 +1,67 @@
+name: Deploy Supabase migrations
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/migrations/**"
+      - "supabase/config.toml"
+      - ".github/workflows/deploy-supabase.yml"
+
+permissions:
+  contents: read
+  actions: write # upload-artifact in ci-security + deploy
+  security-events: write
+
+concurrency:
+  group: deploy-supabase-production-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-supabase.yml
+
+  security:
+    uses: ./.github/workflows/ci-security.yml
+    with:
+      scope: diff
+
+  deploy:
+    needs: [ci, security]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link and push migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase link --project-ref "${SUPABASE_PROJECT_REF}" --password "${SUPABASE_DB_PASSWORD}"
+          supabase db push --linked
+
+      - name: Check TypeScript types drift
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          supabase gen types typescript --linked > types/database.types.ts.new
+          if ! diff -q types/database.types.ts types/database.types.ts.new >/dev/null 2>&1; then
+            echo "::warning::types/database.types.ts differs from generated types. Run locally:"
+            echo "  supabase gen types typescript --linked > types/database.types.ts"
+          fi
+          rm -f types/database.types.ts.new
+
+      - name: Upload types artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-types
+          path: types/database.types.ts
+          if-no-files-found: warn

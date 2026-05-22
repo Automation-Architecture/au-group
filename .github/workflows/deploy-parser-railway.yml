@@ -1,0 +1,94 @@
+name: Deploy document-parser (Railway)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+  push:
+    branches: [main]
+    paths:
+      - "services/document-parser/**"
+      - "services/document-parser/railway.toml"
+      - ".github/workflows/deploy-parser-railway.yml"
+
+permissions:
+  contents: read
+  actions: write
+  security-events: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-parser.yml
+
+  security:
+    uses: ./.github/workflows/ci-security.yml
+    with:
+      scope: diff
+
+  deploy-staging:
+    needs: [ci, security]
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-parser-staging-${{ github.repository }}
+      cancel-in-progress: false
+    environment: staging
+    defaults:
+      run:
+        working-directory: services/document-parser
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway (staging)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --detach
+
+  smoke-staging:
+    needs: deploy-staging
+    if: success()
+    uses: ./.github/workflows/smoke-e2e.yml
+    with:
+      strict: true
+      environment: staging
+
+  deploy-production:
+    needs: [ci, security]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-parser-production-${{ github.repository }}
+      cancel-in-progress: false
+    environment: production
+    defaults:
+      run:
+        working-directory: services/document-parser
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway (production)
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --detach
+
+  smoke-production:
+    needs: deploy-production
+    if: success()
+    uses: ./.github/workflows/smoke-e2e.yml
+    with:
+      strict: true
+      environment: production

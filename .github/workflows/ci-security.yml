@@ -1,0 +1,32 @@
+name: CI — vbsec security
+
+on:
+  workflow_call:
+    inputs:
+      scope:
+        description: all repo or git diff only
+        required: false
+        type: string
+        default: diff
+
+permissions:
+  contents: read
+  actions: write
+  security-events: write
+
+jobs:
+  vbsec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run vbsec scan
+        uses: ./.github/actions/run-vbsec
+        with:
+          scope: ${{ inputs.scope }}
+          base-ref: ${{ github.base_ref || 'main' }}
+          vbsec-ref: ${{ vars.VBSEC_REF }}
+          upload-sarif: "true"

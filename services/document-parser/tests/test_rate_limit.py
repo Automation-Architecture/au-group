@@ -1,11 +1,9 @@
 """Rate limiting behavior (slowapi)."""
 
-from slowapi.errors import RateLimitExceeded
-
-from fastapi.testclient import TestClient
-
 from app.core.rate_limit import limiter
 from app.main import app
+from fastapi.testclient import TestClient
+from slowapi.errors import RateLimitExceeded
 from tests.conftest import sample_parse_text_response
 
 

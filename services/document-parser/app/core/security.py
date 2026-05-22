@@ -2,11 +2,10 @@ import secrets
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import HTTPException, Security, status
-from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-
 from app.core.config import get_settings
 from app.core.tokens import decode_access_token
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 bearer_scheme = HTTPBearer(auto_error=False)

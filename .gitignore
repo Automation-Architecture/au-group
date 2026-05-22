@@ -11,3 +11,16 @@ FINAL_SETUP_STATUS.txt
 WORKFLOWS_VIEWED.md
 update-jira-tasks.sh
 supabase/.temp/
+vbsec-reports/
+n8n-reports/
+.n8n-skills/
+.vbsec/
+.vbsec-tmp/
+/workflows/pulled
+/workflows/
+.ruff_cache
+.pytest_cache
+__pycache__/
+*.pyc
+.n8n-skills-ref
+/test/n8n

@@ -4,7 +4,6 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-
 from tests.conftest import sample_job_status_response, sample_review_queue_row
 
 

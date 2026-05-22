@@ -4,8 +4,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from app.core.config import get_settings
-from app.core.security import verify_auth
 from app.core.rate_limit import limiter
+from app.core.security import verify_auth
 from app.models.schemas import (
     JobStatusResponse,
     ResolveReviewRequest,
@@ -21,7 +21,12 @@ logger = logging.getLogger(__name__)
 _review_rate_limit = lambda: get_settings().rate_limit_review  # noqa: E731
 
 
-@router.get("/review-queue", response_model=ReviewQueueResponse)
+@router.get(
+    "/review-queue",
+    response_model=ReviewQueueResponse,
+    summary="Review queue",
+    description="Use to list filings that need a person to review before proceeding.",
+)
 @limiter.limit(_review_rate_limit)
 async def list_review_queue(
     request: Request,
@@ -54,7 +59,12 @@ async def list_review_queue(
     return ReviewQueueResponse(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/jobs/{document_id}", response_model=JobStatusResponse)
+@router.get(
+    "/jobs/{document_id}",
+    response_model=JobStatusResponse,
+    summary="Job status",
+    description="Use to check whether a background parse has finished (after parse/document with async_mode).",
+)
 @limiter.limit(_review_rate_limit)
 async def get_job_status(
     request: Request,
@@ -68,7 +78,12 @@ async def get_job_status(
     return status
 
 
-@router.post("/review/{review_id}/resolve", response_model=ResolveReviewResponse)
+@router.post(
+    "/review/{review_id}/resolve",
+    response_model=ResolveReviewResponse,
+    summary="Resolve review",
+    description="Use to mark a review-queue item as done after a human has checked it.",
+)
 @limiter.limit(_review_rate_limit)
 async def resolve_review(
     request: Request,

@@ -1,0 +1,65 @@
+name: CI — Supabase migrations
+
+on:
+  workflow_call:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  migrate-reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local DB and apply migrations
+        run: |
+          set -euo pipefail
+          DB_CONTAINER="supabase_db_au-group-local"
+
+          cleanup_after_failure() {
+            supabase stop --no-backup 2>/dev/null || true
+            docker rm -f "${DB_CONTAINER}" 2>/dev/null || true
+          }
+
+          # db reset requires Postgres to be running (db start or supabase start).
+          # Do not run supabase stop before the first attempt — that caused
+          # "supabase start is not running" on every retry.
+          # Port 54322 races after image pull: retry db start + reset (setup-cli#265).
+          for attempt in 1 2 3 4 5; do
+            echo "Attempt ${attempt}: supabase db start"
+            if ! supabase db start; then
+              echo "::warning::supabase db start failed (attempt ${attempt})"
+              cleanup_after_failure
+              sleep $((attempt * 3))
+              continue
+            fi
+
+            echo "Attempt ${attempt}: supabase db reset --local"
+            if supabase db reset --local --yes; then
+              exit 0
+            fi
+
+            echo "::warning::supabase db reset failed (attempt ${attempt})"
+            cleanup_after_failure
+            sleep $((attempt * 3))
+          done
+
+          echo "::error::Could not start local Supabase DB and apply migrations after 5 attempts"
+          exit 1
+
+      - name: Lint database (local)
+        run: supabase db lint --local || echo "::warning::db lint skipped if CLI version lacks command"
+
+      - name: Verify RLS policies (local)
+        run: |
+          chmod +x scripts/ci/verify-supabase-rls.sh
+          ./scripts/ci/verify-supabase-rls.sh
+
+      - name: Stop Supabase local
+        if: always()
+        run: supabase stop --no-backup 2>/dev/null || true

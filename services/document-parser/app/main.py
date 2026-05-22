@@ -10,14 +10,15 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
-from app.core.logging import configure_logging, log_event
-from app.core.rate_limit import limiter
-from app.core.readiness import run_readiness_checks
 from app.core.exceptions import (
     BackgroundJobBusyError,
     BankruptcyIdRequiredError,
     DocumentProcessingError,
 )
+from app.core.logging import configure_logging, log_event
+from app.core.rate_limit import limiter
+from app.core.readiness import run_readiness_checks
+from app.core.request_context import bind_request_id, new_request_id, reset_request_id
 from app.persistence.supabase import SupabaseUnavailableError
 
 configure_logging()
@@ -34,6 +35,14 @@ async def lifespan(_app: FastAPI):
     logger.info("document_parser_stopped")
 
 
+_OPENAPI_TAGS = [
+    {"name": "health", "description": "Service health checks."},
+    {"name": "auth", "description": "Get an access token for API calls."},
+    {"name": "parse", "description": "Read text from uploaded PDFs."},
+    {"name": "extract", "description": "Pull structured data from parsed filings."},
+    {"name": "review", "description": "Track parse jobs and manual review items."},
+]
+
 app = FastAPI(
     title="AU Group Document Parser",
     description="SYS-02A OCR and bankruptcy document parsing service",
@@ -42,10 +51,28 @@ app = FastAPI(
     docs_url="/docs" if _settings.expose_openapi else None,
     redoc_url=None,
     openapi_url="/openapi.json" if _settings.expose_openapi else None,
+    openapi_tags=_OPENAPI_TAGS,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next):
+    correlation_id = (
+        request.headers.get("X-Request-ID")
+        or request.headers.get("X-Correlation-ID")
+        or new_request_id()
+    )
+    request.state.request_id = correlation_id
+    token = bind_request_id(correlation_id)
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = correlation_id
+        return response
+    finally:
+        reset_request_id(token)
 
 
 @app.middleware("http")
@@ -70,6 +97,7 @@ async def metrics_middleware(request: Request, call_next):
             path=request.url.path,
             status_code=response.status_code,
             duration_ms=round(elapsed_ms, 2),
+            correlation_id=getattr(request.state, "request_id", None),
         )
     return response
 
@@ -130,7 +158,12 @@ async def supabase_unavailable_handler(
     return JSONResponse(status_code=503, content={"detail": "Service temporarily unavailable"})
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Liveness check",
+    description="Use to confirm the service is up.",
+    tags=["health"],
+)
 async def health() -> dict[str, str]:
     settings = get_settings()
     return {
@@ -139,7 +172,12 @@ async def health() -> dict[str, str]:
     }
 
 
-@app.get("/health/ready")
+@app.get(
+    "/health/ready",
+    summary="Readiness check",
+    description="Use before sending traffic to confirm Supabase and S3 are reachable.",
+    tags=["health"],
+)
 async def health_ready() -> JSONResponse:
     settings = get_settings()
     checks = run_readiness_checks(settings)

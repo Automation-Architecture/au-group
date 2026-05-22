@@ -2,9 +2,8 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
-
 from app.core.s3_validation import validate_s3_key
+from pydantic import BaseModel, Field, field_validator
 
 
 class FilingType(str, Enum):

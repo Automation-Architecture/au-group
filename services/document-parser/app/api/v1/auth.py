@@ -15,7 +15,12 @@ logger = logging.getLogger(__name__)
 _login_rate_limit = lambda: get_settings().rate_limit_login  # noqa: E731
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    summary="Login",
+    description="Use to get a Bearer token, then call other routes from Swagger UI.",
+)
 @limiter.limit(_login_rate_limit)
 async def login(request: Request, body: LoginRequest) -> TokenResponse:
     settings = get_settings()

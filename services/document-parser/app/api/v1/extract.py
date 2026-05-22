@@ -3,8 +3,8 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.exceptions import BackgroundJobBusyError, DocumentProcessingError
-from app.core.security import verify_auth
 from app.core.rate_limit import limiter
+from app.core.security import verify_auth
 from app.models.schemas import (
     ExtractCreditorMatrixRequest,
     ExtractCreditorMatrixResponse,
@@ -21,6 +21,8 @@ _extract_rate_limit = lambda: get_settings().rate_limit_extract  # noqa: E731
 @router.post(
     "/form201",
     response_model=ExtractForm201Response,
+    summary="Extract Form 201",
+    description="Use to get Form 201 debtor and estate fields from an uploaded document.",
     responses={
         409: {"description": "Document still processing; poll job status first"},
         429: {"description": "Too many concurrent background jobs"},
@@ -49,6 +51,8 @@ async def extract_form201(
 @router.post(
     "/creditor-matrix",
     response_model=ExtractCreditorMatrixResponse,
+    summary="Extract creditor matrix",
+    description="Use to get the creditor list from an uploaded creditor matrix document.",
     responses={
         409: {"description": "Document still processing; poll job status first"},
         429: {"description": "Too many concurrent background jobs"},

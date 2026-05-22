@@ -7,8 +7,8 @@ from app.core.exceptions import (
     BankruptcyIdRequiredError,
     DocumentProcessingError,
 )
-from app.core.security import verify_auth
 from app.core.rate_limit import limiter
+from app.core.security import verify_auth
 from app.models.schemas import (
     ParseDocumentRequest,
     ParseDocumentResponse,
@@ -31,7 +31,12 @@ def _parse_document_response(result: ParseDocumentResponse) -> ParseDocumentResp
     return result
 
 
-@router.post("/ocr", response_model=ParseTextResponse)
+@router.post(
+    "/ocr",
+    response_model=ParseTextResponse,
+    summary="OCR parse",
+    description="Use to read text from a scanned or image-based PDF.",
+)
 @limiter.limit(_parse_rate_limit)
 async def parse_ocr(
     request: Request,
@@ -46,7 +51,12 @@ async def parse_ocr(
     )
 
 
-@router.post("/structured", response_model=ParseTextResponse)
+@router.post(
+    "/structured",
+    response_model=ParseTextResponse,
+    summary="Structured parse",
+    description="Use to read text from a PDF that already has selectable text (no OCR).",
+)
 @limiter.limit(_parse_rate_limit)
 async def parse_structured(
     request: Request,
@@ -63,6 +73,11 @@ async def parse_structured(
 @router.post(
     "/document",
     response_model=ParseDocumentResponse,
+    summary="Parse document",
+    description=(
+        "Use to parse a bankruptcy filing end-to-end: classify type, extract fields, validate, and save. "
+        "n8n calls this after a PDF is uploaded. Set async_mode to parse in the background and poll /jobs/{id}."
+    ),
     responses={
         202: {"model": ParseDocumentResponse, "description": "Parse accepted; poll job status"},
         409: {"description": "Document still processing"},
@@ -99,6 +114,7 @@ async def parse_document(
         return JSONResponse(status_code=429, content={"detail": str(exc)})
 
     if schedule_background and result.document_id is not None:
+        correlation_id = getattr(request.state, "request_id", None)
         background_tasks.add_task(
             pipeline.run_parse_document_background,
             document_id=result.document_id,
@@ -109,5 +125,6 @@ async def parse_document(
             temp_path=temp_path,
             content_hash=content_hash,
             release_slot=release_slot,
+            correlation_id=correlation_id,
         )
     return _parse_document_response(result)

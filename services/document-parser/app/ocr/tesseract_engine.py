@@ -2,12 +2,11 @@ import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import pytesseract
-from pdf2image import convert_from_path
-from PIL import Image
-
 from app.core.config import get_settings
 from app.ocr.engine import OcrPageResult, OcrResult
 from app.ocr.preprocess import preprocess_page
+from pdf2image import convert_from_path
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 

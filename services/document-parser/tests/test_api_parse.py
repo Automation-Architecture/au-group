@@ -4,9 +4,8 @@ import time
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.models.schemas import ParseMode
+from fastapi.testclient import TestClient
 from tests.conftest import sample_parse_document_response, sample_parse_text_response
 
 

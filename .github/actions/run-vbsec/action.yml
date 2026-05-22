@@ -1,0 +1,99 @@
+name: Run vbsec security scan
+description: Pinned vbsec rules, CI scan, artifacts, and SARIF upload for GitHub Security
+inputs:
+  scope:
+    description: Scan scope — all or diff
+    required: false
+    default: diff
+  upload-sarif:
+    description: Upload gitleaks/bandit SARIF to GitHub Security
+    required: false
+    default: "true"
+  base-ref:
+    description: Git base ref for diff scope
+    required: false
+    default: main
+  vbsec-ref:
+    description: Git ref for tanviet12/vbsec (from repo variable VBSEC_REF in the caller workflow)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Read vbsec pin
+      id: vbsec_ref
+      shell: bash
+      run: |
+        ref="${{ inputs.vbsec-ref }}"
+        if [ -z "${ref}" ] && [ -f .vbsec-ref ]; then
+          ref="$(tr -d '[:space:]' < .vbsec-ref)"
+        fi
+        echo "ref=${ref:-main}" >> "$GITHUB_OUTPUT"
+
+    - name: Checkout vbsec rules (pinned)
+      uses: actions/checkout@v6
+      with:
+        repository: tanviet12/vbsec
+        ref: ${{ steps.vbsec_ref.outputs.ref }}
+        path: .vbsec
+        persist-credentials: false
+        sparse-checkout: |
+          skills/vbs-scan-security
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.11"
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: "20"
+
+    - name: Install security scanners
+      shell: bash
+      run: |
+        chmod +x scripts/ci/install-security-scanners.sh
+        ./scripts/ci/install-security-scanners.sh
+
+    - name: Run vbsec CI scan (all 21 rules)
+      shell: bash
+      env:
+        VBSEC_SCOPE: ${{ inputs.scope }}
+      run: |
+        python3 scripts/ci/vbsec_ci_scan.py \
+          --scope "${VBSEC_SCOPE}" \
+          --base-ref "${{ inputs.base-ref }}" \
+          --vbsec-dir .vbsec/skills/vbs-scan-security \
+          --output vbsec-reports/ci-scan.json
+
+    - name: Generate SARIF reports
+      if: inputs.upload-sarif == 'true'
+      shell: bash
+      run: |
+        chmod +x scripts/ci/generate-security-sarif.sh
+        ./scripts/ci/generate-security-sarif.sh
+
+    - name: Upload vbsec JSON report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: vbsec-ci-report
+        path: vbsec-reports/ci-scan.json
+        if-no-files-found: warn
+
+    - name: Upload gitleaks SARIF
+      if: always() && inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      continue-on-error: true
+      with:
+        sarif_file: vbsec-reports/gitleaks.sarif
+        category: gitleaks
+        wait-for-processing: false
+
+    - name: Upload bandit SARIF
+      if: always() && inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      continue-on-error: true
+      with:
+        sarif_file: vbsec-reports/bandit.sarif
+        category: bandit
+        wait-for-processing: false

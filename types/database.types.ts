@@ -546,6 +546,72 @@ export type Database = {
           },
         ]
       }
+      document_parse_results: {
+        Row: {
+          bankruptcy_id: string
+          created_at: string
+          doc_index: number
+          doc_key: string
+          document_id: string | null
+          document_url: string | null
+          id: string
+          manual_review_required: boolean
+          parse_error: string | null
+          parser_result: Json | null
+          parser_status: string
+          processing_job_id: string
+          s3_key: string | null
+          updated_at: string
+        }
+        Insert: {
+          bankruptcy_id: string
+          created_at?: string
+          doc_index: number
+          doc_key: string
+          document_id?: string | null
+          document_url?: string | null
+          id?: string
+          manual_review_required?: boolean
+          parse_error?: string | null
+          parser_result?: Json | null
+          parser_status: string
+          processing_job_id: string
+          s3_key?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bankruptcy_id?: string
+          created_at?: string
+          doc_index?: number
+          doc_key?: string
+          document_id?: string | null
+          document_url?: string | null
+          id?: string
+          manual_review_required?: boolean
+          parse_error?: string | null
+          parser_result?: Json | null
+          parser_status?: string
+          processing_job_id?: string
+          s3_key?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_parse_results_bankruptcy_id_fkey"
+            columns: ["bankruptcy_id"]
+            isOneToOne: false
+            referencedRelation: "bankruptcies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "document_parse_results_processing_job_id_fkey"
+            columns: ["processing_job_id"]
+            isOneToOne: false
+            referencedRelation: "processing_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       form201_extractions: {
         Row: {
           bankruptcy_id: string | null

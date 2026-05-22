@@ -1,0 +1,42 @@
+name: Deploy document-parser (EC2)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # upload-artifact in ci-security
+  security-events: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-parser.yml
+
+  security:
+    uses: ./.github/workflows/ci-security.yml
+    with:
+      scope: diff
+
+  deploy-ec2:
+    needs: [ci, security]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-parser-ec2-production-${{ github.repository }}
+      cancel-in-progress: false
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          if [ -z "${EC2_HOST}" ] || [ -z "${EC2_SSH_KEY}" ]; then
+            echo "EC2_HOST and EC2_SSH_KEY must be set for EC2 deploy"
+            exit 1
+          fi
+          install -m 600 /dev/stdin ec2_key.pem <<< "${EC2_SSH_KEY}"
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem "ubuntu@${EC2_HOST}" \
+            'cd /opt/au-group/services/document-parser && git pull && ./scripts/deploy.sh'
+          rm -f ec2_key.pem

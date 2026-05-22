@@ -1,0 +1,37 @@
+name: CI — document-parser
+
+on:
+  workflow_call:
+
+jobs:
+  lint-test-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/document-parser
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup parser CI environment
+        uses: ./.github/actions/setup-parser-ci
+
+      - name: Ruff lint
+        run: ruff check app tests
+
+      - name: Run tests with coverage
+        env:
+          API_KEY: test-api-key-for-ci-suite-only-do-not-use-in-production
+          APP_ENV: development
+          RATE_LIMIT_ENABLED: "false"
+          JWT_SECRET: test-jwt-secret-at-least-32-characters-long
+          AUTH_USERNAME: test-user
+          AUTH_PASSWORD: test-password
+        run: |
+          pytest tests/ -q --ignore=tests/integration \
+            --cov=app --cov-report=term-missing --cov-fail-under=60
+
+      - name: Dependency audit
+        run: |
+          pip-audit -r requirements.txt \
+            --ignore-vuln PYSEC-2025-183 \
+            --ignore-vuln CVE-2025-45768

@@ -7,10 +7,9 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.core.config import get_settings
 from app.main import app
+from fastapi.testclient import TestClient
 from tests.helpers.integration_env import integration_env_ready, load_integration_env
 from tests.helpers.integration_setup import IntegrationProvisioner, new_run_id
 from tests.helpers.pdf_fixtures import build_integration_pdfs

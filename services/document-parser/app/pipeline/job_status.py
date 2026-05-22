@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 JOB_STATUS_PROCESSING = "processing"
@@ -7,7 +7,7 @@ JOB_STATUS_FAILED = "failed"
 
 
 def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def job_status_from_raw(raw: dict[str, Any] | None) -> str | None:
