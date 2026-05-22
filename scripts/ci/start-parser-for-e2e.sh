@@ -18,13 +18,14 @@ fi
 source .venv/bin/activate
 pip install -q -r requirements-dev.txt
 
-export API_KEY="${API_KEY:-test-api-key-for-ci-suite-only-do-not-use-in-production}"
+# shellcheck source=scripts/ci/generate-parser-test-env.sh
+source "${ROOT}/scripts/ci/generate-parser-test-env.sh"
 export APP_ENV=development
 export RATE_LIMIT_ENABLED=false
 export EXPOSE_OPENAPI=true
-export JWT_SECRET="${JWT_SECRET:-test-jwt-secret-at-least-32-characters-long}"
-export AUTH_USERNAME="${AUTH_USERNAME:-test-user}"
-export AUTH_PASSWORD="${AUTH_PASSWORD:-test-password}"
+
+E2E_ENV_FILE="${ROOT}/e2e/.parser-e2e.env"
+printf 'API_KEY=%s\n' "${API_KEY}" >"${E2E_ENV_FILE}"
 
 if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
   echo "Parser already running (pid $(cat "${PID_FILE}"))"

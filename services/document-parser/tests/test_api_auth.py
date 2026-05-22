@@ -6,7 +6,13 @@ import jwt
 import pytest
 from app.core.config import get_settings
 from fastapi.testclient import TestClient
-from tests.conftest import sample_job_status_response, sample_review_queue_row
+from tests.conftest import (
+    TEST_AUTH_PASSWORD,
+    TEST_AUTH_USERNAME,
+    TEST_JWT_SECRET,
+    sample_job_status_response,
+    sample_review_queue_row,
+)
 
 
 def _protected_routes(bankruptcy_id: str, document_id: str) -> list[tuple[str, str, dict | None]]:
@@ -94,7 +100,7 @@ def test_valid_api_key_allows_job_status(
 def test_login_returns_access_token(client: TestClient) -> None:
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test-user", "password": "test-password"},
+        json={"username": TEST_AUTH_USERNAME, "password": TEST_AUTH_PASSWORD},
     )
     assert response.status_code == 200
     body = response.json()
@@ -106,7 +112,7 @@ def test_login_returns_access_token(client: TestClient) -> None:
 def test_login_rejects_invalid_password(client: TestClient) -> None:
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test-user", "password": "wrong-password"},
+        json={"username": TEST_AUTH_USERNAME, "password": "wrong-password"},
     )
     assert response.status_code == 401
     assert response.json()["detail"] == "Invalid username or password"
@@ -115,7 +121,7 @@ def test_login_rejects_invalid_password(client: TestClient) -> None:
 def test_login_does_not_require_api_key(client: TestClient) -> None:
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test-user", "password": "test-password"},
+        json={"username": TEST_AUTH_USERNAME, "password": TEST_AUTH_PASSWORD},
     )
     assert response.status_code == 200
 
@@ -146,7 +152,7 @@ def test_expired_bearer_token_rejected(client: TestClient) -> None:
     settings = get_settings()
     expired_token = jwt.encode(
         {
-            "sub": "test-user",
+            "sub": TEST_AUTH_USERNAME,
             "type": "access",
             "exp": 0,
             "iat": 0,
@@ -170,11 +176,8 @@ def test_login_unavailable_when_jwt_not_configured(
     get_settings.cache_clear()
     response = client.post(
         "/api/v1/auth/login",
-        json={"username": "test-user", "password": "test-password"},
+        json={"username": TEST_AUTH_USERNAME, "password": TEST_AUTH_PASSWORD},
     )
     assert response.status_code == 503
     get_settings.cache_clear()
-    monkeypatch.setenv(
-        "JWT_SECRET",
-        "test-jwt-secret-at-least-32-characters-long",
-    )
+    monkeypatch.setenv("JWT_SECRET", TEST_JWT_SECRET)

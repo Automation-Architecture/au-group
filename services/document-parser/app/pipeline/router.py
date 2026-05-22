@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.exceptions import (
     BackgroundJobBusyError,
     BankruptcyIdRequiredError,
+    BankruptcyNotFoundError,
     DocumentProcessingError,
 )
 from app.core.logging import log_event
@@ -62,6 +63,46 @@ class DocumentPipeline:
         self._s3 = S3Client()
         self._db = SupabaseClient()
         self._ocr = TesseractOcrEngine()
+
+    def _require_bankruptcy(self, bankruptcy_id: UUID | None) -> None:
+        if bankruptcy_id is None or not self._db._enabled:
+            return
+        if self._db.get_bankruptcy(bankruptcy_id) is None:
+            raise BankruptcyNotFoundError(bankruptcy_id)
+
+    def _backfill_creditor_merge(
+        self,
+        *,
+        bankruptcy_id: UUID | None,
+        response: ParseDocumentResponse,
+    ) -> None:
+        """Merge cached matrix creditors into creditors / bankruptcy_creditors when RPC was skipped."""
+        if (
+            not self._db._enabled
+            or bankruptcy_id is None
+            or not response.creditors
+            or response.manual_review_required
+            or response.validation is None
+        ):
+            return
+        try:
+            merged = self._db.merge_creditors(
+                bankruptcy_id,
+                response.creditors,
+                confidence_score=response.validation.confidence_score,
+            )
+            log_event(
+                logger,
+                "creditor_merge_backfill",
+                bankruptcy_id=str(bankruptcy_id),
+                merged_count=merged,
+            )
+        except Exception as exc:
+            logger.warning(
+                "creditor_merge_backfill_failed bankruptcy_id=%s: %s",
+                bankruptcy_id,
+                exc,
+            )
 
     def _download_http_to_temp(self, document_url: str) -> Path:
         parsed = urlparse(document_url)
@@ -171,6 +212,7 @@ class DocumentPipeline:
         document_url: str | None,
         bankruptcy_id: UUID | None = None,
     ) -> ParseTextResponse:
+        self._require_bankruptcy(bankruptcy_id)
         path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
         try:
             ocr_result = self._ocr.extract_from_pdf(str(path))
@@ -346,6 +388,7 @@ class DocumentPipeline:
         """Returns (response, schedule_background, temp_path, content_hash, key, release_slot)."""
         if self._settings.require_bankruptcy_id and bankruptcy_id is None:
             raise BankruptcyIdRequiredError()
+        self._require_bankruptcy(bankruptcy_id)
 
         path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
         content_hash: str | None = None
@@ -357,6 +400,7 @@ class DocumentPipeline:
                 content_hash, force=force, bankruptcy_id=bankruptcy_id
             )
             if cached is not None:
+                self._backfill_creditor_merge(bankruptcy_id=bankruptcy_id, response=cached)
                 return cached, False, None, None, None, False
 
             if async_mode and self._settings.async_parse_enabled:
@@ -430,6 +474,7 @@ class DocumentPipeline:
         path: Path | None = temp_path
         key = s3_key or document_url or ""
         try:
+            self._require_bankruptcy(bankruptcy_id)
             if path is None or not path.is_file():
                 path, key = self._resolve_pdf(s3_key=s3_key, document_url=document_url)
             hash_value = content_hash or S3Client.sha256_file(path)

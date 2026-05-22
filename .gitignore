@@ -6,6 +6,7 @@ node_modules
 .env
 .env*
 .env.local
+e2e/.parser-e2e.env
 MCP_STATUS.txt
 FINAL_SETUP_STATUS.txt
 WORKFLOWS_VIEWED.md

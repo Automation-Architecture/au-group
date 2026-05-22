@@ -66,7 +66,36 @@
 - `continue-on-error: true` on SARIF upload avoids failing CI when GitHub Advanced Security is not licensed; vbsec JSON + scan step still gate merges.
 - Deploy concurrency uses `cancel-in-progress: false` so in-flight production deploys are not killed by a newer push.
 
+## Gitleaks CI credentials (2026-05-22)
+
+- **Symptom:** GitHub Advanced Security flagged `generic-api-key` in `.github/workflows/ci-parser.yml` for hardcoded `API_KEY` / `JWT_SECRET` test literals.
+- **Fix:** `scripts/ci/generate-parser-test-env.sh` emits ephemeral `openssl rand -hex 32` values; CI workflows source it; pytest uses `secrets.token_hex` in `conftest.py`; E2E writes `e2e/.parser-e2e.env` (gitignored) for Playwright.
+
 ## OpenAPI route descriptions (2026-05-22)
 
 - Short usage-focused `summary` and `description` on each route (what the route is for, not status codes or env vars).
 - Tag blurbs in `openapi_tags` on `app/main.py`. Visible at `/docs` when `EXPOSE_OPENAPI=true`.
+
+## Parse document — unknown bankruptcy_id (2026-05-22)
+
+- **Symptom:** Swagger default UUID (`3fa85f64-...`) caused FK 409 on `documents` insert, surfaced as **503**.
+- **Fix:** `DocumentPipeline._require_bankruptcy()` checks `get_bankruptcy` before PDF work; `BankruptcyNotFoundError` → **422** with clear detail. Skipped when Supabase persistence is disabled (`_enabled` false).
+
+## Parse 200 but empty `creditors` / `bankruptcy_creditors` (2026-05-22)
+
+- **Symptom:** `POST /parse/document` returns 200; user sees no rows in “main” creditor tables. `documents` + `creditor_matrix_*` may still have rows.
+- **Cause:** `au_group_merge_creditor_matrix` RPC fails on remote DB with `42P10` (missing `idx_creditors_normalized_name_address`). First parse can leave matrix rows; merge never runs; repeat requests hit content-hash cache and skip merge.
+- **Fix:** Migration `20260522100000_ensure_creditors_merge_unique_index.sql`; `_backfill_creditor_merge` on cache hit; RPC errors raise `SupabaseUnavailableError`.
+- **Ops:** Apply migration to hosted Supabase (`supabase db push` or SQL editor), then re-POST with `"force": true` or call the same parse again (backfill runs on cache).
+
+## Supabase CLI migration history drift (2026-05-22)
+
+- **Symptom:** `supabase db push` → “Remote migration versions not found in local migrations directory” (remote IDs like `20260515073354` vs local `20260215180000_*`).
+- **Cause:** Cloud history was applied via dashboard/MCP with different version stamps than repo filenames; schema already matches.
+- **Fix:** Reset `supabase_migrations.schema_migrations` on cloud to the 19 local migration versions (bookkeeping only, no SQL re-run). Helper: `scripts/supabase/repair-migration-history.sh` for future drift via CLI.
+
+## CI dummy PDF smoke tests (2026-05-22)
+
+- **Gap:** Unit tests mocked `DocumentPipeline`; integration tests need live `.env` and are skipped in `ci-parser`.
+- **Added:** `tests/test_api_dummy_pdf_smoke.py` — real PyMuPDF dummy PDFs (`pdf_fixtures.py`), fake S3 download + in-memory Supabase (`fake_supabase.py`). Covers health, auth, parse/*, extract/*, review-queue, jobs.
+- **CI:** `ci-parser.yml` runs `pytest -m smoke` after main suite.

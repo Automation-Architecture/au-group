@@ -198,6 +198,40 @@ class TestParseDocument:
         )
         assert response.status_code == 422
 
+    def test_unknown_bankruptcy_id_returns_422(
+        self,
+        client: TestClient,
+        auth_headers: dict[str, str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from app.persistence.supabase import SupabaseClient
+
+        unknown_id = uuid4()
+
+        def _missing_bankruptcy(self, bankruptcy_id: object) -> None:
+            return None
+
+        _real_init = SupabaseClient.__init__
+
+        def _init_with_persistence(self) -> None:
+            _real_init(self)
+            self._enabled = True
+
+        monkeypatch.setattr(SupabaseClient, "__init__", _init_with_persistence)
+        monkeypatch.setattr(SupabaseClient, "get_bankruptcy", _missing_bankruptcy)
+
+        response = client.post(
+            "/api/v1/parse/document",
+            json={
+                "bankruptcy_id": str(unknown_id),
+                "s3_key": "raw-documents/24-10001/form201.pdf",
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+        assert str(unknown_id) in response.json()["detail"]
+        assert "not found" in response.json()["detail"].lower()
+
     def test_value_error_returns_400(
         self, client: TestClient, auth_headers: dict[str, str], patch_pipeline
     ) -> None:

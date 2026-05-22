@@ -441,7 +441,7 @@ class SupabaseClient:
         with httpx.Client(timeout=60.0) as client:
             response = client.post(url, headers=self._headers, json=payload)
             if response.status_code >= 400:
-                raise RuntimeError(
+                raise SupabaseUnavailableError(
                     f"RPC {name} failed: {response.status_code} {response.text}"
                 )
             if not response.content:
