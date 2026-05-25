@@ -110,6 +110,30 @@
 - **Load Poll Candidates fix (2026-05-24):** Empty `[]` was RLS — HTTP credential used publishable key without `Authorization: Bearer` service_role. Fixed via `scripts/n8n/fix-sys01b-load-poll-candidates.mjs` (full URL + both headers; Config supabase reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`).
 - **SYS-00 no-Code (2026-05-24):** Replaced `Normalize Input` + `Fetch PACER Docket` Code nodes with Set/IF/HTTP Request (pagination)/Aggregate on cloud `hgXbSiTY7o7q5yPW`. Artifact `workflows/pulled/au-group-sys-00-get-docket-no-code.json`; push `scripts/n8n/push-sys00-get-docket-no-code.mjs`; spec `docs/workflows/sys-00-get-docket.md`.
 
+## SYS-04 full redesign JSON (2026-05-25)
+
+- **Artifact:** `docs/workflows/au-group-sys-04-salesforce-push-redesign.json` (53 nodes, **0 Code nodes**)
+- **Generate:** `node scripts/n8n/transform-sys04-no-code.mjs`
+- **Push:** `node scripts/n8n/push-sys04-redesign.mjs`
+- **Spec:** `docs/workflows/sys-04-salesforce-push.md`
+- **Migrations:** `20260525160000_au_group_upsert_salesforce_account_rpc.sql`, `20260525170000_au_group_list_company_creditors_rpc.sql`
+- **Node types:** Set, IF, HTTP Request, Supabase, Merge, Execute Workflow — Salesforce via **6 HTTP nodes** + `salesforceOAuth2Api` credential
+- **Post-push:** attach OAuth2 on all `SF *` HTTP nodes; env `SUPABASE_*`, `SF_INSTANCE_URL`, `SYS04_DRY_RUN`
+
+## SYS-04 Upsert RLS 42501 fix (2026-05-25)
+
+- **Symptom:** `Upsert Salesforce Account` HTTP POST → `42501` RLS on `salesforce_accounts`.
+- **Cause:** `httpHeaderAuth` credential `[ AU Group ] - supabase API Key - use for testing` sends **publishable/anon** JWT; table has RLS enabled (no public write policies).
+- **Fix:** `scripts/n8n/fix-sys04-upsert-service-role.mjs --push` — Upsert uses `apikey` + `Authorization: Bearer` with `$env.SUPABASE_SERVICE_ROLE_KEY`; URL from `$env.SUPABASE_URL`. Same for `Acquire Processing Job` (uses `$json.service_role` from `Config supabase`). Config node assignments now read env vars, not hardcoded keys.
+- **Required n8n env:** `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (already used by `Update Case Status`).
+
+## SYS-04 Salesforce Push — no-Code chain (2026-05-25)
+
+- **Scope:** Replace Code nodes `Account Match Or Create` → `Territory Owner` → `Log Bankruptcy Event` → `Check Gates` on workflow `YWmFi1GkJqJMB8bJ`.
+- **Approach:** **Set** nodes (v3.4) with expression assignments; creditor context from `$('Loop Creditors').item.json` (fixes prior bug where `$input` after `Get Zoom Contacts` was only a contact row).
+- **Artifact:** `workflows/pulled/au-group-sys-04-salesforce-push-no-code.json`; deploy `node scripts/n8n/patch-sys04-no-code.mjs --push`.
+- **Still Code in SYS-04:** handoff/expand/aggregate/flag nodes — out of scope for this pass.
+
 ## SYS-03 Creditor Enrichment redesign (2026-05-23)
 
 - **Scope:** PRD FR-4 (AU_GROUP-4) on workflow `j26cimQ4S7kN67IP`.
@@ -119,11 +143,40 @@
 - **Not in this pass:** ZoomInfo Redis cache (NFR-8.2), YAML/DB-configurable tier rules, 429 batching, production credential validation on contact search endpoint shape.
 - **Aggregate fix (2026-05-23):** `$('Skip Individual').all()` throws when that branch never ran (all companies). **Final fix:** loop-end nodes push to `$getWorkflowStaticData('global').enrichResults`; Aggregate reads static data only (no cross-node `.all()`). Reset array in `Attach Job Context`. Prune duplicate canvas copies (`*1` node names). Fix wrong refs like `Merge Bankruptcy Context1`.
 
+## SYS-04 Salesforce — no `$env` secrets (2026-05-23)
+
+- **Security:** Removed `$env.SALESFORCE_ACCESS_TOKEN` / `$env.SALESFORCE_INSTANCE_URL` from `Account Match Or Create` Set expressions. Salesforce auth must use **n8n credentials** (or AWS Secrets via a dedicated node), never workflow env vars that leak in execution logs.
+- **Dry run:** Only `dry_run` on the loop item (from handoff / Expand). When true → `DRY_{creditor_id}` stub + `sf_action: dry_run`. When false and no existing account → `salesforce_account_id: null`, `sf_action: pending_salesforce` until KD-53 wires the SF node.
+- **Deployed:** `scripts/n8n/patch-sys04-no-code.mjs --push` on `YWmFi1GkJqJMB8bJ`.
+- **MATCH node (2026-05-23):** Zoom fields use `$input` (not `$('Get Zoom Contacts')`); removed `?.` optional chaining; `Get Zoom Contacts` has `alwaysOutputData` so MATCH runs with zero contacts; `dry_run` typed boolean.
+
+## SYS-04 handoff + credentials (2026-05-23)
+
+- **No `$env`:** Supabase RPC/REST uses hardcoded project REST base + **AU Group Supabase Service Role** `httpHeaderAuth` credential (not workflow env). Salesforce HTTP uses **salesforceOAuth2Api** + `$credentials.salesforceOAuth2Api.instanceUrl` (no `SF_INSTANCE_URL` env).
+- **SYS-03 handoff shape:** `enrichment_summary`, `schedule_f_queue_id`, `parent_processing_job_id`, `case_number`, `debtor_name`, `pipeline_execution_id` (upstream trace only). Normalize unwraps `[{...}]` arrays. `dry_run` only when `dry_run === true` on input.
+- **Pipeline id:** Loop/complete use `$('Pipeline Started').first().json.id` (new SYS-04 row), not upstream `pipeline_execution_id` from handoff.
+- **Artifact:** `docs/workflows/au-group-sys-04-salesforce-push-redesign.json`, `scripts/n8n/patch-sys04-handoff-no-env.mjs`. `transform-sys04-no-code.mjs` blocked unless `--force-legacy-regen` (old template still had `$env`).
+- **pinData:** Sample handoff for case `26-15850` / `Anissa Hayes-Bryant` on `SYS-04 Trigger`.
+
+## SYS-04 PGRST202 `au_group_count_company_creditors` (2026-05-23)
+
+- **Cause:** RPC not deployed on `umivttszdnsrosbqryia`; first apply failed because migration used `bc.claim_amount` but `claim_amount` lives on `creditors` (`c.claim_amount`).
+- **Fix:** Corrected `20260525170000_au_group_list_company_creditors_rpc.sql`; applied to remote via Supabase MCP. Both `au_group_count_company_creditors` and `au_group_list_company_creditors` now in schema.
+- **n8n:** Cloud node still references `Merge Bankruptcy Context1` — rename to `Merge Bankruptcy Context` or re-import redesign JSON.
+
+## SYS-00 Get Docket redesign + cloud push (2026-05-25)
+
+- **Target:** `5WG5YykOvLYxCOFN` — https://automationarchitecture.app.n8n.cloud/workflow/5WG5YykOvLYxCOFN
+- **Change:** Removed embedded SYS-01B nightly poll (22 → 7 nodes). Sub-flow only: trigger → normalize → fetch PACER.
+- **Artifact:** `workflows/pulled/au-group-sys-00-get-docket.json`, `scripts/n8n/push-sys00-get-docket.mjs`, `docs/workflows/sys-00-get-docket.md`, `workflows/lib/pacer-fetch-docket.js`
+- **Callers updated:** SYS-01B `3qtDRBJtKrFUXqhH`, SYS-06 `gGRp6dF85A015TMH` → Execute `5WG5YykOvLYxCOFN`. Workflow **activated** on cloud (required for sub-workflow references).
+- **Ops:** Re-attach **HTTP Basic Auth** on **Fetch PACER Docket** in n8n UI if missing after push.
+- **Legacy:** `hgXbSiTY7o7q5yPW` old duplicate — archive in n8n UI when convenient.
+
 ## SYS-01B PACER Nightly Poll workflow JSON (2026-05-24)
 
 - **Deliverables:** `workflows/pulled/au-group-sys-01b-pacer-nightly-poll.json` (orchestrator), cleaned `au-group-sys-00-get-docket.json` (sub-flow only), `docs/workflows/sys-01b-pacer-nightly-poll.md`.
-- **Design:** 02:00 ET cron → cap cases → `pacer_poll` acquire → Execute `hgXbSiTY7o7q5yPW` → `au_group_upsert_docket_entries` → `last_docket_check_at` → job complete/fail. No SYS-02/03/04.
-- **Cloud:** Legacy combined workflow `5WG5YykOvLYxCOFN` still named “SYS-00 Get Docket”; rename on import to SYS-01B.
+- **Design:** 02:00 ET cron → cap cases → `pacer_poll` acquire → Execute `5WG5YykOvLYxCOFN` (SYS-00) → `au_group_upsert_docket_entries` → `last_docket_check_at` → job complete/fail. No SYS-02/03/04.
 - **Migration:** `20260524120000_au_group_upsert_docket_entries_rpc.sql` — `au_group_upsert_docket_entries(p_bankruptcy_id, p_entries)` applied to Supabase `umivttszdnsrosbqryia` (2026-05-25). PGRST202 before apply = RPC missing on remote, not n8n body shape.
 
 ## Architect audit follow-ups (2026-05-22)
