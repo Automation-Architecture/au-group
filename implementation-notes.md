@@ -100,6 +100,32 @@
 - **Added:** `tests/test_api_dummy_pdf_smoke.py` — real PyMuPDF dummy PDFs (`pdf_fixtures.py`), fake S3 download + in-memory Supabase (`fake_supabase.py`). Covers health, auth, parse/*, extract/*, review-queue, jobs.
 - **CI:** `ci-parser.yml` runs `pytest -m smoke` after main suite.
 
+## SYS-01B no-Code workflow JSON (2026-05-24)
+
+- **Artifact:** `workflows/pulled/au-group-sys-01b-pacer-nightly-poll-no-code.json` — same lanes as Code version but uses Schedule/HTTP/Supabase/Set/IF/Merge/SplitInBatches/Execute Workflow/Slack/Wait only.
+- **RPC via HTTP Request** (not Code): `au_group_acquire_processing_job`, `au_group_upsert_docket_entries`; requires `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` in n8n env.
+- **SYS-00** sub-flow `hgXbSiTY7o7q5yPW` may still contain Code for PACER pagination — refactor SYS-00 separately for full no-Code stack.
+- **Spec:** `docs/workflows/sys-01b-pacer-nightly-poll.md`
+- **Canvas layout (2026-05-24):** `scripts/n8n/beautify-sys01b-layout.mjs` pushed SYS-06-style lane stickies + left→right flow to cloud `3qtDRBJtKrFUXqhH`; renamed **AU Group - SYS-01B - PACER Nightly Poll**.
+- **Load Poll Candidates fix (2026-05-24):** Empty `[]` was RLS — HTTP credential used publishable key without `Authorization: Bearer` service_role. Fixed via `scripts/n8n/fix-sys01b-load-poll-candidates.mjs` (full URL + both headers; Config supabase reads `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`).
+- **SYS-00 no-Code (2026-05-24):** Replaced `Normalize Input` + `Fetch PACER Docket` Code nodes with Set/IF/HTTP Request (pagination)/Aggregate on cloud `hgXbSiTY7o7q5yPW`. Artifact `workflows/pulled/au-group-sys-00-get-docket-no-code.json`; push `scripts/n8n/push-sys00-get-docket-no-code.mjs`; spec `docs/workflows/sys-00-get-docket.md`.
+
+## SYS-03 Creditor Enrichment redesign (2026-05-23)
+
+- **Scope:** PRD FR-4 (AU_GROUP-4) on workflow `j26cimQ4S7kN67IP`.
+- **Deployed:** `scripts/n8n/patch-sys03-workflow.mjs --push` — single Code node `ZoomInfo Enrich Company` (company search → tier from firmographics → contact search with tier 1→2→3 fallback).
+- **Wiring fixes:** `Loop Creditors` done → `Aggregate Enrichment`; all per-creditor branches loop back; `Prepare SYS-04 Input` → `Execute SYS-04`; removed broken `Edit Fields` nodes; Complete/Pipeline nodes use `$json.*` not `Skip No Creditors` refs.
+- **Summary metrics:** per-creditor dedupe in aggregate; added `zoominfo_company_matched`, `no_contact_found`, `errors`.
+- **Not in this pass:** ZoomInfo Redis cache (NFR-8.2), YAML/DB-configurable tier rules, 429 batching, production credential validation on contact search endpoint shape.
+- **Aggregate fix (2026-05-23):** `$('Skip Individual').all()` throws when that branch never ran (all companies). **Final fix:** loop-end nodes push to `$getWorkflowStaticData('global').enrichResults`; Aggregate reads static data only (no cross-node `.all()`). Reset array in `Attach Job Context`. Prune duplicate canvas copies (`*1` node names). Fix wrong refs like `Merge Bankruptcy Context1`.
+
+## SYS-01B PACER Nightly Poll workflow JSON (2026-05-24)
+
+- **Deliverables:** `workflows/pulled/au-group-sys-01b-pacer-nightly-poll.json` (orchestrator), cleaned `au-group-sys-00-get-docket.json` (sub-flow only), `docs/workflows/sys-01b-pacer-nightly-poll.md`.
+- **Design:** 02:00 ET cron → cap cases → `pacer_poll` acquire → Execute `hgXbSiTY7o7q5yPW` → `au_group_upsert_docket_entries` → `last_docket_check_at` → job complete/fail. No SYS-02/03/04.
+- **Cloud:** Legacy combined workflow `5WG5YykOvLYxCOFN` still named “SYS-00 Get Docket”; rename on import to SYS-01B.
+- **Migration:** `20260524120000_au_group_upsert_docket_entries_rpc.sql` — `au_group_upsert_docket_entries(p_bankruptcy_id, p_entries)` applied to Supabase `umivttszdnsrosbqryia` (2026-05-25). PGRST202 before apply = RPC missing on remote, not n8n body shape.
+
 ## Architect audit follow-ups (2026-05-22)
 
 - **`SUPABASE_HTTP_TIMEOUT_SEC`** in `Settings` (default 60s); `SupabaseClient` uses it for REST/RPC/count.
