@@ -22,3 +22,15 @@ def test_validate_creditors_ok() -> None:
     ]
     result = validate_creditor_matrix(rows)
     assert result.confidence_score == 1.0
+    assert result.level == "high"
+
+
+def test_validate_creditors_junk_rows_lower_confidence() -> None:
+    rows = [
+        CreditorRow(creditor_name="Acme Inc", entity_type="company"),
+        CreditorRow(creditor_name="contact", entity_type="company"),
+    ]
+    result = validate_creditor_matrix(rows)
+    assert result.confidence_score == 0.5
+    assert result.manual_review_required is True
+    assert "creditor_name" in result.missing_fields

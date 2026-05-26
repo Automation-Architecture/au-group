@@ -2,15 +2,10 @@ import re
 
 from app.extractors.structured_pdf import StructuredPdfResult
 from app.models.schemas import CreditorRow
+from app.validation.creditor_name_quality import HEADER_PATTERN, is_junk_creditor_name
 
 ENTITY_SUFFIXES = re.compile(
     r"\b(LLC|L\.L\.C\.|Inc\.?|Corp\.?|Corporation|Ltd\.?|LP|LLP|Co\.)\b",
-    re.I,
-)
-
-HEADER_PATTERN = re.compile(
-    r"^(list of creditors|creditor matrix|creditors holding|official form 204|"
-    r"20 largest unsecured|name of creditor|creditor\s*name)\b",
     re.I,
 )
 
@@ -40,6 +35,40 @@ def _parse_claim_amount(value: str | None) -> float | None:
         return None
 
 
+def _name_and_address_from_table_row(row: list) -> tuple[str | None, str | None, str | None]:
+    """Pick name/address/amount cells; skip index columns and Form 204 labels."""
+    cells = [(cell or "").strip() for cell in row]
+    if not any(cells):
+        return None, None, None
+
+    name_idx: int | None = None
+    for i, cell in enumerate(cells):
+        if cell and not is_junk_creditor_name(cell):
+            name_idx = i
+            break
+    if name_idx is None:
+        return None, None, None
+
+    name = cells[name_idx]
+    address: str | None = None
+    for j in range(name_idx + 1, len(cells)):
+        candidate = cells[j]
+        if not candidate or is_junk_creditor_name(candidate):
+            continue
+        if re.search(r"[\d$]", candidate) and _parse_claim_amount(candidate) is not None:
+            continue
+        address = candidate
+        break
+
+    amount_raw: str | None = None
+    for cell in reversed(cells):
+        if cell and re.search(r"\d", cell):
+            amount_raw = cell
+            break
+
+    return name, address, amount_raw
+
+
 def _rows_from_tables(structured: StructuredPdfResult) -> list[CreditorRow]:
     creditors: list[CreditorRow] = []
     for table in structured.tables:
@@ -51,15 +80,13 @@ def _rows_from_tables(structured: StructuredPdfResult) -> list[CreditorRow]:
         for row in table[1:]:
             if not row or not any(row):
                 continue
-            name = (row[0] or "").strip()
-            if not name or len(name) < 2:
+            name, address, amount_raw = _name_and_address_from_table_row(row)
+            if not name or is_junk_creditor_name(name):
                 continue
-            address = (row[1] or "").strip() if len(row) > 1 else None
-            amount_raw = row[2] if len(row) > 2 else None
             creditors.append(
                 CreditorRow(
                     creditor_name=name,
-                    address=address or None,
+                    address=address,
                     claim_amount=_parse_claim_amount(amount_raw or ""),
                     entity_type=_infer_entity_type(name),
                 )
@@ -82,6 +109,8 @@ def _rows_from_text(text: str) -> list[CreditorRow]:
             continue
         if numbered:
             first = re.sub(r"^\d+\.?\s+", "", first)
+        if is_junk_creditor_name(first):
+            continue
         address = ", ".join(lines[1:3]) if len(lines) > 1 else None
         amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block)
         creditors.append(
@@ -102,7 +131,7 @@ def _block_to_creditor_row(lines: list[str]) -> CreditorRow | None:
     if len(first) < 3 or HEADER_PATTERN.search(first):
         return None
     name = re.sub(r"^\d+\.?\s+", "", first)
-    if not name or len(name) < 2:
+    if not name or is_junk_creditor_name(name):
         return None
     address = ", ".join(lines[1:3]) if len(lines) > 1 else None
     block_text = "\n".join(lines)
@@ -153,6 +182,8 @@ def extract_creditor_matrix(
     seen: set[str] = set()
     unique: list[CreditorRow] = []
     for row in creditors:
+        if is_junk_creditor_name(row.creditor_name):
+            continue
         key = row.creditor_name.lower()
         if key in seen:
             continue

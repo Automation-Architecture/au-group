@@ -6,14 +6,14 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 | ID | Requirement summary | Automated | Workflow / job | Notes |
 |----|---------------------|-----------|----------------|-------|
-| **AC-1.1** | Daily PACER filings by 8 AM | scheduled | `smoke-e2e.yml` (cron, strict) | Full PACER SLA needs production schedule + CloudWatch |
+| **AC-1.1** | Daily PACER filings by 8 AM | partial | `au_group_target_states`, SYS-01B `au_group_list_pacer_poll_candidates`, SYS-01 gate | Admin-configurable states in Supabase; push workflow JSON to n8n cloud |
 | **AC-1.2** | Form 201 debtor metadata 95%+ | no | `docs/ci/manual/pacer-form201.md` | Parser unit tests + manual 95% sampling |
 | **AC-1.3** | Top 20 in Salesforce within 24h | scheduled | `smoke-e2e.yml` | End-to-end via n8n SYS-01→02→03 |
 | **AC-1.4** | Company vs individual 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
 | **AC-2.1** | Monitoring queue for new Ch.11 | no | — | SYS-06 inactive until FR-2 ready |
 | **AC-2.2** | Schedule F within 7 days | scheduled | `smoke-e2e.yml` | SYS-06/07 not in deploy manifest |
 | **AC-2.3** | Alert context complete | no | — | Product/n8n alert nodes |
-| **AC-2.4** | PACER favorites approval | no | — | Keith workflow; SYS-07 |
+| **AC-2.4** | PACER favorites approval | partial | `docs/workflows/sys-07-pacer-favorites.md`, SYS-06/07 n8n | Deploy `deploy-mvp.mjs --wave=1`; manual Keith test |
 | **AC-3.1** | Structured Schedule E/F 95%+ | yes | `ci-parser` → pytest | `tests/test_schedules*.py`, fixtures |
 | **AC-3.2** | Simple list extraction | yes | `ci-parser` → pytest | `tests/test_creditor_matrix.py` |
 | **AC-3.3** | OCR + low-confidence flag | yes | `ci-parser` → pytest | `tests/test_pipeline_*.py` |
@@ -26,12 +26,12 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-4.5** | Canonical names | no | — | n8n SYS-03 |
 | **AC-5.1** | Salesforce match 95%+ | no | — | AU_GROUP-5 |
 | **AC-5.2** | Bankruptcy event fields | no | — | n8n SYS-03 + SF |
-| **AC-5.3** | Territory 100% | no | — | n8n SYS-03 |
+| **AC-5.3** | Territory 100% | partial | `au_group_territory_assignments`, `au_group_parse_creditor_state`, SYS-04 **Resolve Territory Rep** | Replace placeholder SF User IDs; push SYS-04 JSON; live OwnerId needs KD-53 |
 | **AC-5.4** | DNC suppression | no | — | n8n SYS-03 |
 | **AC-5.5** | Active engagement gate | no | — | n8n SYS-03 |
 | **AC-5.6** | T+1 outreach | scheduled | `smoke-e2e.yml` | Timing verified in prod ops |
-| **AC-6.2** | Exposure on SF account | no | — | Phase 3 |
-| **AC-6.3** | Repeat-exposure threshold | no | — | Phase 3 |
+| **AC-6.2** | Exposure on SF account | partial | `creditor_exposure_summary`, SYS-08 | Keith Excel column map; SF field sync |
+| **AC-6.3** | Repeat-exposure threshold | partial | `au_group_check_repeat_exposure` RPC | Wire RPC in SYS-05 when creditor_id on handoff |
 | **AC-6.4** | Low-value geography flag | no | — | Phase 2 |
 | **NFR-1.1** | Processing latency / 8 AM | scheduled | `smoke-e2e.yml` cron (strict) | Not PR-blocking |
 | **NFR-1.2** | Throughput (50+ filings/day) | no | — | Load test / prod metrics |

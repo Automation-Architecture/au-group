@@ -1,5 +1,6 @@
 from app.core.config import get_settings
 from app.models.schemas import CreditorRow, Form201Data, ValidationResult
+from app.validation.creditor_name_quality import is_junk_creditor_name
 
 FORM201_REQUIRED_FIELDS = (
     "debtor_name",
@@ -13,6 +14,15 @@ FORM201_REQUIRED_FIELDS = (
 )
 
 CREDITOR_REQUIRED_FIELDS = ("creditor_name",)
+
+
+def _confidence_level(score: float) -> str:
+    settings = get_settings()
+    if score >= settings.confidence_level_high:
+        return "high"
+    if score >= settings.confidence_level_medium:
+        return "medium"
+    return "low"
 
 
 def _missing_form201_fields(form201: Form201Data) -> list[str]:
@@ -44,7 +54,7 @@ def validate_form201(form201: Form201Data, *, ocr_used: bool = False) -> Validat
     manual_review = (
         confidence < settings.confidence_review_threshold
         or "debtor_name" in missing
-        or (ocr_used and confidence < 0.9)
+        or (ocr_used and confidence < settings.ocr_confidence_review_threshold)
     )
 
     return ValidationResult(
@@ -63,21 +73,28 @@ def validate_creditor_matrix(creditors: list[CreditorRow]) -> ValidationResult:
             missing_fields=["creditors"],
             level="low",
         )
-    valid_rows = sum(1 for row in creditors if row.creditor_name)
+    valid_rows = sum(
+        1
+        for row in creditors
+        if row.creditor_name and not is_junk_creditor_name(row.creditor_name)
+    )
     confidence = valid_rows / len(creditors)
     missing: list[str] = []
     if valid_rows < len(creditors):
         missing.append("creditor_name")
+    if valid_rows == 0:
+        missing.append("creditor_name_quality")
 
     settings = get_settings()
-    manual_review = confidence < settings.confidence_review_threshold
+    manual_review = (
+        confidence < settings.confidence_review_threshold or valid_rows == 0
+    )
 
-    level = "high" if confidence >= 0.95 else "medium" if confidence >= 0.8 else "low"
     return ValidationResult(
         confidence_score=round(confidence, 4),
         manual_review_required=manual_review,
         missing_fields=missing,
-        level=level,
+        level=_confidence_level(confidence),
     )
 
 

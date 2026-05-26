@@ -22,7 +22,9 @@ as $$
   where bc.bankruptcy_id = p_bankruptcy_id
     and c.is_company is true
     and length(trim(c.name)) >= 3
-    and c.name !~* '^(mailing address|email address|\d{1,2})$';
+    and lower(trim(c.name)) not in ('contact', 'contacts')
+    and c.name !~* '(mailing address|email address)'
+    and trim(c.name) !~ '^\d{1,2}$';
 $$;
 
 comment on function public.au_group_list_company_creditors is
@@ -43,7 +45,9 @@ as $$
   where bc.bankruptcy_id = p_bankruptcy_id
     and c.is_company is true
     and length(trim(c.name)) >= 3
-    and c.name !~* '^(mailing address|email address|\d{1,2})$';
+    and lower(trim(c.name)) not in ('contact', 'contacts')
+    and c.name !~* '(mailing address|email address)'
+    and trim(c.name) !~ '^\d{1,2}$';
 $$;
 
 grant execute on function public.au_group_count_company_creditors(uuid) to service_role;
