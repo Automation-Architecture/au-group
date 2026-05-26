@@ -3,16 +3,6 @@
     "supabase": {
       "type": "http",
       "url": "https://mcp.supabase.com/mcp?project_ref=umivttszdnsrosbqryia"
-    },
-    "n8n-mcp": {
-      "command": "bash",
-      "args": ["scripts/n8n/run-n8n-mcp.sh"],
-      "env": {
-        "MCP_MODE": "stdio",
-        "LOG_LEVEL": "error",
-        "DISABLE_CONSOLE_OUTPUT": "true",
-        "N8N_API_URL": "https://automationarchitecture.app.n8n.cloud"
-      }
     }
   }
 }
