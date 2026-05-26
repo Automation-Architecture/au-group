@@ -55,7 +55,7 @@ def is_junk_creditor_name(name: str) -> bool:
     lower = cleaned.lower()
     if lower in JUNK_EXACT_NAMES:
         return True
-    if _pure_digit_pattern(max_line_digits).match(cleaned):
+    if max_line_digits > 0 and _pure_digit_pattern(max_line_digits).match(cleaned):
         return True
     if HEADER_PATTERN.search(cleaned):
         return True

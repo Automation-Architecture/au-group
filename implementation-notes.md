@@ -285,7 +285,7 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **Symptom:** `creditors.name` contained Form 204 labels (`email address of creditor`), line numbers (`19`), `contact` — parser treated table column 0 / form fields as names.
 - **Fix:** `is_junk_creditor_name()` in `app/validation/creditor_name_quality.py` (shared by parser + validation); filter at extract + smarter table column pick; `validate_creditor_matrix` flags empty/invalid sets; migrations `20260527120000_*` + `20260527130000_*_sync` skip junk at `au_group_merge_creditor_matrix`.
 - **Review follow-up (2026-05-27):** Removed `holdings` from junk substring list (false-positive on "ABC Holdings LLC"); extracted shared module so validation does not import `fitz` via extractors.
-- **Review follow-up (2026-05-29):** `au_group_is_junk_creditor_name()` — single SQL function for merge + SYS-04 read RPCs; parser thresholds in `Settings` (`creditor_name_min_length`, `creditor_line_number_max_digits`, confidence level bands).
+- **Review follow-up (2026-05-29):** `au_group_is_junk_creditor_name()` — single SQL function for merge + SYS-04 read RPCs; thresholds from `au_group_runtime_config` keys `creditor_name_min_length` / `creditor_line_number_max_digits` (seeded in `291200`, `au_group_config_int` in `291600`); parser mirrors via Settings env vars (same key names, default 3).
 - **Deploy:** Push document-parser to Railway; `supabase db push` or apply migration on `umivttszdnsrosbqryia`; re-parse affected cases or run cleanup migration.
 
 ## SYS-09 daily sheet — audit archive (2026-05-29)
@@ -297,6 +297,8 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 **Enum fix:** `processing_jobs.status` on remote is `processing_job_status` (`queued`/`running`/`retrying`, not `pending`). `au_group_creditor_pipeline_status` uses `::text` casts.
 
 **Still manual:** Pull SYS-03 → wire `au_group_set_creditor_zoominfo_company_id`; run SYS-09 manually; re-parse junk-linked bankruptcies via SYS-02.
+
+**PR review (2026-05-29):** In `20260529160000_au_group_daily_report_runtime_config_and_fixes.sql` — `REVOKE EXECUTE … FROM public` after `GRANT` on new SECURITY DEFINER RPCs (`au_group_config_*`, `au_group_set_creditor_zoominfo_company_id`, `au_group_daily_creditor_report_rows`); restored orphan-inclusive `report_rows` (`left join lateral` per `291500`, not `inner join primary_bankruptcy`). Dropped duplicate-timestamp `20260529160000_au_group_daily_creditor_report_orphans.sql` (logic folded into `291600`). `au_group_creditor_pipeline_status` pending/failed checks now match jobs via `bankruptcy_creditors` **or** `creditors.source_bankruptcy_id` (same UNION as `report_rows`).
 
 ## Fix F0 — repo restore + cloud sync (2026-05-25)
 

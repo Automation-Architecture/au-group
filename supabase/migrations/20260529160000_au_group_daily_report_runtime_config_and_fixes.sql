@@ -1,5 +1,5 @@
--- SYS-09 audit fixes: runtime config (no static labels/URLs/thresholds), primary bankruptcy
--- state selection, pending-enrichment status, zoominfo company id RPC, orphan junk cleanup.
+-- SYS-09 audit fixes: runtime config (no static labels/URLs/thresholds), lateral bankruptcy
+-- state for address parsing, pending-enrichment status, zoominfo company id RPC, orphan junk cleanup.
 
 -- Config helpers (defaults when key missing)
 create or replace function public.au_group_config_text(p_key text, p_default text)
@@ -30,6 +30,8 @@ $$;
 
 grant execute on function public.au_group_config_text (text, text) to service_role;
 grant execute on function public.au_group_config_int (text, integer) to service_role;
+revoke execute on function public.au_group_config_text (text, text) from public;
+revoke execute on function public.au_group_config_int (text, integer) from public;
 
 insert into public.au_group_runtime_config (config_key, config_value, notes)
 values
@@ -149,10 +151,18 @@ begin
   if exists (
     select 1
     from public.processing_jobs pj
-    inner join public.bankruptcy_creditors bc on bc.bankruptcy_id = pj.bankruptcy_id
-    where bc.creditor_id = p_creditor_id
-      and pj.job_type::text = 'zoom_info_enrich'
+    where pj.job_type::text = 'zoom_info_enrich'
       and pj.status::text in ('queued', 'running', 'retrying')
+      and pj.bankruptcy_id in (
+        select bc.bankruptcy_id
+        from public.bankruptcy_creditors bc
+        where bc.creditor_id = p_creditor_id
+        union
+        select c.source_bankruptcy_id
+        from public.creditors c
+        where c.id = p_creditor_id
+          and c.source_bankruptcy_id is not null
+      )
   ) then
     return v_pending;
   end if;
@@ -160,10 +170,18 @@ begin
   if exists (
     select 1
     from public.processing_jobs pj
-    inner join public.bankruptcy_creditors bc on bc.bankruptcy_id = pj.bankruptcy_id
-    where bc.creditor_id = p_creditor_id
-      and pj.job_type::text = 'zoom_info_enrich'
+    where pj.job_type::text = 'zoom_info_enrich'
       and pj.status::text = 'failed'
+      and pj.bankruptcy_id in (
+        select bc.bankruptcy_id
+        from public.bankruptcy_creditors bc
+        where bc.creditor_id = p_creditor_id
+        union
+        select c.source_bankruptcy_id
+        from public.creditors c
+        where c.id = p_creditor_id
+          and c.source_bankruptcy_id is not null
+      )
   ) then
     return v_failed;
   end if;
@@ -202,6 +220,7 @@ comment on function public.au_group_set_creditor_zoominfo_company_id is
   'SYS-03: persist ZoomInfo company id on creditors for daily sheet URL column';
 
 grant execute on function public.au_group_set_creditor_zoominfo_company_id (uuid, text) to service_role;
+revoke execute on function public.au_group_set_creditor_zoominfo_company_id (uuid, text) from public;
 
 drop function if exists public.au_group_daily_creditor_report_rows(timestamptz);
 
@@ -229,21 +248,12 @@ as $$
     from public.creditors c
     where c.source_bankruptcy_id is not null
   ),
-  primary_bankruptcy as (
-    select distinct on (cb.creditor_id)
-      cb.creditor_id,
-      cb.bankruptcy_id,
-      b.state as bankruptcy_state
-    from creditor_bankruptcy cb
-    inner join public.bankruptcies b on b.id = cb.bankruptcy_id
-    order by cb.creditor_id, b.created_at desc nulls last, cb.bankruptcy_id
-  ),
   row_data as (
-    select
+    select distinct on (c.id)
       c.id as creditor_id,
       c.name::text as creditor,
       public.au_group_parse_creditor_city(c.address) as city,
-      public.au_group_parse_creditor_state(c.address, pb.bankruptcy_state) as state,
+      public.au_group_parse_creditor_state(c.address, b.state) as state,
       case
         when c.claim_amount is null then ''
         else to_char(c.claim_amount, 'FM$999,999,999,990.00')
@@ -251,7 +261,14 @@ as $$
       public.au_group_creditor_pipeline_status(c.id) as status,
       public.au_group_zoominfo_company_url(c.zoominfo_company_id) as zoominfo_url
     from public.creditors c
-    inner join primary_bankruptcy pb on pb.creditor_id = c.id
+    left join lateral (
+      select bk.state
+      from creditor_bankruptcy cb
+      inner join public.bankruptcies bk on bk.id = cb.bankruptcy_id
+      where cb.creditor_id = c.id
+      order by bk.created_at desc nulls last
+      limit 1
+    ) b on true
     cross join v_since vs
     where c.is_company is true
       and not public.au_group_is_junk_creditor_name(c.name)
@@ -265,6 +282,7 @@ as $$
             and b2.created_at >= vs.since
         )
       )
+    order by c.id, c.created_at desc
   )
   select jsonb_build_object(
     'since', (select since from v_since),
@@ -277,6 +295,7 @@ comment on function public.au_group_daily_creditor_report_rows is
   'SYS-09: daily sheet rows {since, row_count, rows}; config-driven status/URL/window';
 
 grant execute on function public.au_group_daily_creditor_report_rows (timestamptz) to service_role;
+revoke execute on function public.au_group_daily_creditor_report_rows (timestamptz) from public;
 
 -- Orphan junk cleanup (pre-fix parse artifacts; keeps linked/SF/enriched rows)
 delete from public.creditors c
