@@ -7,6 +7,8 @@ from app.core.config import get_settings
 from app.core.rate_limit import limiter
 from app.core.security import verify_auth
 from app.models.schemas import (
+    ApplyReviewRequest,
+    ApplyReviewResponse,
     JobStatusResponse,
     ResolveReviewRequest,
     ResolveReviewResponse,
@@ -72,6 +74,50 @@ async def get_job_status(
     if not status:
         raise HTTPException(status_code=404, detail="Document not found")
     return status
+
+
+@router.post(
+    "/review/{review_id}/apply",
+    response_model=ApplyReviewResponse,
+    summary="Apply corrected extraction",
+    description=(
+        "Apply human-corrected creditor matrix or Form 201 from manual review, then resolve."
+    ),
+)
+@limiter.limit(_review_rate_limit)
+async def apply_review(
+    request: Request,
+    review_id: UUID,
+    body: ApplyReviewRequest,
+    _auth=Depends(verify_auth),
+) -> ApplyReviewResponse:
+    pipeline = DocumentPipeline()
+    try:
+        result = pipeline.apply_manual_review(
+            review_id,
+            creditors=body.creditors,
+            form201=body.form201,
+            resolved_by=body.resolved_by,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Review item not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        logger.exception("apply_manual_review_failed review_id=%s", review_id)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+
+    bankruptcy_flag = result.get("bankruptcy_manual_review_required")
+    return ApplyReviewResponse(
+        review_id=UUID(str(result["review_id"])),
+        document_id=UUID(str(result["document_id"])) if result.get("document_id") else None,
+        bankruptcy_id=UUID(str(result["bankruptcy_id"])) if result.get("bankruptcy_id") else None,
+        status=str(result.get("status", "resolved")),
+        bankruptcy_manual_review_required=bool(bankruptcy_flag)
+        if bankruptcy_flag is not None
+        else None,
+        creditor_count=int(result.get("creditor_count", 0)),
+    )
 
 
 @router.post(

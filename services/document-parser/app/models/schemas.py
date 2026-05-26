@@ -3,7 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from app.core.s3_validation import validate_s3_key
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class FilingType(StrEnum):
@@ -177,12 +177,30 @@ class ResolveReviewRequest(BaseModel):
     resolved_by: str | None = None
 
 
+class ApplyReviewRequest(BaseModel):
+    creditors: list[CreditorRow] | None = None
+    form201: Form201Data | None = None
+    resolved_by: str | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_correction_payload(self) -> "ApplyReviewRequest":
+        has_creditors = bool(self.creditors)
+        has_form201 = self.form201 is not None
+        if has_creditors == has_form201:
+            raise ValueError("Exactly one of creditors or form201 is required")
+        return self
+
+
 class ResolveReviewResponse(BaseModel):
     review_id: UUID
     document_id: UUID | None
     bankruptcy_id: UUID | None
     status: str
     bankruptcy_manual_review_required: bool | None = None
+
+
+class ApplyReviewResponse(ResolveReviewResponse):
+    creditor_count: int = 0
 
 
 class LoginRequest(BaseModel):

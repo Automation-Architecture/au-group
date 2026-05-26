@@ -94,6 +94,12 @@
 - **Cause:** Cloud history was applied via dashboard/MCP with different version stamps than repo filenames; schema already matches.
 - **Fix:** Reset `supabase_migrations.schema_migrations` on cloud to the 19 local migration versions (bookkeeping only, no SQL re-run). Helper: `scripts/supabase/repair-migration-history.sh` for future drift via CLI.
 
+## Supabase migration history repair (2026-05-26)
+
+- **Symptom:** `db push` blocked on 35 MCP-only versions (`20260523035053` … `20260526050127`).
+- **Fix (MCP `execute_sql` on `umivttszdnsrosbqryia`):** Deleted ghost rows; inserted 24 repo version stamps (schema already applied via MCP). Renamed duplicate `20260529160000_*orphans*` → `20260529161000_*`.
+- **Result:** Remote `schema_migrations` = 43 rows, matches `supabase/migrations/*.sql`. `au_group_daily_creditor_report_rows` callable. CLI `db push` still prompts for DB password but should be a no-op.
+
 ## CI dummy PDF smoke tests (2026-05-22)
 
 - **Gap:** Unit tests mocked `DocumentPipeline`; integration tests need live `.env` and are skipped in `ci-parser`.
@@ -306,6 +312,15 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **Repo:** Moved `au-group-sys-04-salesforce-push-redesign.json` → `workflows/archive/` (not on cloud).
 - **SYS-07:** Hourly Poll now wires `List PACER Favorites Reports` (cloud); orphan `List Favorites Stub` connection entry remains — cleanup in F3.
 - **Next:** Fix F1 — `creditor_outreach_disposition` migration + SYS-04/05 gate/disposition wiring.
+
+## KD-38 — OCR manual review (Sheet + n8n + API) (2026-05-26)
+
+- **Parser API:** `validate_creditor_matrix(..., ocr_used, ocr_confidence)` gates low OCR confidence; `review_reason` prefixed with `low_priority` when page OCR below threshold. `POST /api/v1/review/{review_id}/apply` supports **creditor matrix** or **Form 201** (`ApplyReviewRequest` exactly one of `creditors` / `form201`).
+- **Tests:** `tests/test_validation.py`, `tests/test_api_review.py` (matrix + form201 apply).
+- **n8n:** `workflows/pulled/au-group-sys-02-parse-doc.json` — child parse + job poll. Parent SYS-02 **Manual Review?** stops before SYS-03.
+- **n8n KD-38 (audit fixes):** `au-group-sys-38-ocr-manual-review.json` — **no Code nodes** (Split Out, Merge, Filter, Set, HTTP, IF). Sync-out: parallel read Sheet + GET queue → merge by `review_id` → filter Pending/new → GET job → upsert. Sync-in: filter Approved/Rejected → apply/resolve branches → SYS-03. Manual Run = sync-out only.
+- **Sheet spec:** `docs/workflows/kd-38-manual-review-sheet.md` — columns `ocr_text_preview`, `corrected_form201_json`.
+- **Deploy (manual):** Railway parser deploy; import SYS-38 + parse-doc to n8n; env `MANUAL_REVIEW_SHEET_DOCUMENT_ID`, `PARSER_URL`, `DOCUMENT_PARSER_API_KEY`; E2E one bankruptcy row before Jira Done.
 
 ## SYS-01 RSS — canvas sticky notes (2026-05-26)
 
