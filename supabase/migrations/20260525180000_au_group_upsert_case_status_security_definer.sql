@@ -1,4 +1,4 @@
--- Lifecycle flags and helpers for document-parser / n8n pipeline
+-- SYS-04 Update Case Status: run as definer so service_role/anon RPC callers bypass RLS on bankruptcy_case_status
 
 create or replace function public.au_group_upsert_case_status (
   p_bankruptcy_id uuid,
@@ -14,6 +14,10 @@ security definer
 set search_path = public
 as $$
 begin
+  if p_bankruptcy_id is null then
+    raise exception 'p_bankruptcy_id is required' using errcode = 'P0001';
+  end if;
+
   insert into public.bankruptcy_case_status (
     bankruptcy_id,
     has_creditor_matrix,
@@ -51,46 +55,8 @@ begin
 end;
 $$;
 
-create or replace function public.au_group_link_document_bankruptcy (
-  p_document_id uuid,
-  p_bankruptcy_id uuid
-) returns jsonb
-language plpgsql
-security invoker
-set search_path to public
-as $$
-declare
-  v_doc public.documents%rowtype;
-begin
-  update public.documents
-  set bankruptcy_id = p_bankruptcy_id, updated_at = now()
-  where id = p_document_id
-  returning * into v_doc;
-
-  if v_doc.id is null then
-    raise exception 'document not found: %', p_document_id using errcode = 'P0002';
-  end if;
-
-  update public.form201_extractions
-  set bankruptcy_id = p_bankruptcy_id
-  where document_id = p_document_id;
-
-  update public.creditor_matrix_extractions
-  set bankruptcy_id = p_bankruptcy_id
-  where document_id = p_document_id;
-
-  update public.manual_review_queue
-  set bankruptcy_id = p_bankruptcy_id
-  where document_id = p_document_id and bankruptcy_id is null;
-
-  return jsonb_build_object(
-    'document_id', v_doc.id,
-    'bankruptcy_id', p_bankruptcy_id,
-    's3_key', v_doc.s3_key,
-    'filing_type', v_doc.filing_type
-  );
-end;
-$$;
+comment on function public.au_group_upsert_case_status is
+  'Upsert bankruptcy_case_status lifecycle flags (security definer for n8n service_role RPC)';
 
 grant execute on function public.au_group_upsert_case_status (
   uuid, boolean, boolean, boolean, boolean, boolean, text
@@ -98,5 +64,3 @@ grant execute on function public.au_group_upsert_case_status (
 revoke execute on function public.au_group_upsert_case_status (
   uuid, boolean, boolean, boolean, boolean, boolean, text
 ) from public;
-
-grant execute on function public.au_group_link_document_bankruptcy (uuid, uuid) to service_role;
