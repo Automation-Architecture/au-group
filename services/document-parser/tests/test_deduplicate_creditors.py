@@ -1,5 +1,4 @@
 import pytest
-
 from app.dedup.creditors import (
     _similarity,
     _sum_claim_amounts,

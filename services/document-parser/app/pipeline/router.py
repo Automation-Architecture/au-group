@@ -21,7 +21,6 @@ from app.dedup.creditors import deduplicate_creditors
 from app.extractors.creditor_matrix import extract_creditor_matrix
 from app.extractors.form201 import extract_form201
 from app.extractors.schedules import parse_schedule_ef
-from app.pipeline.filing_types import is_creditor_list_filing
 from app.extractors.structured_pdf import (
     StructuredPdfResult,
     extract_structured_pdf,
@@ -43,6 +42,7 @@ from app.ocr.tesseract_engine import TesseractOcrEngine
 from app.persistence.s3 import S3Client
 from app.persistence.supabase import SupabaseClient
 from app.pipeline.background_jobs import release_background_slot, try_acquire_background_slot
+from app.pipeline.filing_types import is_creditor_list_filing
 from app.pipeline.job_status import (
     JOB_STATUS_FAILED,
     JOB_STATUS_PROCESSING,

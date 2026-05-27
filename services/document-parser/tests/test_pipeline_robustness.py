@@ -10,8 +10,8 @@ from app.models.schemas import (
     ParseMode,
     ValidationResult,
 )
-from app.pipeline.job_status import RAW_CREDITORS_MERGED, processing_placeholder_raw
 from app.persistence.supabase import SupabaseClient
+from app.pipeline.job_status import RAW_CREDITORS_MERGED, processing_placeholder_raw
 from app.pipeline.router import DocumentPipeline
 from tests.helpers.fake_supabase import FakeSupabaseClient
 
