@@ -26,7 +26,7 @@ create trigger bankruptcy_case_status_set_updated_at
 
 create table if not exists public.docket_entries (
   id uuid primary key default gen_random_uuid(),
-  bankruptcy_id uuid references public.bankruptcies (id) on delete cascade,
+  bankruptcy_id uuid not null references public.bankruptcies (id) on delete cascade,
   docket_number text,
   filed_at timestamptz,
   title text,
@@ -39,6 +39,13 @@ create table if not exists public.docket_entries (
 
 create index if not exists idx_docket_entries_bankruptcy_id
   on public.docket_entries (bankruptcy_id);
+
+-- Existing deployments may have nullable bankruptcy_id from an earlier apply
+delete from public.docket_entries
+where bankruptcy_id is null;
+
+alter table public.docket_entries
+  alter column bankruptcy_id set not null;
 
 alter table public.bankruptcy_case_status enable row level security;
 alter table public.docket_entries enable row level security;

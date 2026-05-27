@@ -12,10 +12,10 @@ set search_path = public
 as $$
 begin
   if p_creditor_id is null then
-    raise exception 'p_creditor_id is required';
+    raise exception 'p_creditor_id is required' using errcode = 'P0001';
   end if;
   if p_salesforce_account_id is null or length(trim(p_salesforce_account_id)) = 0 then
-    raise exception 'p_salesforce_account_id is required';
+    raise exception 'p_salesforce_account_id is required' using errcode = 'P0001';
   end if;
 
   insert into public.salesforce_accounts (

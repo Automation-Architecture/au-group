@@ -78,6 +78,7 @@ end;
 $$;
 
 grant execute on function public.au_group_resolve_court_mapping (text) to service_role;
+revoke execute on function public.au_group_resolve_court_mapping (text) from public;
 
 create or replace function public.au_group_get_runtime_config(p_key text)
 returns text
@@ -92,6 +93,7 @@ as $$
 $$;
 
 grant execute on function public.au_group_get_runtime_config (text) to service_role;
+revoke execute on function public.au_group_get_runtime_config (text) from public;
 
 create or replace function public.au_group_list_pacer_poll_candidates(p_limit int default null)
 returns setof public.bankruptcies
@@ -130,6 +132,7 @@ end;
 $$;
 
 grant execute on function public.au_group_list_pacer_poll_candidates (int) to service_role;
+revoke execute on function public.au_group_list_pacer_poll_candidates (int) from public;
 
 insert into public.au_group_runtime_config (config_key, config_value, notes)
 values
