@@ -112,8 +112,25 @@ jobs:
     with:
       scope: diff
 
+  codeql:
+    uses: ./.github/workflows/ci-codeql.yml
+
+  container-scan:
+    uses: ./.github/workflows/ci-container-scan.yml
+
   all-green:
-    needs: [changes, parser, integration, supabase, playwright, export, security]
+    needs:
+      [
+        changes,
+        parser,
+        integration,
+        supabase,
+        playwright,
+        export,
+        security,
+        codeql,
+        container-scan,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +142,9 @@ jobs:
             "${{ needs.supabase.result }}" \
             "${{ needs.playwright.result }}" \
             "${{ needs.export.result }}" \
-            "${{ needs.security.result }}"; do
+            "${{ needs.security.result }}" \
+            "${{ needs.codeql.result }}" \
+            "${{ needs.container-scan.result }}"; do
             if [ "${result}" = "failure" ]; then
               echo "A required CI job failed"
               exit 1
@@ -149,6 +168,8 @@ jobs:
           require "${{ needs.playwright.result }}" "playwright"
           require "${{ needs.export.result }}" "export"
           require "${{ needs.security.result }}" "security"
+          require "${{ needs.codeql.result }}" "codeql"
+          require "${{ needs.container-scan.result }}" "container-scan"
           echo "CI gate passed (full PR suite)"
 
       - name: Require path-matched jobs succeeded
@@ -172,9 +193,17 @@ jobs:
             echo "::error::security must succeed on every run"
             exit 1
           fi
+          if [ "${{ needs.codeql.result }}" != "success" ]; then
+            echo "::error::codeql must succeed on every run"
+            exit 1
+          fi
+          if [ "${{ needs.container-scan.result }}" != "success" ]; then
+            echo "::error::container-scan must succeed on every run"
+            exit 1
+          fi
           echo "CI gate passed"
 
       - name: Block trivial pushes to main/develop without code checks
         if: github.event_name == 'push' && needs.changes.outputs.code != 'true'
         run: |
-          echo "::warning::Push did not touch parser/supabase/e2e paths — only security ran."
+          echo "::warning::Push did not touch parser/supabase/e2e paths — only security, codeql, and container-scan ran."

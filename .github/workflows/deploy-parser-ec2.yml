@@ -17,8 +17,14 @@ jobs:
     with:
       scope: diff
 
+  codeql:
+    uses: ./.github/workflows/ci-codeql.yml
+
+  container-scan:
+    uses: ./.github/workflows/ci-container-scan.yml
+
   deploy-ec2:
-    needs: [ci, security]
+    needs: [ci, security, codeql, container-scan]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-parser-ec2-production-${{ github.repository }}

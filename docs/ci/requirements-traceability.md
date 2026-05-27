@@ -56,12 +56,12 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **NFR-8.2** | API cost optimization | no | — | ZoomInfo cache — prod |
 | **NFR-9.1** | CAN-SPAM | no | — | Engage/SalesLoft templates |
 | **NFR-9.2** | Data retention | no | — | S3 lifecycle + SF policy |
-| **NFR-5** | Security / deps | yes | `ci-security` (always), `ci-parser` pip-audit | vbsec 21 rules on every PR |
+| **NFR-5** | Security / deps | yes | `ci-security`, `ci-codeql`, `ci-container-scan`, `ci-parser` pip-audit | vbsec + CodeQL + Trivy on every PR |
 | **AU_GROUP-8.1** | Unit + integration tests | yes | `ci-parser`, `integration-tests` | PR: runs when secrets set; skip + warn if missing. Cron: strict. Optional `INTEGRATION_CI_STRICT=true` |
 | **AU_GROUP-8.2** | CI/CD pipeline | yes | `ci.yml`, deploy workflows | Deploy runs security + smoke (strict) |
 | **AU_GROUP-8.3** | CloudWatch dashboards | no | — | Infra outside repo |
 | **AU_GROUP-8.4** | Sentry | no | — | Phase 5 |
-| **AU_GROUP-8.5** | Security scan | yes | `ci-security` on every PR + deploy | gitleaks + bandit + pip/npm audit + patterns |
+| **AU_GROUP-8.5** | Security scan | yes | `ci-security`, `ci-codeql`, `ci-container-scan` on every PR + parser deploy | vbsec + CodeQL + Trivy + pip/npm audit |
 
 ## Workflow file index
 
@@ -75,6 +75,8 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | Export package | `.github/workflows/ci-export.yml` | Called by `ci.yml`; validates `export/aaa-client-dashboard/` |
 | Playwright E2E | `.github/workflows/ci-playwright.yml` | Called by ci.yml |
 | vbsec security | `.github/workflows/ci-security.yml` | **Every** PR/push; all deploy workflows |
+| CodeQL (parser) | `.github/workflows/ci-codeql.yml` | **Every** PR/push; parser deploy workflows |
+| Trivy (parser image) | `.github/workflows/ci-container-scan.yml` | **Every** PR/push; parser deploy workflows |
 | Deploy parser (Railway) | `.github/workflows/deploy-parser-railway.yml` | push main, dispatch → smoke strict |
 | Deploy n8n | — | No standalone workflow file currently present; remove stale `deploy-n8n.yml` reference |
 | Deploy Supabase | `.github/workflows/deploy-supabase.yml` | push main → security |
@@ -83,7 +85,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 ## CI gate behavior (2026-05)
 
-- **Security:** runs on every PR/push (`ci.yml`), not path-filtered.
+- **Security:** `security`, `codeql`, and `container-scan` run on every PR/push (`ci.yml`), not path-filtered.
 - **Integration:** runs when `services/document-parser/**` changes; skips with warning if staging secrets missing (unless `INTEGRATION_CI_STRICT=true` or weekly cron).
 - **all-green:** path-matched jobs must `success`; security always required.
 - **Smoke:** `strict=true` on deploy and daily cron — fails if `PARSER_*_URL` / n8n secrets missing.
@@ -94,4 +96,5 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 - [Rollback](./rollback.md)
 - [Manual tests](./manual/README.md)
 - [vbsec](./vbsec.md)
+- [Security layers](./security-layers.md)
 - [PR auto-fix (no merge)](./pr-autofix.md)

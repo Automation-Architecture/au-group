@@ -182,10 +182,10 @@ For AI-assisted edits in the IDE (not bulk export):
 | Environments & secrets | [`docs/ci/environments.md`](docs/ci/environments.md) |
 | Rollback | [`docs/ci/rollback.md`](docs/ci/rollback.md) |
 | n8n workflow-as-code | [`workflows/README.md`](workflows/README.md), [`tests/n8n/`](tests/n8n/), [`docs/ci/n8n-skills.md`](docs/ci/n8n-skills.md) |
-| vbsec security (CI) | [`docs/ci/vbsec.md`](docs/ci/vbsec.md) — all 21 [vbsec](https://github.com/tanviet12/vbsec) rules (gitleaks, bandit, pip-audit, npm audit, patterns) |
+| Security CI | [`docs/ci/security-layers.md`](docs/ci/security-layers.md) — vbsec, CodeQL, Trivy, pip-audit; [vbsec rules](docs/ci/vbsec.md) |
 | Branch protection setup | [`.github/BRANCH_PROTECTION.md`](.github/BRANCH_PROTECTION.md) |
 
-PRs run [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (parser, **Playwright E2E**, Supabase migrations, n8n JSON, dashboard export, **vbsec security**). Merges to `main` can deploy the document-parser to **Railway**, push **Supabase** migrations, and promote **n8n** workflows when those paths change.
+PRs run [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (parser, **Playwright E2E**, Supabase migrations, dashboard export, **security**: vbsec + CodeQL + Trivy). Merges to `main` can deploy the document-parser to **Railway**, push **Supabase** migrations, and promote **n8n** workflows when those paths change.
 
 Playwright tests live in [`e2e/`](e2e/) (health, OpenAPI `/docs`). Local: start parser with `EXPOSE_OPENAPI=true`, then `cd e2e && npm test`.
 

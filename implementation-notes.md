@@ -66,6 +66,14 @@
 - `continue-on-error: true` on SARIF upload avoids failing CI when GitHub Advanced Security is not licensed; vbsec JSON + scan step still gate merges.
 - Deploy concurrency uses `cancel-in-progress: false` so in-flight production deploys are not killed by a newer push.
 
+## CodeQL + Trivy security layers (2026-05-27)
+
+- **Added:** `.github/workflows/ci-codeql.yml`, `ci-container-scan.yml`, `.github/codeql/codeql-config.yml`
+- **Gate:** `ci.yml` `all-green` requires `codeql` + `container-scan` on every PR/push (same as vbsec)
+- **Deploy:** `deploy-parser-railway.yml` and `deploy-parser-ec2.yml` run both before deploy
+- **Docs:** `docs/ci/security-layers.md`
+- **Deferred:** OWASP ZAP (needs stable staging + `PARSER_STAGING_URL`); Semgrep (overlaps vbsec/Bandit)
+
 ## Gitleaks CI credentials (2026-05-22)
 
 - **Symptom:** GitHub Advanced Security flagged `generic-api-key` in `.github/workflows/ci-parser.yml` for hardcoded `API_KEY` / `JWT_SECRET` test literals.
