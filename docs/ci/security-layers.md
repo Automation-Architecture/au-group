@@ -22,6 +22,7 @@ Enable **Settings → Code security →** Dependabot alerts and code scanning fo
 
 - CodeQL paths: [`codeql-config.yml`](../../.github/codeql/codeql-config.yml) — `app/` + `scripts/`, not tests
 - Trivy builds [`services/document-parser/Dockerfile`](../../services/document-parser/Dockerfile) (same image as optional EC2 deploy)
+- `trivy-action` is pinned to a **full commit SHA** (`v0.36.0`), not `@0.28.0` — upstream tags use a `v` prefix and older numeric tags were removed ([GHSA-69fq-xp46-6x23](https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23))
 
 ## Not in CI (by design)
 
