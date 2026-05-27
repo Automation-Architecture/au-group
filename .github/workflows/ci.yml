@@ -33,10 +33,24 @@ jobs:
       export: ${{ github.event_name == 'pull_request' && 'true' || steps.filter.outputs.export }}
       code: ${{ steps.code.outputs.any }}
     steps:
+      # PRs always run the full suite (outputs below); skip paths-filter to avoid
+      # GitHub API "diff temporarily unavailable" / rate-limit errors on large PRs.
+      - name: PR — full suite (no path filter)
+        if: github.event_name == 'pull_request'
+        id: code
+        run: echo "any=true" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v6
+        if: github.event_name != 'pull_request'
+        with:
+          fetch-depth: 0
+
       - uses: dorny/paths-filter@v4
+        if: github.event_name != 'pull_request'
         id: filter
         with:
+          # Use git diff instead of PR files API (avoids diff-not-available / throttling).
+          token: ""
           filters: |
             parser:
               - 'services/document-parser/**'
@@ -64,6 +78,7 @@ jobs:
               - '.github/workflows/**'
 
       - name: Detect code-path changes
+        if: github.event_name != 'pull_request'
         id: code
         run: |
           any=false
