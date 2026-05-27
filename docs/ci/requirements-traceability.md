@@ -14,11 +14,11 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-2.2** | Schedule F within 7 days | scheduled | `smoke-e2e.yml` | SYS-06/07 not in deploy manifest |
 | **AC-2.3** | Alert context complete | no | — | Product/n8n alert nodes |
 | **AC-2.4** | PACER favorites approval | partial | `docs/workflows/sys-07-pacer-favorites.md`, SYS-06/07 n8n | Deploy `deploy-mvp.mjs --wave=1`; manual Keith test |
-| **AC-3.1** | Structured Schedule E/F 95%+ | yes | `ci-parser` → pytest | `tests/test_schedules*.py`, fixtures |
+| **AC-3.1** | Structured Schedule E/F 95%+ | partial | `ci-parser` → pytest | `tests/test_schedules.py`, `tests/test_api_schedule_ef.py` (happy path); 95% accuracy sampling still manual |
 | **AC-3.2** | Simple list extraction | yes | `ci-parser` → pytest | `tests/test_creditor_matrix.py` |
 | **AC-3.3** | OCR + low-confidence flag | yes | `ci-parser` → pytest | `tests/test_validation.py`, `tests/test_api_review.py`, `tests/test_pipeline_*.py` |
 | **AC-3.4** | Page classification 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
-| **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest | `tests/test_idempotency.py` |
+| **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest | `tests/test_deduplicate_creditors.py`, `tests/test_api_creditor_dedup.py` (parse + extract/creditor-matrix), `app/dedup/creditors.py` |
 | **AC-4.1** | ZoomInfo 80%+ match | no | — | AU_GROUP-4; integration tests later |
 | **AC-4.2** | Tier identification 95%+ | no | — | n8n SYS-03 |
 | **AC-4.3** | Contacts 80%+ | no | — | n8n SYS-03 |

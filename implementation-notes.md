@@ -313,6 +313,28 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **SYS-07:** Hourly Poll now wires `List PACER Favorites Reports` (cloud); orphan `List Favorites Stub` connection entry remains — cleanup in F3.
 - **Next:** Fix F1 — `creditor_outreach_disposition` migration + SYS-04/05 gate/disposition wiring.
 
+## KD-40 — FR-3.5 Creditor fuzzy deduplication (2026-05-30)
+
+- **Parser:** `app/dedup/creditors.py` — RapidFuzz `token_set_ratio` on normalized name+address; Union-Find clustering; default threshold **85** (`CREDITOR_DEDUP_THRESHOLD`, `creditor_dedup_enabled`).
+- **Pipeline:** `DocumentPipeline._dedup_creditors_if_enabled` runs after extract / manual-review apply / merge backfill, **before** `validate_creditor_matrix` and `merge_creditors`.
+- **Audit:** `CreditorRow.source_line_numbers`, `dedup_audit` json; `documents.raw_extraction.dedup_stats`; staging column `creditor_matrix_rows.source_line_numbers`; canonical `creditors.dedup_audit`.
+- **Migration:** `20260530120000_kd40_creditor_dedup_audit.sql` — merge RPC sums `claim_amount` on conflict and merges dedup audit.
+- **Tests:** `tests/test_deduplicate_creditors.py` (AC-3.5).
+- **Audit fixes (2026-05-27):** Removed extractor name-only pre-filter (`creditor_matrix.py`); cache hit returns `_with_deduped_creditors` after backfill; `creditor_dedup_threshold` validated 50–100; `dedup_audit` only when `len(group) > 1`.
+- **Audit follow-up (2026-05-27):** Intentional deviation from PRD “name-only” wording — match key is **name+address** (documented in PRD § FR-3.5 + AC-3.5). Cache hit upserts `raw_extraction.creditors` + `dedup_stats` via `_sync_cached_matrix_raw_extraction`. Job status uses `_raw_with_deduped_creditors`. Smoke/API tests assert deduped creditors, `dedup_stats`, and `last_merge_creditors` carries `dedup_audit` / `source_line_numbers`.
+- **Code review fix (2026-05-27):** `raw_extraction.creditors_merged` set after successful `merge_creditors`; `_backfill_creditor_merge` skips when flag is true (prevents cache-hit claim_amount double-sum). RPC `dedup_audit` merge includes `duplicate_count`. Remote DBs that already applied `20260530120000` need `CREATE OR REPLACE` on `au_group_merge_creditor_matrix` if `duplicate_count` merge fix is required (re-run migration body or MCP patch).
+- **n8n:** No workflow change — SYS-02 still calls parser; dedup is server-side.
+- **Deploy:** Apply Supabase migration on remote; redeploy Railway document-parser; KD-36 Schedule E/F extractor can add line numbers using same `source_line_numbers` pattern later.
+- **Remote migration history (2026-05-27):** Schema already live (`source_line_numbers`, `dedup_audit`, merge RPC). MCP applied as `20260527082541_kd40_creditor_dedup_audit`; repo file is `20260530120000_kd40_creditor_dedup_audit.sql`. Repaired remote `schema_migrations` with version `20260530120000` so `supabase db push` does not re-apply DDL. Prefer **Supabase MCP `apply_migration`** when CLI `db push` hangs (no `.supabase` link / interactive password).
+- **Phase 0 ship checklist (architect plan, 2026-05-27):**
+  1. Commit: `app/dedup/`, migration `20260530120000_kd40_creditor_dedup_audit.sql`, dedup tests (exclude `.coverage`).
+  2. Remote: confirm columns + `au_group_merge_creditor_matrix`; patch RPC if `duplicate_count` merge missing.
+  3. Railway: redeploy document-parser.
+  4. Smoke: matrix PDF + `force=true` → `dedup_stats`, merged ABC row, `creditors_merged` in raw.
+  5. Jira: mark AU_GROUP-3.4 Done (CloudWatch metric stays deferred).
+- **Phase 3 prep (2026-05-27):** `app/pipeline/filing_types.py` — `is_creditor_list_filing()` for CREDITOR_MATRIX + SCHEDULE; router dedup/cache paths use it. Extraction still matrix-only until AU_GROUP-3.1 `parse_schedule_ef`.
+- **Phase 2 (2026-05-27):** `parse_schedule_ef` in `schedules.py` (table headers + text/numbered fallbacks); `router.py` SCHEDULE branch + dedup; manual review apply uses `is_creditor_list_filing`. FR-3.1 extra fields (claim date, nature, flags) still deferred — CreditorRow has name/address/amount only.
+
 ## KD-38 — OCR manual review (Sheet + n8n + API) (2026-05-26)
 
 - **Parser API:** `validate_creditor_matrix(..., ocr_used, ocr_confidence)` gates low OCR confidence; `review_reason` prefixed with `low_priority` when page OCR below threshold. `POST /api/v1/review/{review_id}/apply` supports **creditor matrix** or **Form 201** (`ApplyReviewRequest` exactly one of `creditors` / `form201`).

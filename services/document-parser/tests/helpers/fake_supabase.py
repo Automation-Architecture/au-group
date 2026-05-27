@@ -15,11 +15,12 @@ class FakeSupabaseClient(SupabaseClient):
 
     _documents: dict[str, dict[str, Any]] = {}
     _reviews: list[dict[str, Any]] = []
+    # Class-level: each API handler creates a new DocumentPipeline() → new fake instance.
     merge_creditors_call_count: int = 0
+    last_merge_creditors: list[CreditorRow] | None = None
 
     def __init__(self) -> None:
         self._enabled = True
-        FakeSupabaseClient.merge_creditors_call_count = 0
 
     def get_bankruptcy(self, bankruptcy_id: UUID) -> dict[str, Any] | None:
         return {
@@ -144,6 +145,7 @@ class FakeSupabaseClient(SupabaseClient):
         confidence_score: float | None = None,
     ) -> int:
         FakeSupabaseClient.merge_creditors_call_count += 1
+        FakeSupabaseClient.last_merge_creditors = list(creditors)
         return len(creditors)
 
     def upsert_case_status(self, bankruptcy_id: UUID, **kwargs: Any) -> None:

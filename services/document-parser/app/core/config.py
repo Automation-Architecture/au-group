@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # services/document-parser — stable .env path regardless of process cwd (uvicorn, IDE)
@@ -48,6 +48,8 @@ class Settings(BaseSettings):
     ocr_confidence_review_threshold: float = 0.9
     creditor_name_min_length: int = 3
     creditor_line_number_max_digits: int = 3
+    creditor_dedup_enabled: bool = True
+    creditor_dedup_threshold: int = Field(default=85, ge=50, le=100)
     allow_local_file_urls: bool = False
     local_file_root: str | None = None
 

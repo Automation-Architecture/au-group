@@ -331,6 +331,7 @@ export type Database = {
           entity_type: string | null
           extraction_id: string
           id: string
+          source_line_numbers: number[]
         }
         Insert: {
           address?: string | null
@@ -340,6 +341,7 @@ export type Database = {
           entity_type?: string | null
           extraction_id: string
           id?: string
+          source_line_numbers?: number[]
         }
         Update: {
           address?: string | null
@@ -349,6 +351,7 @@ export type Database = {
           entity_type?: string | null
           extraction_id?: string
           id?: string
+          source_line_numbers?: number[]
         }
         Relationships: [
           {
@@ -367,6 +370,7 @@ export type Database = {
           claim_date: string | null
           confidence_score: number | null
           created_at: string
+          dedup_audit: Json | null
           id: string
           is_company: boolean
           is_contingent: boolean
@@ -385,6 +389,7 @@ export type Database = {
           claim_date?: string | null
           confidence_score?: number | null
           created_at?: string
+          dedup_audit?: Json | null
           id?: string
           is_company?: boolean
           is_contingent?: boolean
@@ -403,6 +408,7 @@ export type Database = {
           claim_date?: string | null
           confidence_score?: number | null
           created_at?: string
+          dedup_audit?: Json | null
           id?: string
           is_company?: boolean
           is_contingent?: boolean

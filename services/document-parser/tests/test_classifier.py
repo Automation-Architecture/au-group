@@ -12,6 +12,14 @@ def test_classify_creditor_matrix() -> None:
     assert classify_filing_type(text) == FilingType.CREDITOR_MATRIX
 
 
+def test_classify_schedule_ef() -> None:
+    text = (
+        "Official Form 206E/F\n"
+        "Schedule E/F — Creditors Holding Unsecured Nonpriority Claims"
+    )
+    assert classify_filing_type(text) == FilingType.SCHEDULE
+
+
 def test_docket_hint_overrides() -> None:
     text = "random content"
     assert classify_filing_type(text, docket_hint=FilingType.FORM_201) == FilingType.FORM_201

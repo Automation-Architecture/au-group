@@ -10,6 +10,7 @@ ENTITY_SUFFIXES = re.compile(
 )
 
 NUMBERED_LINE_START = re.compile(r"^\d+\.\s+")
+LINE_NUMBER_PREFIX = re.compile(r"^(\d+)\.?\s+")
 
 
 def _infer_entity_type(name: str) -> str:
@@ -21,6 +22,13 @@ def _infer_entity_type(name: str) -> str:
     if len(parts) >= 2 and parts[0][0].isupper() and parts[1][0].isupper():
         return "individual"
     return "company"
+
+
+def _parse_line_number(text: str) -> tuple[int | None, str]:
+    match = LINE_NUMBER_PREFIX.match(text.strip())
+    if not match:
+        return None, text
+    return int(match.group(1)), text[match.end() :].strip()
 
 
 def _parse_claim_amount(value: str | None) -> float | None:
@@ -77,18 +85,20 @@ def _rows_from_tables(structured: StructuredPdfResult) -> list[CreditorRow]:
         header = " ".join(cell or "" for cell in table[0]).lower()
         if "creditor" not in header and "name" not in header:
             continue
-        for row in table[1:]:
+        for row_index, row in enumerate(table[1:], start=1):
             if not row or not any(row):
                 continue
             name, address, amount_raw = _name_and_address_from_table_row(row)
             if not name or is_junk_creditor_name(name):
                 continue
+            # source_line_numbers: 1-based table body row index (pdfplumber), not PDF line number
             creditors.append(
                 CreditorRow(
                     creditor_name=name,
                     address=address,
                     claim_amount=_parse_claim_amount(amount_raw or ""),
                     entity_type=_infer_entity_type(name),
+                    source_line_numbers=[row_index],
                 )
             )
     return creditors
@@ -104,21 +114,21 @@ def _rows_from_text(text: str) -> list[CreditorRow]:
         first = lines[0]
         if len(first) < 3 or HEADER_PATTERN.search(first):
             continue
-        numbered = re.match(r"^\d+\.?\s+", first)
-        if not numbered and len(lines) < 2 and "$" not in block:
+        line_no, first = _parse_line_number(first)
+        if line_no is None and len(lines) < 2 and "$" not in block:
             continue
-        if numbered:
-            first = re.sub(r"^\d+\.?\s+", "", first)
         if is_junk_creditor_name(first):
             continue
         address = ", ".join(lines[1:3]) if len(lines) > 1 else None
         amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block)
+        source_lines = [line_no] if line_no is not None else []
         creditors.append(
             CreditorRow(
                 creditor_name=first,
                 address=address,
                 claim_amount=_parse_claim_amount(amount_match.group(0) if amount_match else None),
                 entity_type=_infer_entity_type(first),
+                source_line_numbers=source_lines,
             )
         )
     return creditors
@@ -130,17 +140,19 @@ def _block_to_creditor_row(lines: list[str]) -> CreditorRow | None:
     first = lines[0]
     if len(first) < 3 or HEADER_PATTERN.search(first):
         return None
-    name = re.sub(r"^\d+\.?\s+", "", first)
+    line_no, name = _parse_line_number(first)
     if not name or is_junk_creditor_name(name):
         return None
     address = ", ".join(lines[1:3]) if len(lines) > 1 else None
     block_text = "\n".join(lines)
     amount_match = re.search(r"\$\s*[\d,]+(?:\.\d+)?", block_text)
+    source_lines = [line_no] if line_no is not None else []
     return CreditorRow(
         creditor_name=name,
         address=address,
         claim_amount=_parse_claim_amount(amount_match.group(0) if amount_match else None),
         entity_type=_infer_entity_type(name),
+        source_line_numbers=source_lines,
     )
 
 
@@ -179,14 +191,5 @@ def extract_creditor_matrix(
         creditors.extend(_rows_from_text(text))
     if not creditors:
         creditors.extend(_rows_from_numbered_lines(text))
-    seen: set[str] = set()
-    unique: list[CreditorRow] = []
-    for row in creditors:
-        if is_junk_creditor_name(row.creditor_name):
-            continue
-        key = row.creditor_name.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        unique.append(row)
-    return unique
+    # Junk filter only; fuzzy dedup runs in DocumentPipeline (KD-40).
+    return [row for row in creditors if not is_junk_creditor_name(row.creditor_name)]

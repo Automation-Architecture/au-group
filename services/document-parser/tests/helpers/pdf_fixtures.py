@@ -32,6 +32,74 @@ $1,234,567.89
 $50,000.00
 """
 
+# KD-40: intentional fuzzy duplicates (ABC Corp / ABC Corporation, same address)
+CREDITOR_MATRIX_DEDUP_TEXT = """
+Official Form 204
+List of Creditors
+
+
+1. ABC Corp
+123 Main St, Dallas, TX 75001
+$100.00
+
+
+2. ABC Corporation
+123 Main St, Dallas, TX 75001
+$50.00
+
+
+3. Jane Smith
+456 Oak Ave, Austin, TX 78701
+$25.00
+"""
+
+# KD-40: intentional fuzzy duplicates on Schedule E/F path
+SCHEDULE_EF_DEDUP_TEXT = """
+Official Form 206E/F
+Schedule E/F — Creditors Holding Unsecured Nonpriority Claims
+
+
+1. ABC Corp
+123 Main St, Dallas, TX 75001
+$100.00
+
+
+2. ABC Corporation
+123 Main St, Dallas, TX 75001
+$50.00
+"""
+
+SCHEDULE_EF_TEXT = """
+Official Form 206E/F
+Schedule E/F — Creditors Holding Unsecured Nonpriority Claims
+
+
+1. Widget Industries LLC
+100 Pine St, Boston, MA 02101
+$75,000.00
+
+
+2. Robert Jones
+200 Elm Ave, Cambridge, MA 02139
+$12,500.00
+"""
+
+# KD-40: same canonical name, different addresses — must NOT merge
+CREDITOR_MATRIX_SAME_NAME_DIFF_ADDR_TEXT = """
+Official Form 204
+List of Creditors
+
+
+1. Acme Corp
+123 Main St, Dallas, TX 75001
+$100.00
+
+
+2. Acme Corp
+456 Oak Ave, Austin, TX 78701
+$50.00
+"""
+
 
 def write_text_pdf(path: Path, body: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)

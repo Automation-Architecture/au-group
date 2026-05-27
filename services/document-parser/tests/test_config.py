@@ -39,6 +39,13 @@ def test_production_rejects_short_api_key(monkeypatch: pytest.MonkeyPatch) -> No
         settings.validate_api_key_strength()
 
 
+def test_creditor_dedup_threshold_rejects_out_of_range() -> None:
+    with pytest.raises(ValidationError):
+        Settings(api_key="x" * 32, creditor_dedup_threshold=49)
+    with pytest.raises(ValidationError):
+        Settings(api_key="x" * 32, creditor_dedup_threshold=101)
+
+
 def test_get_settings_surfaces_jwt_validation_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

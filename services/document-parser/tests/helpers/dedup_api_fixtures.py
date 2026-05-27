@@ -1,4 +1,4 @@
-"""Shared fixtures for dummy-PDF API smoke tests (CI-safe, no live S3/Supabase)."""
+"""Fixtures for KD-40 API tests (real pipeline, fake S3/Supabase)."""
 
 from __future__ import annotations
 
@@ -14,49 +14,40 @@ from app.persistence.s3 import S3Client
 from tests.helpers.fake_supabase import FakeSupabaseClient
 from tests.helpers.pdf_fixtures import (
     CREDITOR_MATRIX_DEDUP_TEXT,
-    build_integration_pdfs,
+    CREDITOR_MATRIX_SAME_NAME_DIFF_ADDR_TEXT,
     write_text_pdf,
 )
 
-SMOKE_FORM201_KEY = "raw-documents/smoke-test/form201.pdf"
-SMOKE_MATRIX_KEY = "raw-documents/smoke-test/creditor_matrix.pdf"
-SMOKE_MATRIX_DEDUP_KEY = "raw-documents/smoke-test/creditor_matrix_dedup.pdf"
+DEDUP_MATRIX_KEY = "raw-documents/smoke-test/creditor_matrix_dedup.pdf"
+DEDUP_MATRIX_DIFF_ADDR_KEY = "raw-documents/smoke-test/creditor_matrix_diff_addr.pdf"
 
 
-@pytest.fixture(scope="module")
-def dummy_pdf_paths(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
-    root = tmp_path_factory.mktemp("dummy-pdfs")
-    form201_path, matrix_path = build_integration_pdfs(root)
-    matrix_dedup_path = root / "creditor_matrix_dedup.pdf"
-    write_text_pdf(matrix_dedup_path, CREDITOR_MATRIX_DEDUP_TEXT)
-    return {
-        "root": root,
-        "form201": form201_path,
-        "matrix": matrix_path,
-        "matrix_dedup": matrix_dedup_path,
-    }
+@pytest.fixture
+def dedup_bankruptcy_id() -> UUID:
+    return UUID("22222222-2222-4222-8222-222222222222")
 
 
-@pytest.fixture(scope="module")
-def smoke_bankruptcy_id() -> UUID:
-    return UUID("11111111-1111-4111-8111-111111111111")
-
-
-@pytest.fixture(scope="module")
-def smoke_api_env(dummy_pdf_paths: dict[str, Path]) -> Generator[FakeSupabaseClient, None, None]:
-    """Patch settings, S3, and Supabase for one module of real PDF smoke tests."""
-    patcher = pytest.MonkeyPatch()
-    root = dummy_pdf_paths["root"]
+@pytest.fixture
+def dedup_api_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, dedup_bankruptcy_id: UUID
+) -> Generator[FakeSupabaseClient, None, None]:
+    root = tmp_path / "dedup-pdfs"
+    root.mkdir(parents=True, exist_ok=True)
+    matrix_path = root / "creditor_matrix_dedup.pdf"
+    diff_addr_path = root / "creditor_matrix_diff_addr.pdf"
+    write_text_pdf(matrix_path, CREDITOR_MATRIX_DEDUP_TEXT)
+    write_text_pdf(diff_addr_path, CREDITOR_MATRIX_SAME_NAME_DIFF_ADDR_TEXT)
     key_to_path = {
-        SMOKE_FORM201_KEY: dummy_pdf_paths["form201"],
-        SMOKE_MATRIX_KEY: dummy_pdf_paths["matrix"],
-        SMOKE_MATRIX_DEDUP_KEY: dummy_pdf_paths["matrix_dedup"],
+        DEDUP_MATRIX_KEY: matrix_path,
+        DEDUP_MATRIX_DIFF_ADDR_KEY: diff_addr_path,
     }
 
+    patcher = pytest.MonkeyPatch()
     root_str = str(root.resolve())
     patcher.setenv("ALLOW_LOCAL_FILE_URLS", "true")
     patcher.setenv("LOCAL_FILE_ROOT", root_str)
     patcher.setenv("REQUIRE_BANKRUPTCY_ID", "true")
+    patcher.setenv("CREDITOR_DEDUP_ENABLED", "true")
     get_settings.cache_clear()
 
     FakeSupabaseClient._documents.clear()
@@ -86,7 +77,3 @@ def smoke_api_env(dummy_pdf_paths: dict[str, Path]) -> Generator[FakeSupabaseCli
     yield fake_db
     patcher.undo()
     get_settings.cache_clear()
-
-
-def file_url_for(path: Path) -> str:
-    return f"file://{path.resolve()}"
