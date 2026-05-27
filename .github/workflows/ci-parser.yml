@@ -24,7 +24,7 @@ jobs:
           source "${GITHUB_WORKSPACE}/scripts/ci/generate-parser-test-env.sh"
           export APP_ENV=development
           export RATE_LIMIT_ENABLED=false
-          pytest tests/ -q --ignore=tests/integration \
+          pytest tests/ -q --ignore=tests/integration -m "not smoke" \
             --cov=app --cov-report=term-missing --cov-fail-under=60
 
       - name: Dummy PDF API smoke tests

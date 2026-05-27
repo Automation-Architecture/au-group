@@ -1,19 +1,34 @@
 -- Single source of truth for creditor junk-name rules (RPC layer).
--- Parser defaults must match: Settings.creditor_name_min_length,
--- Settings.creditor_line_number_max_digits, app/validation/creditor_name_quality.py
+-- Thresholds: au_group_runtime_config keys creditor_name_min_length,
+-- creditor_line_number_max_digits (defaults 3). Parser mirrors via Settings env vars.
+
+insert into public.au_group_runtime_config (config_key, config_value, notes)
+values
+  ('creditor_name_min_length', '3', 'Junk filter: min name length (parser Settings default)'),
+  ('creditor_line_number_max_digits', '3', 'Junk filter: max digits for line-number false positives')
+on conflict (config_key) do nothing;
 
 create or replace function public.au_group_is_junk_creditor_name(p_name text)
 returns boolean
 language plpgsql
-immutable
+stable
 strict
+set search_path = public
 as $$
 declare
   v_display_name text;
   v_name text;
-  v_min_length constant int := 3;
-  v_max_line_digits constant int := 3;
+  v_min_length integer;
+  v_max_line_digits integer;
 begin
+  v_min_length := coalesce(
+    nullif(trim(public.au_group_get_runtime_config('creditor_name_min_length')), '')::integer,
+    3
+  );
+  v_max_line_digits := coalesce(
+    nullif(trim(public.au_group_get_runtime_config('creditor_line_number_max_digits')), '')::integer,
+    3
+  );
   v_display_name := trim(p_name);
   if v_display_name = '' then
     return true;

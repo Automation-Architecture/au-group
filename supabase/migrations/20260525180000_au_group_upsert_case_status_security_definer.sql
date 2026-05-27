@@ -61,3 +61,6 @@ comment on function public.au_group_upsert_case_status is
 grant execute on function public.au_group_upsert_case_status (
   uuid, boolean, boolean, boolean, boolean, boolean, text
 ) to service_role;
+revoke execute on function public.au_group_upsert_case_status (
+  uuid, boolean, boolean, boolean, boolean, boolean, text
+) from public;

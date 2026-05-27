@@ -1,4 +1,7 @@
-from app.extractors.creditor_matrix import extract_creditor_matrix
+from app.extractors.creditor_matrix import (
+    _name_and_address_from_table_row,
+    extract_creditor_matrix,
+)
 from app.extractors.structured_pdf import StructuredPdfResult
 from app.validation.creditor_name_quality import is_junk_creditor_name
 
@@ -23,6 +26,15 @@ $1,234,567.89
 456 Oak Ave, Austin, TX 78701
 $50,000.00
 """
+
+
+def test_table_row_keeps_numeric_address_not_amount() -> None:
+    name, address, amount_raw = _name_and_address_from_table_row(
+        ["1", "Acme Corp", "500 Commerce St, Dallas, TX 75001", "$10,000.00"]
+    )
+    assert name == "Acme Corp"
+    assert address is not None and "Commerce" in address
+    assert amount_raw == "$10,000.00"
 
 
 def test_extract_creditors_from_text() -> None:

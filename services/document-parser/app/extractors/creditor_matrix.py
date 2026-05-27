@@ -11,6 +11,7 @@ ENTITY_SUFFIXES = re.compile(
 
 NUMBERED_LINE_START = re.compile(r"^\d+\.\s+")
 LINE_NUMBER_PREFIX = re.compile(r"^(\d+)\.?\s+")
+_AMOUNT_ONLY_PATTERN = re.compile(r"^[\$\d\.,\s]+$")
 
 
 def _infer_entity_type(name: str) -> str:
@@ -63,14 +64,21 @@ def _name_and_address_from_table_row(row: list) -> tuple[str | None, str | None,
         candidate = cells[j]
         if not candidate or is_junk_creditor_name(candidate):
             continue
-        if re.search(r"[\d$]", candidate) and _parse_claim_amount(candidate) is not None:
+        if (
+            _AMOUNT_ONLY_PATTERN.match(candidate)
+            and _parse_claim_amount(candidate) is not None
+        ):
             continue
         address = candidate
         break
 
     amount_raw: str | None = None
     for cell in reversed(cells):
-        if cell and re.search(r"\d", cell):
+        if (
+            cell
+            and _AMOUNT_ONLY_PATTERN.match(cell)
+            and _parse_claim_amount(cell) is not None
+        ):
             amount_raw = cell
             break
 

@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     confidence_level_high: float = 0.95
     confidence_level_medium: float = 0.8
     ocr_confidence_review_threshold: float = 0.9
+    # Must match au_group_runtime_config: creditor_name_min_length, creditor_line_number_max_digits
     creditor_name_min_length: int = 3
     creditor_line_number_max_digits: int = 3
     creditor_dedup_enabled: bool = True
