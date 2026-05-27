@@ -65,7 +65,12 @@ def validate_form201(form201: Form201Data, *, ocr_used: bool = False) -> Validat
     )
 
 
-def validate_creditor_matrix(creditors: list[CreditorRow]) -> ValidationResult:
+def validate_creditor_matrix(
+    creditors: list[CreditorRow],
+    *,
+    ocr_used: bool = False,
+    ocr_confidence: float | None = None,
+) -> ValidationResult:
     if not creditors:
         return ValidationResult(
             confidence_score=0.0,
@@ -87,7 +92,14 @@ def validate_creditor_matrix(creditors: list[CreditorRow]) -> ValidationResult:
 
     settings = get_settings()
     manual_review = (
-        confidence < settings.confidence_review_threshold or valid_rows == 0
+        confidence < settings.confidence_review_threshold
+        or valid_rows == 0
+        or (ocr_used and confidence < settings.ocr_confidence_review_threshold)
+        or (
+            ocr_used
+            and ocr_confidence is not None
+            and ocr_confidence < settings.ocr_confidence_review_threshold
+        )
     )
 
     return ValidationResult(

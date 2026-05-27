@@ -195,6 +195,7 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 | POST | `/api/v1/extract/form201` | Form 201 extraction (full parse; **409** if document still processing) |
 | POST | `/api/v1/extract/creditor-matrix` | Creditor matrix extraction (**409** if document still processing) |
 | GET | `/api/v1/review-queue` | Manual review queue |
+| POST | `/api/v1/review/{review_id}/apply` | Apply corrected creditor matrix or Form 201 from Sheet review, then resolve |
 | POST | `/api/v1/review/{review_id}/resolve` | Mark review done; clear bankruptcy flag if no pending items |
 | GET | `/api/v1/jobs/{document_id}` | Job status poll (`processing` / `completed` / `failed`) |
 | GET | `/health/ready` | Readiness probe (Supabase + S3; 503 if deps down) |

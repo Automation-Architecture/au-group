@@ -54,6 +54,24 @@ from app.validation.engine import (
     validate_form201,
 )
 
+_RESOLVABLE_REVIEW_STATUSES = frozenset({"pending", "in_review"})
+
+
+def _build_review_reason(
+    validation: ValidationResult,
+    *,
+    ocr_used: bool,
+    ocr_confidence: float,
+) -> str:
+    settings = get_settings()
+    parts: list[str] = []
+    if ocr_used and ocr_confidence < settings.ocr_confidence_review_threshold:
+        parts.append("low_priority")
+    base = ",".join(validation.missing_fields) or "low_confidence"
+    if parts:
+        return f"{','.join(parts)},{base}"
+    return base
+
 logger = logging.getLogger(__name__)
 
 
@@ -505,6 +523,153 @@ class DocumentPipeline:
             raise FileNotFoundError("Review item not found")
         return self._db.resolve_manual_review(review_id, resolved_by=resolved_by)
 
+    def apply_manual_review(
+        self,
+        review_id: UUID,
+        *,
+        creditors: list[CreditorRow] | None = None,
+        form201: Form201Data | None = None,
+        resolved_by: str | None = None,
+    ) -> dict:
+        row = self._db.get_manual_review(review_id)
+        if not row:
+            raise FileNotFoundError("Review item not found")
+        status = str(row.get("status", ""))
+        if status not in _RESOLVABLE_REVIEW_STATUSES:
+            raise ValueError(f"Review item is not applicable (status={status})")
+
+        document_id_raw = row.get("document_id")
+        bankruptcy_id_raw = row.get("bankruptcy_id")
+        if not document_id_raw or not bankruptcy_id_raw:
+            raise ValueError("Review item missing document_id or bankruptcy_id")
+
+        document_id = UUID(str(document_id_raw))
+        bankruptcy_id = UUID(str(bankruptcy_id_raw))
+        doc_row = self._db.get_document(document_id)
+        if not doc_row:
+            raise ValueError("Document not found for review item")
+
+        filing_type = FilingType(doc_row.get("filing_type", FilingType.UNKNOWN.value))
+        merged_count = 0
+
+        if creditors is not None:
+            if filing_type != FilingType.CREDITOR_MATRIX:
+                raise ValueError(
+                    f"creditors apply not supported for filing_type={filing_type.value}"
+                )
+            validation = validate_creditor_matrix(creditors)
+            if validation.manual_review_required:
+                raise ValueError(
+                    "Corrected creditors still fail validation: "
+                    + ",".join(validation.missing_fields)
+                )
+
+            extraction_id = uuid4()
+            matrix_rows = [
+                {
+                    "extraction_id": str(extraction_id),
+                    "creditor_name": c.creditor_name,
+                    "address": c.address,
+                    "claim_amount": c.claim_amount,
+                    "entity_type": c.entity_type,
+                }
+                for c in creditors
+            ]
+            self._db.replace_creditor_matrix_extraction(
+                {
+                    "id": str(extraction_id),
+                    "document_id": str(document_id),
+                    "bankruptcy_id": str(bankruptcy_id),
+                    "creditor_count": len(creditors),
+                    "confidence_score": validation.confidence_score,
+                    "manual_review_required": False,
+                    "parser_version": self._settings.parser_version,
+                },
+                matrix_rows,
+            )
+            merged_count = self._db.merge_creditors(
+                bankruptcy_id,
+                creditors,
+                confidence_score=validation.confidence_score,
+            )
+            raw = self._coerce_mapping(doc_row.get("raw_extraction"))
+            raw["manual_review_required"] = False
+            raw["creditors"] = [c.model_dump() for c in creditors]
+            validation_block = raw.get("validation")
+            if isinstance(validation_block, dict):
+                validation_block["manual_review_required"] = False
+            doc_payload = SupabaseClient.document_payload(
+                bankruptcy_id=bankruptcy_id,
+                s3_key=str(doc_row.get("s3_key", "")),
+                content_sha256=str(doc_row.get("content_sha256", "")),
+                page_count=int(doc_row.get("page_count") or 0),
+                filing_type=filing_type,
+                parse_mode=ParseMode(doc_row.get("parse_mode", ParseMode.OCR.value)),
+                ocr_used=bool(doc_row.get("ocr_used")),
+                parser_version=str(
+                    doc_row.get("parser_version", self._settings.parser_version)
+                ),
+                raw_extraction=raw,
+            )
+            doc_payload["id"] = str(document_id)
+            self._db.upsert_document(doc_payload)
+
+        elif form201 is not None:
+            if filing_type != FilingType.FORM_201:
+                raise ValueError(
+                    f"form201 apply not supported for filing_type={filing_type.value}"
+                )
+            validation = validate_form201(form201, ocr_used=False)
+            if validation.manual_review_required:
+                raise ValueError(
+                    "Corrected Form 201 still fails validation: "
+                    + ",".join(validation.missing_fields)
+                )
+            self._db.replace_form201_extraction(
+                SupabaseClient.form201_to_row(
+                    document_id,
+                    bankruptcy_id,
+                    form201,
+                    validation.confidence_score,
+                    False,
+                    form201.model_dump(),
+                    self._settings.parser_version,
+                )
+            )
+            self._db.upsert_bankruptcy_from_form201(
+                bankruptcy_id,
+                form201,
+                validation.confidence_score,
+                False,
+            )
+            raw = self._coerce_mapping(doc_row.get("raw_extraction"))
+            raw["manual_review_required"] = False
+            raw["form201"] = form201.model_dump()
+            validation_block = raw.get("validation")
+            if isinstance(validation_block, dict):
+                validation_block["manual_review_required"] = False
+            doc_payload = SupabaseClient.document_payload(
+                bankruptcy_id=bankruptcy_id,
+                s3_key=str(doc_row.get("s3_key", "")),
+                content_sha256=str(doc_row.get("content_sha256", "")),
+                page_count=int(doc_row.get("page_count") or 0),
+                filing_type=filing_type,
+                parse_mode=ParseMode(doc_row.get("parse_mode", ParseMode.STRUCTURED.value)),
+                ocr_used=bool(doc_row.get("ocr_used")),
+                parser_version=str(
+                    doc_row.get("parser_version", self._settings.parser_version)
+                ),
+                raw_extraction=raw,
+            )
+            doc_payload["id"] = str(document_id)
+            self._db.upsert_document(doc_payload)
+        else:
+            raise ValueError("Exactly one of creditors or form201 is required")
+
+        result = self._db.resolve_manual_review(review_id, resolved_by=resolved_by)
+        result["creditor_count"] = merged_count
+        return result
+
     def _mark_job_failed(self, document_id: UUID, error: str) -> None:
         row = self._db.get_document(document_id)
         if not row:
@@ -557,7 +722,9 @@ class DocumentPipeline:
                 validation = validate_form201(form201, ocr_used=ocr_used)
             elif filing_type == FilingType.CREDITOR_MATRIX:
                 creditors = extract_creditor_matrix(text, structured)
-                validation = validate_creditor_matrix(creditors)
+                validation = validate_creditor_matrix(
+                    creditors, ocr_used=ocr_used, ocr_confidence=ocr_confidence
+                )
             else:
                 validation = should_review_for_error("unknown_filing_type")
 
@@ -675,7 +842,9 @@ class DocumentPipeline:
                     {
                         "bankruptcy_id": str(bankruptcy_id) if bankruptcy_id else None,
                         "document_id": str(active_document_id),
-                        "review_reason": ",".join(validation.missing_fields) or "low_confidence",
+                        "review_reason": _build_review_reason(
+                            validation, ocr_used=ocr_used, ocr_confidence=ocr_confidence
+                        ),
                         "status": "pending",
                     }
                 )
