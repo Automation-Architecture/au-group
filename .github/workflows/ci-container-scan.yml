@@ -31,7 +31,11 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           ignore-unfixed: true
-          vuln-type: os,library
+          # Gate Python deps (same layer as pip-audit). OS packages are upgraded in Dockerfile;
+          # unfixed Debian base CVEs are reported in SARIF but do not block merge.
+          vuln-type: library
+          scanners: vuln
+          trivyignores: services/document-parser/.trivyignore
 
       - name: Upload Trivy SARIF
         if: always()

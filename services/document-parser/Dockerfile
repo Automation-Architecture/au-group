@@ -1,10 +1,13 @@
 # Optional container image for EC2/ECS deploy path (Railway uses nixpacks by default)
 FROM python:3.11-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr \
-    poppler-utils \
-    libgl1 \
+# Apply security updates before adding OCR/poppler packages (Trivy OS scan).
+RUN apt-get update \
+    && apt-get -y upgrade --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        poppler-utils \
+        libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
