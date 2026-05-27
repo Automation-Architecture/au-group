@@ -115,8 +115,8 @@ jobs:
   codeql:
     uses: ./.github/workflows/ci-codeql.yml
 
-  container-scan:
-    uses: ./.github/workflows/ci-container-scan.yml
+  trivy:
+    uses: ./.github/workflows/ci-trivy.yml
 
   all-green:
     needs:
@@ -129,7 +129,7 @@ jobs:
         export,
         security,
         codeql,
-        container-scan,
+        trivy,
       ]
     if: always()
     runs-on: ubuntu-latest
@@ -144,7 +144,7 @@ jobs:
             "${{ needs.export.result }}" \
             "${{ needs.security.result }}" \
             "${{ needs.codeql.result }}" \
-            "${{ needs.container-scan.result }}"; do
+            "${{ needs.trivy.result }}"; do
             if [ "${result}" = "failure" ]; then
               echo "A required CI job failed"
               exit 1
@@ -169,7 +169,7 @@ jobs:
           require "${{ needs.export.result }}" "export"
           require "${{ needs.security.result }}" "security"
           require "${{ needs.codeql.result }}" "codeql"
-          require "${{ needs.container-scan.result }}" "container-scan"
+          require "${{ needs.trivy.result }}" "trivy"
           echo "CI gate passed (full PR suite)"
 
       - name: Require path-matched jobs succeeded
@@ -197,8 +197,8 @@ jobs:
             echo "::error::codeql must succeed on every run"
             exit 1
           fi
-          if [ "${{ needs.container-scan.result }}" != "success" ]; then
-            echo "::error::container-scan must succeed on every run"
+          if [ "${{ needs.trivy.result }}" != "success" ]; then
+            echo "::error::trivy must succeed on every run"
             exit 1
           fi
           echo "CI gate passed"
@@ -206,4 +206,4 @@ jobs:
       - name: Block trivial pushes to main/develop without code checks
         if: github.event_name == 'push' && needs.changes.outputs.code != 'true'
         run: |
-          echo "::warning::Push did not touch parser/supabase/e2e paths — only security, codeql, and container-scan ran."
+          echo "::warning::Push did not touch parser/supabase/e2e paths — only security, codeql, and trivy ran."

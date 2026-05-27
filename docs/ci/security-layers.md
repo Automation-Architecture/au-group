@@ -8,30 +8,30 @@ Layered checks on every PR/push via [`ci.yml`](../../.github/workflows/ci.yml), 
 | SAST (dataflow) | CodeQL | [`ci-codeql.yml`](../../.github/workflows/ci-codeql.yml) | SQLi, SSRF, path traversal, insecure deserialization |
 | Secrets | Gitleaks | `ci-security` | API keys, tokens in repo |
 | Dependencies | pip-audit (+ npm audit for e2e) | `ci-security`, [`ci-parser.yml`](../../.github/workflows/ci-parser.yml) | CVEs in Python/Node lockfiles |
-| Container | Trivy | [`ci-container-scan.yml`](../../.github/workflows/ci-container-scan.yml) | **Library** vulns in Docker image (gate); Dockerfile runs `apt-get upgrade` for OS patches |
+| Dependencies (2nd opinion) | Trivy fs | [`ci-trivy.yml`](../../.github/workflows/ci-trivy.yml) | CVEs in `services/document-parser/` (no Docker build) |
 
 ## GitHub Security tab
 
 - **vbsec:** gitleaks + bandit SARIF (`run-vbsec` composite)
 - **CodeQL:** native analysis upload
-- **Trivy:** container SARIF (`continue-on-error` on upload if Advanced Security is off)
+- **Trivy:** filesystem SARIF (`continue-on-error` on upload if Advanced Security is off)
 
 Enable **Settings → Code security →** Dependabot alerts and code scanning for full UI integration.
 
 ## Scope
 
 - CodeQL paths: [`codeql-config.yml`](../../.github/codeql/codeql-config.yml) — `app/` + `scripts/`, not tests
-- Trivy builds [`services/document-parser/Dockerfile`](../../services/document-parser/Dockerfile) (same image as optional EC2 deploy)
-- CI **fails** on CRITICAL/HIGH **Python packages** only (`vuln-type: library`); ignores align with [`pip-audit.toml`](../../services/document-parser/pip-audit.toml) via [`.trivyignore`](../../services/document-parser/.trivyignore)
-- Secret scanning is off in Trivy (`scanners: vuln`) — Gitleaks already covers secrets
-- `trivy-action` is pinned to a **full commit SHA** (`v0.36.0`), not `@0.28.0` — upstream tags use a `v` prefix and older numeric tags were removed ([GHSA-69fq-xp46-6x23](https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23))
+- Trivy: [`install-trivy.sh`](../../scripts/ci/install-trivy.sh) pins CLI **v0.69.3**; scans `services/document-parser/` only
+- Ignores align with [`pip-audit.toml`](../../services/document-parser/pip-audit.toml) via [`.trivyignore`](../../services/document-parser/.trivyignore)
+- **No Docker** in CI — Railway uses nixpacks; optional [`Dockerfile`](../../services/document-parser/Dockerfile) is for EC2 only
 
 ## Not in CI (by design)
 
 | Tool | Reason |
 |------|--------|
-| Semgrep | Overlaps Bandit + vbsec; add only if custom rule packs are needed |
-| OWASP ZAP | Needs stable staging API + secrets; use post-deploy smoke / manual until staging URL is a repo variable |
+| `trivy-action` + image scan | Slow, duplicates pip-audit; OS CVEs in base image are not actionable in this repo’s deploy path |
+| Semgrep | Overlaps Bandit + vbsec |
+| OWASP ZAP | Needs stable staging API + secrets |
 
 ## Related
 

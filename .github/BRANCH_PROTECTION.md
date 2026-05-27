@@ -15,7 +15,7 @@ Recommended additional checks (appear when paths match):
 - `migrate-reset` / `CI — Supabase migrations`
 - `vbsec` / `CI — vbsec security` (**every PR**)
 - `analyze` / `CI — CodeQL` (**every PR**)
-- `trivy` / `CI — container scan (Trivy)` (**every PR**)
+- `trivy-fs` / `CI — Trivy (parser deps)` (**every PR**)
 - `validate` / `CI — AAA dashboard export` (from [`.github/workflows/ci-export.yml`](workflows/ci-export.yml), path-filtered in `ci.yml`)
 
 ## Pull request rules

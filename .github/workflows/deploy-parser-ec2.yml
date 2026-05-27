@@ -20,11 +20,11 @@ jobs:
   codeql:
     uses: ./.github/workflows/ci-codeql.yml
 
-  container-scan:
-    uses: ./.github/workflows/ci-container-scan.yml
+  trivy:
+    uses: ./.github/workflows/ci-trivy.yml
 
   deploy-ec2:
-    needs: [ci, security, codeql, container-scan]
+    needs: [ci, security, codeql, trivy]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-parser-ec2-production-${{ github.repository }}

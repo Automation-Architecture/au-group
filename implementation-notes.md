@@ -68,8 +68,9 @@
 
 ## CodeQL + Trivy security layers (2026-05-27)
 
-- **Added:** `.github/workflows/ci-codeql.yml`, `ci-container-scan.yml`, `.github/codeql/codeql-config.yml`
-- **Gate:** `ci.yml` `all-green` requires `codeql` + `container-scan` on every PR/push (same as vbsec)
+- **Added:** `.github/workflows/ci-codeql.yml`, `ci-trivy.yml`, `.github/codeql/codeql-config.yml`, `scripts/ci/install-trivy.sh`
+- **Gate:** `ci.yml` `all-green` requires `codeql` + `trivy` on every PR/push (same as vbsec)
+- **Trivy:** filesystem scan only (no Docker / no `trivy-action`); pins CLI v0.69.3
 - **Deploy:** `deploy-parser-railway.yml` and `deploy-parser-ec2.yml` run both before deploy
 - **Docs:** `docs/ci/security-layers.md`
 - **Deferred:** OWASP ZAP (needs stable staging + `PARSER_STAGING_URL`); Semgrep (overlaps vbsec/Bandit)
