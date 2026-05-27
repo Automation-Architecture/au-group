@@ -111,13 +111,9 @@ begin
       dedup_audit = case
         when creditors.dedup_audit is null then excluded.dedup_audit
         when excluded.dedup_audit is null then creditors.dedup_audit
-        else jsonb_build_object(
-          'dedup_group_id', coalesce(
-            excluded.dedup_audit->>'dedup_group_id',
-            creditors.dedup_audit->>'dedup_group_id'
-          ),
-          'merged_names', (
-            select jsonb_agg(distinct n)
+        else (
+          with merged as (
+            select coalesce(jsonb_agg(distinct n), '[]'::jsonb) as names
             from (
               select jsonb_array_elements_text(
                 coalesce(creditors.dedup_audit->'merged_names', '[]'::jsonb)
@@ -126,28 +122,35 @@ begin
               select jsonb_array_elements_text(
                 coalesce(excluded.dedup_audit->'merged_names', '[]'::jsonb)
               ) as n
-            ) names
-          ),
-          'source_line_numbers', to_jsonb(
-            (
-              select array_agg(distinct ln order by ln)
-              from (
-                select jsonb_array_elements_text(
-                  coalesce(creditors.dedup_audit->'source_line_numbers', '[]'::jsonb)
-                )::integer as ln
-                union
-                select jsonb_array_elements_text(
-                  coalesce(excluded.dedup_audit->'source_line_numbers', '[]'::jsonb)
-                )::integer as ln
-                union
-                select unnest(v_source_lines)
-              ) lines
-            )
-          ),
-          'duplicate_count', greatest(
-            coalesce((creditors.dedup_audit->>'duplicate_count')::integer, 1),
-            coalesce((excluded.dedup_audit->>'duplicate_count')::integer, 1)
+            ) names_src
           )
+          select jsonb_build_object(
+            'dedup_group_id', coalesce(
+              excluded.dedup_audit->>'dedup_group_id',
+              creditors.dedup_audit->>'dedup_group_id'
+            ),
+            'merged_names', names,
+            'source_line_numbers', to_jsonb(
+              (
+                select array_agg(distinct ln::integer order by ln::integer)
+                from (
+                  select jsonb_array_elements_text(
+                    coalesce(creditors.dedup_audit->'source_line_numbers', '[]'::jsonb)
+                  ) as ln
+                  where ln ~ '^\d+$'
+                  union
+                  select jsonb_array_elements_text(
+                    coalesce(excluded.dedup_audit->'source_line_numbers', '[]'::jsonb)
+                  ) as ln
+                  where ln ~ '^\d+$'
+                  union
+                  select unnest(v_source_lines)::text as ln
+                ) lines
+              )
+            ),
+            'duplicate_count', greatest(1, jsonb_array_length(names))
+          )
+          from merged
         )
       end,
       updated_at = now()
@@ -196,13 +199,9 @@ begin
             when v_dedup_audit is null and v_existing_audit is null then null
             when v_existing_audit is null then v_dedup_audit
             when v_dedup_audit is null then v_existing_audit
-            else jsonb_build_object(
-              'dedup_group_id', coalesce(
-                v_dedup_audit->>'dedup_group_id',
-                v_existing_audit->>'dedup_group_id'
-              ),
-              'merged_names', (
-                select jsonb_agg(distinct n)
+            else (
+              with merged as (
+                select coalesce(jsonb_agg(distinct n), '[]'::jsonb) as names
                 from (
                   select jsonb_array_elements_text(
                     coalesce(v_existing_audit->'merged_names', '[]'::jsonb)
@@ -211,13 +210,18 @@ begin
                   select jsonb_array_elements_text(
                     coalesce(v_dedup_audit->'merged_names', '[]'::jsonb)
                   ) as n
-                ) names
-              ),
-              'source_line_numbers', to_jsonb(v_merged_lines),
-              'duplicate_count', greatest(
-                coalesce((v_existing_audit->>'duplicate_count')::integer, 1),
-                coalesce((v_dedup_audit->>'duplicate_count')::integer, 1)
+                ) names_src
               )
+              select jsonb_build_object(
+                'dedup_group_id', coalesce(
+                  v_dedup_audit->>'dedup_group_id',
+                  v_existing_audit->>'dedup_group_id'
+                ),
+                'merged_names', names,
+                'source_line_numbers', to_jsonb(v_merged_lines),
+                'duplicate_count', greatest(1, jsonb_array_length(names))
+              )
+              from merged
             )
           end,
           updated_at = now()

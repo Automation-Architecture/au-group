@@ -470,7 +470,7 @@ def test_dedup_creditors_if_enabled_logs_when_duplicates_removed(
         CreditorRow(creditor_name="ABC Corporation", address="123 Main St", claim_amount=50.0),
     ]
     with caplog.at_level(logging.INFO):
-        _, stats = pipeline._dedup_creditors_if_enabled(creditors)
+        _, stats = pipeline._dedup_creditors_if_enabled(creditors, log=True)
     assert stats is not None
     assert stats["duplicates_removed"] == 1
     assert any("creditor_dedup" in record.getMessage() for record in caplog.records)

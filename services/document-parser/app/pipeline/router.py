@@ -93,7 +93,7 @@ class DocumentPipeline:
             raise BankruptcyNotFoundError(bankruptcy_id)
 
     def _dedup_creditors_if_enabled(
-        self, creditors: list[CreditorRow]
+        self, creditors: list[CreditorRow], *, log: bool = False
     ) -> tuple[list[CreditorRow], dict[str, int] | None]:
         if not creditors or not self._settings.creditor_dedup_enabled:
             return creditors, None
@@ -106,7 +106,7 @@ class DocumentPipeline:
             "deduped_count": stats.deduped_count,
             "duplicates_removed": stats.duplicates_removed,
         }
-        if stats.duplicates_removed > 0:
+        if log and stats.duplicates_removed > 0:
             log_event(logger, "creditor_dedup", **dedup_stats)
         return deduped, dedup_stats
 
@@ -182,7 +182,7 @@ class DocumentPipeline:
         creditors = self._creditors_from_raw(raw)
         if not creditors:
             return
-        deduped, dedup_stats = self._dedup_creditors_if_enabled(creditors)
+        deduped, dedup_stats = self._dedup_creditors_if_enabled(creditors, log=True)
         if dedup_stats is None:
             return
         updated_creditors = [c.model_dump() for c in deduped]
@@ -685,7 +685,7 @@ class DocumentPipeline:
                 raise ValueError(
                     f"creditors apply not supported for filing_type={filing_type.value}"
                 )
-            creditors, dedup_stats = self._dedup_creditors_if_enabled(creditors)
+            creditors, dedup_stats = self._dedup_creditors_if_enabled(creditors, log=True)
             validation = validate_creditor_matrix(creditors)
             if validation.manual_review_required:
                 raise ValueError(
@@ -849,14 +849,18 @@ class DocumentPipeline:
             elif filing_type == FilingType.CREDITOR_MATRIX:
                 creditors = extract_creditor_matrix(text, structured)
                 if creditors:
-                    creditors, dedup_stats = self._dedup_creditors_if_enabled(creditors)
+                    creditors, dedup_stats = self._dedup_creditors_if_enabled(
+                        creditors, log=True
+                    )
                 validation = validate_creditor_matrix(
                     creditors or [], ocr_used=ocr_used, ocr_confidence=ocr_confidence
                 )
             elif filing_type == FilingType.SCHEDULE:
                 creditors = parse_schedule_ef(text, structured)
                 if creditors:
-                    creditors, dedup_stats = self._dedup_creditors_if_enabled(creditors)
+                    creditors, dedup_stats = self._dedup_creditors_if_enabled(
+                        creditors, log=True
+                    )
                 validation = validate_creditor_matrix(
                     creditors or [], ocr_used=ocr_used, ocr_confidence=ocr_confidence
                 )
