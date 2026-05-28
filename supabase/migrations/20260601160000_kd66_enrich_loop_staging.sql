@@ -14,6 +14,7 @@ create index if not exists idx_au_group_enrich_loop_staging_job
 
 alter table public.au_group_enrich_loop_staging enable row level security;
 
+drop policy if exists au_group_enrich_loop_staging_deny_public on public.au_group_enrich_loop_staging;
 create policy au_group_enrich_loop_staging_deny_public
   on public.au_group_enrich_loop_staging
   for all
