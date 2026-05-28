@@ -132,6 +132,8 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
+    from app.core.runtime_config import apply_runtime_config
+
     try:
         settings = Settings()
     except ValidationError as exc:
@@ -148,4 +150,4 @@ def get_settings() -> Settings:
     except ValueError as exc:
         raise RuntimeError(f"Invalid API_KEY configuration: {exc}") from exc
 
-    return settings
+    return apply_runtime_config(settings)

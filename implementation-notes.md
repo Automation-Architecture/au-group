@@ -363,14 +363,24 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **Wiring aligned with cloud paste:** `court_id_norm` on **Edit Fields**; removed **Set Normalize Court Id** from path; **Config supabase** (`$env.SUPABASE_URL` + `/rest/v1/`) before court/target RPCs; **Combine Court Gate** merges from **Edit Fields**.
 - **Not copied:** large `pinData` test fixture from n8n UI (keeps repo diff small); re-pin in editor if needed.
 
+## KD-24 — FR-4.5 Company name normalization (2026-05-28)
+
+- **Migration:** `20260531120000_kd24_company_name_rules.sql` — `au_group_company_name_rules` (suffix_strip / alias / token_replace); rule-driven `au_group_normalize_company_name`; `au_group_company_lookup_prepare` RPC for SYS-03.
+- **Remote:** Applied to `umivttszdnsrosbqryia` via Supabase MCP `kd24_company_name_rules_full` (2026-05-28). Smoke: `au_group_normalize_company_name('Acme Inc.')` → `ACME`; `au_group_company_lookup_prepare` returns `cache_key` + `normalized_name`.
+- **Parser:** `app/enrichment/company_name.py` + `tests/test_company_name_normalize.py` — offline mirror of default rules; **Postgres is source of truth** at runtime.
+- **SYS-03:** `scripts/n8n/patch-sys03-kd20-kd24.py` — removed duplicate suffix regex from `Build Lookup Context`; uses `au_group_company_lookup_prepare` instead of `au_group_company_lookup_cache_key` only.
+- **Baseline:** `scripts/supabase/kd24-normalization-baseline.sql` — sample key delta before/after rules.
+- **SYS-04 note:** Account match (T4.1) must use `creditors.normalized_name`, not ad-hoc JS.
+
 ## KD-20 — FR-4.1 ZoomInfo company lookup (2026-05-31)
 
 - **Migration:** `20260531100000_kd20_zoominfo_company_lookup.sql` — `au_group_zoominfo_company_cache`, match columns on `creditors`, cache/get/upsert RPCs, extended `au_group_set_creditor_zoominfo_company_id`.
 - **Parser:** `app/enrichment/company_name.py` + `tests/test_company_name_normalize.py` (cache key helper; SQL `au_group_normalize_company_name` is source of truth for RPC).
-- **SYS-03:** `scripts/n8n/patch-sys03-kd20.mjs` → `workflows/pulled/au-group-sys-03-creditor-enrichment.json` — company-only path: cache → ZoomInfo search (httpHeaderAuth) → disambiguate → persist; removed contact persist nodes (KD-22); `dry_run` stub; 429 branch; `au_group_list_company_creditors` RPC load; aggregate `cache_hits` / `ambiguous` / `rate_limited`.
+- **SYS-03:** `scripts/n8n/patch-sys03-kd20-kd24.py` → `workflows/pulled/au-group-sys-03-creditor-enrichment.json` — cache → ZoomInfo search → disambiguate → persist; `dry_run` stub; **429 → RPC Persist Rate Limited**; Supabase RPC nodes use `apikey` + `Authorization: Bearer` with `$env.SUPABASE_SERVICE_ROLE_KEY`.
 - **Push:** `node scripts/n8n/push-sys03-workflow.mjs` (workflow `j26cimQ4S7kN67IP`). Attach **AU Group ZoomInfo API** credential in n8n before live API (KD-53).
-- **Docs:** `docs/workflows/sys-03-kd20-company-lookup.md`, `scripts/supabase/test-kd20-zoominfo-cache.sql`.
-- **Deploy:** `supabase db push` or MCP apply migration; push SYS-03 JSON; production match-rate smoke when KD-53 unblocks.
+- **Docs:** `docs/workflows/sys-03-kd20-company-lookup.md`, `scripts/supabase/test-kd20-zoominfo-cache.sql`, `scripts/supabase/kd20-migration-repair.sh`.
+- **Deploy:** KD-24 schema live on remote; push SYS-03 JSON when `N8N_API_KEY` set; production match-rate smoke when KD-53 unblocks.
+- **Smoke (2026-05-28):** Remote SQL verify for normalize + prepare RPC (see KD-24). Stages 1–2 (dry_run, cache) — run in n8n after push. Stage 3–4 blocked on KD-53.
 - **Remote apply (2026-05-28):** MCP `kd20_zoominfo_company_lookup` → history version `20260528042439` (schema live). Local file `20260531100000_kd20_zoominfo_company_lookup.sql` includes `drop function …(uuid,text)` before RPC signature change.
 - **`db push` blocked:** Remote has MCP-only migration versions not in `supabase/migrations/`. Repair history (does not roll back DDL), then mark local KD-20 file applied:
 
@@ -386,3 +396,25 @@ supabase migration repair --status applied 20260531100000
 After that, `supabase db push` should be a no-op for KD-20. Prefer **Supabase MCP `apply_migration`** when CLI history is out of sync.
 
 - **Out-of-order duplicate:** If `db push` asks for `--include-all` on `20260529175000_creditors_normalized_name.sql`, do **not** apply — remote already has `20260529160500` + column `creditors.normalized_name`. Run: `supabase migration repair --status applied 20260529175000` then `supabase db push` again.
+
+## KD-22 — FR-4.2–4.4 contacts + tier config (2026-05-28)
+
+- **Migrations:** `20260601120000_kd22_contact_tiers_and_contacts.sql` — `au_group_company_tiers`, `au_group_tier_contact_titles`, `au_group_classify_company_tier`, `au_group_list_contact_titles`, `au_group_upsert_zoom_info_contacts`.
+- **Migrations:** `20260601130000_kd22_suppression_and_outreach_gates.sql` — suppression tables, `au_group_is_suppressed_creditor_name`, `au_group_evaluate_outreach_gates`, repeat-exposure runtime config keys.
+- **SYS-03:** `workflows/pulled/au-group-sys-03-creditor-enrichment.json` (55 nodes). **Pushed to n8n cloud** `j26cimQ4S7kN67IP` via PUT API (2026-05-28). After `RPC Persist Company Match`: tier RPC → titles RPC → ZoomInfo `contacts/search` → upsert `zoom_info_contacts`.
+- **SYS-05:** `RPC Evaluate Outreach Gates` before `Check Gates`. **Pushed to n8n cloud** `SWES563HTLR2t9Gv` via PUT API (2026-05-28).
+- **Docs:** `docs/workflows/sys-03-kd22-contacts.md`, `docs/workflows/sys-03-kd20-company-lookup.md`, `docs/workflows/sys-05-outreach-gates.md`.
+- **Test:** `scripts/supabase/test-kd22-contact-tiers.sql`.
+- **Deploy (manual):** `supabase db push` or MCP apply on `umivttszdnsrosbqryia`; push SYS-03/05 JSON to n8n cloud (`j26cimQ4S7kN67IP`); attach ZoomInfo credential; confirm service_role on Supabase HTTP nodes (not publishable-only).
+- **Keith ops (no code):** UPDATE `au_group_territory_assignments` SF user IDs; seed `au_group_suppression_*`; adjust tier/title tables as needed.
+- **Still deferred:** SYS-06/07 production PACER favorites; ZoomInfo contact API shape may need tweak after KD-53 live test.
+
+## Client no-Code compliance — full plan (2026-05-28)
+
+- **Runbook:** `docs/workflows/client-ops-runbook.md` (Keith-editable tables + do-not-touch list).
+- **Migrations:** KD-61 suppression in `list_company_creditors`; KD-64 `finalize_document_job`; KD-65 ZoomInfo normalize RPCs; KD-66 enrich loop staging; KD-68 Schedule F/RSS RPCs; KD-69 parser runtime config keys.
+- **Workflows:** All `workflows/pulled/au-group-sys-*.json` refactored to **0 Code nodes** (`scripts/ci/count-workflow-code-nodes.py` passes). Deployed via n8n PUT API (not Python patch scripts).
+- **SYS-04 → SYS-05:** `Execute SYS-05 Outreach` after `Apply Outreach Gates`; SYS-05 `Merge Gate Result` + `Unwrap Gate Fields` (Set-only).
+- **SYS-02 cloud ID:** Active workflow is `7IjPc44k9YaCrmXM` (archived copy `qwVPSlI3L1RMsw9V` — do not PUT).
+- **Parser:** `app/core/runtime_config.py` overlays `creditor_dedup_*` and junk thresholds from `au_group_runtime_config` when Supabase creds set.
+- **Keith UAT (manual):** territory IDs, suppression seed, KD-53 creds; then activate SYS-06/07 after PACER favorites smoke (`docs/ci/manual/` AC-2.4).

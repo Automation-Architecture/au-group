@@ -10,7 +10,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-1.2** | Form 201 debtor metadata 95%+ | no | `docs/ci/manual/pacer-form201.md` | Parser unit tests + manual 95% sampling |
 | **AC-1.3** | Top 20 in Salesforce within 24h | scheduled | `smoke-e2e.yml` | End-to-end via n8n SYS-01→02→03 |
 | **AC-1.4** | Company vs individual 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
-| **AC-2.1** | Monitoring queue for new Ch.11 | no | — | SYS-06 inactive until FR-2 ready |
+| **AC-2.1** | Monitoring queue for new Ch.11 | partial | SYS-06 `gGRp6dF85A015TMH`, `au_group_diff_pacer_favorites` | 0 Code nodes; activate after Keith UAT (KD-68) |
 | **AC-2.2** | Schedule F within 7 days | scheduled | `smoke-e2e.yml` | SYS-06/07 not in deploy manifest |
 | **AC-2.3** | Alert context complete | no | — | Product/n8n alert nodes |
 | **AC-2.4** | PACER favorites approval | partial | `docs/workflows/sys-07-pacer-favorites.md`, SYS-06/07 n8n | Deploy `deploy-mvp.mjs --wave=1`; manual Keith test |
@@ -19,16 +19,16 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-3.3** | OCR + low-confidence flag | yes | `ci-parser` → pytest | `tests/test_validation.py`, `tests/test_api_review.py`, `tests/test_pipeline_*.py` |
 | **AC-3.4** | Page classification 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
 | **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest | `tests/test_deduplicate_creditors.py`, `tests/test_api_creditor_dedup.py` (parse + extract/creditor-matrix), `app/dedup/creditors.py` |
-| **AC-4.1** | ZoomInfo 80%+ match | no | — | AU_GROUP-4; integration tests later |
-| **AC-4.2** | Tier identification 95%+ | no | — | n8n SYS-03 |
-| **AC-4.3** | Contacts 80%+ | no | — | n8n SYS-03 |
-| **AC-4.4** | Fallback logic | no | — | n8n SYS-03 |
-| **AC-4.5** | Canonical names | no | — | n8n SYS-03 |
+| **AC-4.1** | ZoomInfo 80%+ match | partial | KD-20 migration + SYS-03 company HTTP | Production match-rate smoke (KD-53) |
+| **AC-4.2** | Tier identification 95%+ | partial | `au_group_classify_company_tier`, SYS-03 RPC | Manual sampling vs PRD tiers |
+| **AC-4.3** | Contacts 80%+ | partial | `au_group_upsert_zoom_info_contacts`, SYS-03 contact HTTP | Live ZoomInfo + KD-53 |
+| **AC-4.4** | Fallback logic | partial | `au_group_list_contact_titles(..., true)` | n8n passes merged title list |
+| **AC-4.5** | Canonical names | partial | `au_group_normalize_company_name` (KD-20) | Trade-name rules KD-24 deferred |
 | **AC-5.1** | Salesforce match 95%+ | no | — | AU_GROUP-5 |
 | **AC-5.2** | Bankruptcy event fields | no | — | n8n SYS-03 + SF |
 | **AC-5.3** | Territory 100% | partial | `au_group_territory_assignments`, `au_group_parse_creditor_state`, SYS-04 **Resolve Territory Rep** | Replace placeholder SF User IDs; push SYS-04 JSON; live OwnerId needs KD-53 |
-| **AC-5.4** | DNC suppression | no | — | n8n SYS-03 |
-| **AC-5.5** | Active engagement gate | no | — | n8n SYS-03 |
+| **AC-5.4** | DNC suppression | partial | `au_group_evaluate_outreach_gates`, SYS-04→SYS-05 Execute | SF `Do_Not_Contact__c` on handoff |
+| **AC-5.5** | Active engagement gate | partial | same + SYS-05 Set-only gates | SF opp/activity queries on SYS-04 |
 | **AC-5.6** | T+1 outreach | scheduled | `smoke-e2e.yml` | Timing verified in prod ops |
 | **AC-6.2** | Exposure on SF account | partial | `creditor_exposure_summary`, SYS-08 | Keith Excel column map; SF field sync |
 | **AC-6.3** | Repeat-exposure threshold | partial | `au_group_check_repeat_exposure` RPC | Wire RPC in SYS-05 when creditor_id on handoff |
@@ -50,6 +50,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **NFR-6.1** | Purchase approval UX | no | — | SYS-07 / Keith workflow |
 | **NFR-6.2** | Salesforce UX | no | — | SF config |
 | **NFR-6.3** | Alert clarity | no | — | n8n templates |
+| **NFR-7.1** | No-code config (Keith) | yes | `scripts/ci/count-workflow-code-nodes.py`, Supabase config tables | 0 Code in `workflows/pulled/au-group-sys-*.json`; Keith edits tables + SF + Engage |
 | **NFR-7.2** | Monitoring | scheduled | `smoke-e2e.yml` | Sentry Phase 5 (AU_GROUP-8.4) |
 | **NFR-7.3** | Documentation | yes | `ci-export` | Dashboard package JSON valid |
 | **NFR-8.1** | PACER cost control | no | — | Human-in-the-loop — product |
