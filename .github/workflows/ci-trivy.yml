@@ -38,6 +38,7 @@ jobs:
             --ignore-unfixed \
             --ignorefile services/document-parser/.trivyignore \
             --format table \
+            --exit-code 1 \
             services/document-parser
 
       - name: Upload Trivy SARIF
