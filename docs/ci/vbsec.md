@@ -62,7 +62,7 @@ python3 scripts/ci/vbsec_ci_scan.py --scope all --fail-on critical
 
 ## Layered security (CodeQL + Trivy)
 
-vbsec is the **pattern + Bandit** layer. **CodeQL** (dataflow SAST) and **Trivy** (container image) run in parallel on every PR — see [`security-layers.md`](security-layers.md).
+vbsec is the **pattern + Bandit** layer. **CodeQL** (dataflow SAST) and **Trivy** (filesystem scan — `trivy fs` as run by [`ci-trivy.yml`](../../.github/workflows/ci-trivy.yml)) run in parallel on every PR — see [`security-layers.md`](security-layers.md).
 
 ## Related
 

@@ -26,10 +26,11 @@ def _infer_entity_type(name: str) -> str:
 
 
 def _parse_line_number(text: str) -> tuple[int | None, str]:
-    match = LINE_NUMBER_PREFIX.match(text.strip())
+    stripped_text = text.strip()
+    match = LINE_NUMBER_PREFIX.match(stripped_text)
     if not match:
         return None, text
-    return int(match.group(1)), text[match.end() :].strip()
+    return int(match.group(1)), stripped_text[match.end() :].strip()
 
 
 def _parse_claim_amount(value: str | None) -> float | None:
