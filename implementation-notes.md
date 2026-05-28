@@ -362,3 +362,27 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **Lanes documented:** RSS ingest, parse/qualify, KD-14 target-state gate, dedup/insert, SYS-02 queue.
 - **Wiring aligned with cloud paste:** `court_id_norm` on **Edit Fields**; removed **Set Normalize Court Id** from path; **Config supabase** (`$env.SUPABASE_URL` + `/rest/v1/`) before court/target RPCs; **Combine Court Gate** merges from **Edit Fields**.
 - **Not copied:** large `pinData` test fixture from n8n UI (keeps repo diff small); re-pin in editor if needed.
+
+## KD-20 — FR-4.1 ZoomInfo company lookup (2026-05-31)
+
+- **Migration:** `20260531100000_kd20_zoominfo_company_lookup.sql` — `au_group_zoominfo_company_cache`, match columns on `creditors`, cache/get/upsert RPCs, extended `au_group_set_creditor_zoominfo_company_id`.
+- **Parser:** `app/enrichment/company_name.py` + `tests/test_company_name_normalize.py` (cache key helper; SQL `au_group_normalize_company_name` is source of truth for RPC).
+- **SYS-03:** `scripts/n8n/patch-sys03-kd20.mjs` → `workflows/pulled/au-group-sys-03-creditor-enrichment.json` — company-only path: cache → ZoomInfo search (httpHeaderAuth) → disambiguate → persist; removed contact persist nodes (KD-22); `dry_run` stub; 429 branch; `au_group_list_company_creditors` RPC load; aggregate `cache_hits` / `ambiguous` / `rate_limited`.
+- **Push:** `node scripts/n8n/push-sys03-workflow.mjs` (workflow `j26cimQ4S7kN67IP`). Attach **AU Group ZoomInfo API** credential in n8n before live API (KD-53).
+- **Docs:** `docs/workflows/sys-03-kd20-company-lookup.md`, `scripts/supabase/test-kd20-zoominfo-cache.sql`.
+- **Deploy:** `supabase db push` or MCP apply migration; push SYS-03 JSON; production match-rate smoke when KD-53 unblocks.
+- **Remote apply (2026-05-28):** MCP `kd20_zoominfo_company_lookup` → history version `20260528042439` (schema live). Local file `20260531100000_kd20_zoominfo_company_lookup.sql` includes `drop function …(uuid,text)` before RPC signature change.
+- **`db push` blocked:** Remote has MCP-only migration versions not in `supabase/migrations/`. Repair history (does not roll back DDL), then mark local KD-20 file applied:
+
+```bash
+supabase migration repair --status reverted \
+  20260526133459 20260526134303 20260526134325 20260526134330 \
+  20260526134339 20260526134340 20260526140453 20260526140456 \
+  20260526143315 20260526144137 20260527082541 20260528035956 20260528042439
+
+supabase migration repair --status applied 20260531100000
+```
+
+After that, `supabase db push` should be a no-op for KD-20. Prefer **Supabase MCP `apply_migration`** when CLI history is out of sync.
+
+- **Out-of-order duplicate:** If `db push` asks for `--include-all` on `20260529175000_creditors_normalized_name.sql`, do **not** apply — remote already has `20260529160500` + column `creditors.normalized_name`. Run: `supabase migration repair --status applied 20260529175000` then `supabase db push` again.
