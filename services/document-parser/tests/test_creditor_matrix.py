@@ -127,7 +127,7 @@ $10,000.00
     assert not any(is_junk_creditor_name(n) for n in names)
 
 
-def test_infer_entity_type_individual_and_partnership() -> None:
+def test_infer_entity_type_individual_only() -> None:
     rows = extract_creditor_matrix(
         "1. John and Jane Smith\n100 Main St\n$1,000.00\n\n"
         "2. Robert Jones\n200 Oak Ave\n$2,000.00"

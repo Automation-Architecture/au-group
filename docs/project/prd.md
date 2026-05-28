@@ -874,7 +874,7 @@ AI agent that cross-references all signals and proactively recommends priority a
 | FR-3.2 | All creditor names and addresses extracted from simple creditor lists; missing data fields marked as null (not blank or guessed); non-standard formatting handled |
 | FR-3.3 | OCR attempts made on all scanned/handwritten documents; low-confidence results flagged for manual review (not auto-processed); handwritten filings from small cases flagged as low-priority |
 | FR-3.4 | Page classification correctly identifies creditor pages in 90%+ of cases; non-creditor pages excluded from parsing; handles 200+ page dockets |
-| FR-3.5 | Duplicate creditors consolidated using fuzzy matching on normalized company name and address (default threshold 85%); same company listed multiple times with variations is consolidated; total claim amounts summed; `dedup_stats` and per-row `dedup_audit` persisted |
+| FR-3.5 | Duplicate creditors consolidated using fuzzy matching on normalized company name and address (default threshold 85%); same company listed multiple times with variations is consolidated; total claim amounts summed; `dedup_stats`, per-row `dedup_audit`, and `source_line_numbers` persisted for deduplicated records |
 
 ---
 
