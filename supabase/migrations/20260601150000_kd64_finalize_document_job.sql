@@ -27,7 +27,7 @@ begin
     jsonb_build_object(
       'bankruptcy_id', r.bankruptcy_id,
       'processing_job_id', r.processing_job_id,
-      'pipeline_execution_id', coalesce(p_pipeline_execution_id, p_pipeline_execution_id),
+      'pipeline_execution_id', p_pipeline_execution_id,
       'schedule_f_queue_id', p_schedule_f_queue_id,
       'doc_index', r.doc_index,
       'doc_key', r.doc_key,
