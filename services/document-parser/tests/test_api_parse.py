@@ -250,14 +250,14 @@ class TestParseDocument:
         assert response.status_code == 400
         assert response.json()["detail"] == "Invalid request"
 
-    def test_idempotent_response_shape_when_cached(
+    def test_repeat_requests_with_same_mock_return_identical_json(
         self,
         client: TestClient,
         auth_headers: dict[str, str],
         bankruptcy_id,
         patch_pipeline,
     ) -> None:
-        """Same mocked pipeline output twice yields identical JSON (contract for n8n)."""
+        """Two requests with the same stubbed pipeline output return identical JSON (HTTP contract only)."""
         mock_response = sample_parse_document_response()
         patch_pipeline(
             "parse_document",

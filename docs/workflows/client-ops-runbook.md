@@ -12,7 +12,7 @@
 | `au_group_tier_contact_titles` | Job titles per tier for ZoomInfo contact search |
 | `au_group_suppression_lenders` | Lender name patterns excluded from enrichment |
 | `au_group_suppression_keywords` | Keyword patterns excluded from enrichment |
-| `au_group_runtime_config` | `repeat_exposure_*`, `creditor_name_min_length`, `creditor_line_number_max_digits`, `creditor_dedup_threshold` |
+| `au_group_runtime_config` | `repeat_exposure_*`, `creditor_name_min_length`, `creditor_line_number_max_digits`, `creditor_dedup_threshold`, `rss_max_items_per_run`, `rss_normalize_batch_size` |
 | `au_group_territory_assignments` | State → Salesforce User ID for routing |
 
 ## Keith may change (external UIs)
@@ -37,9 +37,11 @@
 | Replace `005PLACEHOLDER*` in `au_group_territory_assignments` with real Salesforce User IDs | Keith | KD-60 |
 | Seed `au_group_suppression_lenders` / `au_group_suppression_keywords` from discovery list | Keith | KD-60 |
 | Salesforce custom fields: DNC, engagement flags, bankruptcy event | Keith SF admin | AC-5.4/5.5 |
+| Salesforce FR-5.7 fields: `Email_Template_Recommendation__c`, `Has_Recent_SF_Activity__c`, `Activity_Summary__c`, `Outreach_Status__c` | Keith SF admin | AC-5.7 |
 | n8n: service_role on Supabase HTTP nodes; ZoomInfo cred on SYS-03 | AAA | — |
+| n8n: push patched SYS-04/05/01B (`python3 scripts/n8n/push-workflows.py`) | AAA | — |
 
-See [production-credentials-client-checklist.md](../project/production-credentials-client-checklist.md).
+See [production-credentials-client-checklist.md](../project/production-credentials-client-checklist.md) and [production-activation-checklist.md](./production-activation-checklist.md).
 
 ## UAT (no n8n editor)
 

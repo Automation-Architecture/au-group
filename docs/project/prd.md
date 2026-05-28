@@ -491,6 +491,16 @@ For net-new accounts with no active engagement and no do-not-contact flag, the s
 - Email sequence launched automatically
 - T+1 timing (next business day) to avoid same-day sends
 
+**FR-5.7: Salesforce Recency Signal for Outreach Template (MVP)**  
+Before outreach, the system shall query Salesforce for recent account history and expose a rep-visible recommendation on the Account.
+
+- **Inputs:** open Opportunities; Tasks/Activities in the last 90 days; prior `Bankruptcy_Event__c` records on the same Account; repeat-exposure threshold (FR-6.3 via `au_group_evaluate_outreach_gates` / `au_group_check_repeat_exposure`).
+- **Outputs on Account:** `Has_Recent_SF_Activity__c`, `Email_Template_Recommendation__c` (`generic` | `custom`), `Activity_Summary__c`, `Outreach_Status__c`.
+- **Behavior:**
+  - `generic` — net-new: no open opportunity, no 90-day activity, no prior bankruptcy events on the Account, and repeat-exposure threshold not exceeded.
+  - `custom` — existing prospect, recent activity, and/or prior bankruptcy on the Account: suppress automated generic template; rep chooses or alternate Engage sequence.
+- **MVP bar (client):** PACER intake → ZoomInfo company + contacts → Salesforce Account/Event with bankruptcy fields and merge variables for email; recency signal is required for template choice, not full AI copy generation.
+
 ---
 
 ### FR-6: Historical Creditor Database (P1 — Nice-to-Have)
@@ -900,6 +910,7 @@ AI agent that cross-references all signals and proactively recommends priority a
 | FR-5.4 | No emails sent to do-not-contact accounts; rep receives flagged lead notification; DNC flag checked before every outreach trigger; 100% suppression rate |
 | FR-5.5 | No emails sent to accounts with active engagements (open opportunities, recent activity within 90 days); rep receives context for manual decision; active engagement detection runs before every outreach trigger |
 | FR-5.6 | Email triggered within 24 hours of lead creation for net-new qualified leads; email sequence launched automatically via ZoomInfo Engage/SalesLoft; T+1 timing (next business day) applied to avoid same-day sends |
+| FR-5.7 | Recency signal on Account (`Has_Recent_SF_Activity__c`, `Email_Template_Recommendation__c`, `Activity_Summary__c`); `generic` only for net-new; `custom` when open opp, 90d activity, or prior bankruptcy on Account |
 
 ---
 

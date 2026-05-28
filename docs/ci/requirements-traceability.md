@@ -6,7 +6,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 | ID | Requirement summary | Automated | Workflow / job | Notes |
 |----|---------------------|-----------|----------------|-------|
-| **AC-1.1** | Daily PACER filings by 8 AM | partial | `au_group_target_states`, SYS-01B `au_group_list_pacer_poll_candidates`, SYS-01 gate | Admin-configurable states in Supabase; push workflow JSON to n8n cloud |
+| **AC-1.1** | Daily PACER filings by 8 AM | partial | `au_group_target_states`, SYS-01B `au_group_list_pacer_poll_candidates()` (Ch.11 + target state, no LIMIT), SYS-01 gate | Admin-configurable states in Supabase; apply `20260602140000`; push SYS-01B workflow |
 | **AC-1.2** | Form 201 debtor metadata 95%+ | no | `docs/ci/manual/pacer-form201.md` | Parser unit tests + manual 95% sampling |
 | **AC-1.3** | Top 20 in Salesforce within 24h | scheduled | `smoke-e2e.yml` | End-to-end via n8n SYS-01→02→03 |
 | **AC-1.4** | Company vs individual 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
@@ -26,10 +26,11 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-4.5** | Canonical names | partial | `au_group_normalize_company_name` (KD-20) | Trade-name rules KD-24 deferred |
 | **AC-5.1** | Salesforce match 95%+ | no | — | AU_GROUP-5 |
 | **AC-5.2** | Bankruptcy event fields | no | — | n8n SYS-03 + SF |
-| **AC-5.3** | Territory 100% | partial | `au_group_territory_assignments`, `au_group_parse_creditor_state`, SYS-04 **Resolve Territory Rep** | Replace placeholder SF User IDs; push SYS-04 JSON; live OwnerId needs KD-53 |
-| **AC-5.4** | DNC suppression | partial | `au_group_evaluate_outreach_gates`, SYS-04→SYS-05 Execute | SF `Do_Not_Contact__c` on handoff |
-| **AC-5.5** | Active engagement gate | partial | same + SYS-05 Set-only gates | SF opp/activity queries on SYS-04 |
-| **AC-5.6** | T+1 outreach | scheduled | `smoke-e2e.yml` | Timing verified in prod ops |
+| **AC-5.3** | Territory 100% | partial | `au_group_territory_assignments`, SYS-04 **RPC Resolve Territory Rep** + OwnerId on create/update | Replace placeholder SF User IDs; KD-53 |
+| **AC-5.4** | DNC suppression | partial | SYS-04 `SF Get Account DNC` + `suppress`; `Outreach Eligible?` blocks SYS-05; SYS-05 `au_group_evaluate_outreach_gates` | Rep notification still manual |
+| **AC-5.5** | Active engagement gate | partial | SYS-04 opp/Task 90d → `outreach_eligible` false; `Outreach Eligible?` before SYS-05 | FR-5.7 PATCH Account fields |
+| **AC-5.6** | T+1 outreach | partial | SYS-05 Schedule Trigger 09:00 ET + `smoke-e2e.yml` | SYS-05 `Check Gates` graph; SalesLoft guards |
+| **AC-5.7** | SF recency → email template | partial | SYS-04 `Apply Outreach Gates` + `Email_Template_Recommendation__c` PATCH | FR-5.7; AU_GROUP-5.1 fields |
 | **AC-6.2** | Exposure on SF account | partial | `creditor_exposure_summary`, SYS-08 | Keith Excel column map; SF field sync |
 | **AC-6.3** | Repeat-exposure threshold | partial | `au_group_check_repeat_exposure` RPC | Wire RPC in SYS-05 when creditor_id on handoff |
 | **AC-6.4** | Low-value geography flag | no | — | Phase 2 |

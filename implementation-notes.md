@@ -215,7 +215,7 @@
 ## SYS-01B PACER Nightly Poll workflow JSON (2026-05-24)
 
 - **Deliverables:** `workflows/pulled/au-group-sys-01b-pacer-nightly-poll.json` (orchestrator), cleaned `au-group-sys-00-get-docket.json` (sub-flow only), `docs/workflows/sys-01b-pacer-nightly-poll.md`.
-- **Design:** 02:00 ET cron → cap cases → `pacer_poll` acquire → Execute `5WG5YykOvLYxCOFN` (SYS-00) → `au_group_upsert_docket_entries` → `last_docket_check_at` → job complete/fail. No SYS-02/03/04.
+- **Design:** 02:00 ET cron → load **all** Ch.11 poll candidates (target-state filter, no row cap) → `pacer_poll` acquire → Execute `5WG5YykOvLYxCOFN` (SYS-00) → `au_group_upsert_docket_entries` → `last_docket_check_at` → job complete/fail. Handoff to SYS-02 when docket has parse URL.
 - **Migration:** `20260524120000_au_group_upsert_docket_entries_rpc.sql` — `au_group_upsert_docket_entries(p_bankruptcy_id, p_entries)` applied to Supabase `umivttszdnsrosbqryia` (2026-05-25). PGRST202 before apply = RPC missing on remote, not n8n body shape.
 
 ## SYS-06 ↔ SYS-07 linkage fix (2026-05-23)
@@ -293,7 +293,7 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 **Deploy**
 
 - Push pulled JSON to n8n cloud: SYS-01B `3qtDRBJtKrFUXqhH`, SYS-01, SYS-04 `YWmFi1GkJqJMB8bJ`.
-- n8n env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, optional `SYS01B_MAX_CASES_PER_RUN`.
+- n8n env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (no batch cap env — FR-1.1 requires all filtered cases per run).
 
 ## Creditor name junk filter (2026-05-27)
 
@@ -409,6 +409,19 @@ After that, `supabase db push` should be a no-op for KD-20. Prefer **Supabase MC
 - **Keith ops (no code):** UPDATE `au_group_territory_assignments` SF user IDs; seed `au_group_suppression_*`; adjust tier/title tables as needed.
 - **Still deferred:** SYS-06/07 production PACER favorites; ZoomInfo contact API shape may need tweak after KD-53 live test.
 
+## SYS-04 vibe-test fixes (2026-05-28)
+
+- **Workflow:** `workflows/pulled/au-group-sys-04-salesforce-push.json` → cloud `YWmFi1GkJqJMB8bJ` PUT 200.
+- **FR-5.1:** SF search uses `normalized_name` + `BillingState`; `Parse SF Search` picks match by state/street or returns null (create new).
+- **FR-5.4/5.5:** `suppress` = DNC + open opp + activity 90d only (prior bankruptcy no longer blocks outreach in SYS-04).
+- **FR-5.6:** `outreach_eligible` derived from gates + `dry_run` (removed hardcoded `false`).
+- **FR-5.3:** `territory_rep` from `Combine Territory Output`; `OwnerId` on Account update.
+- **Migration:** `20260602120000_sys04_list_creditors_normalized_name.sql` — RPC returns `normalized_name`.
+- **Spec:** `docs/workflows/sys-04-salesforce-push.md`.
+- **Still manual:** KD-53 SF creds, real territory User IDs, AU_GROUP-5.1 custom objects.
+- **Wiring fix (2026-05-28):** `Apply Outreach Gates` → `Is DNC?` → `Flag Suppressed` | `Execute SYS-05`; `Merge Loop + SF Map` → `Set Territory State` → `Valid Territory State?` → RPC/skip → `Combine Territory Output`; `Needs SF Recommendation?` → `Set Recommendation Fields` → `Record Loop Outcome`.
+- **Vibe-test patch (2026-05-28):** `scripts/n8n/patch-sys04-vibetest-fixes.py` — `Parse SF Search` → `Ambiguous SF Match?` (EC-3.1) → `Flag Ambiguous SF Match` | `SF Account Found?` (`sf_matched_id` required); territory + service_role on `RPC Resolve Territory Rep`. Cloud PUT 200.
+
 ## Client no-Code compliance — full plan (2026-05-28)
 
 - **Runbook:** `docs/workflows/client-ops-runbook.md` (Keith-editable tables + do-not-touch list).
@@ -418,3 +431,34 @@ After that, `supabase db push` should be a no-op for KD-20. Prefer **Supabase MC
 - **SYS-02 cloud ID:** Active workflow is `7IjPc44k9YaCrmXM` (archived copy `qwVPSlI3L1RMsw9V` — do not PUT).
 - **Parser:** `app/core/runtime_config.py` overlays `creditor_dedup_*` and junk thresholds from `au_group_runtime_config` when Supabase creds set.
 - **Keith UAT (manual):** territory IDs, suppression seed, KD-53 creds; then activate SYS-06/07 after PACER favorites smoke (`docs/ci/manual/` AC-2.4).
+
+## SYS-01 RSS — volume + large item optimization (2026-05-28)
+
+- **Large HTML:** `au_group_normalize_rss_item` caps HTML at 32KB / cleaned text 12KB (`20260601200000_rss_normalize_per_item.sql`).
+- **High row count:** Per-item HTTP caused timeouts when 5 courts × many entries. **Fix:** `Within RSS Cap?` (`$itemIndex < RSS_MAX_ITEMS_PER_RUN`, default 200) → `RSS Normalize Batches` (Split In Batches, default 20) → `RPC Normalize RSS Batch` (`au_group_normalize_rss_items` on `$input.all()` in batch only) → `Split RSS Results` → `Has Signal Score?`. Loop: RPC → back to `RSS Normalize Batches`.
+- **Config:** `au_group_runtime_config` keys `rss_max_items_per_run`, `rss_normalize_batch_size`; n8n env `RSS_MAX_ITEMS_PER_RUN`, `RSS_NORMALIZE_BATCH_SIZE` (optional override).
+
+## SYS-01 RSS — redesign aligned to project (2026-05-28)
+
+- **Spec:** `docs/workflows/sys-01-rss-intelligence.md` (lanes, ADR-001 scope, KD-14, SYS-02 handoff contract).
+- **Flow:** Bulk normalize (RPC batch) → `Has Signal Score?` → `Is Qualified?` → **`Chapter 11 Filing?`** (FR-1.1 partial on RSS) → `Loop Over Items` (**batchSize 1**) → KD-14 gate → dedup/persist → **`Has Document URL?`** → **`Set Prepare SYS-02 Handoff`** → `Queue Document Parse` (`7IjPc44k9YaCrmXM`).
+- **Renames:** `If`/`If2`/`If1` → descriptive IF node names; sticky notes updated (no “Code in JavaScript”).
+- **Handoff:** Explicit `bankruptcy_id`, `schedule_f_queue_id`, `job_payload.documents[]` for SYS-02; skip parse when no `document_url` (still insert monitoring queue).
+- **Deployed:** n8n cloud `pVPVaIbUixU95f43` PUT 200 (2026-05-28).
+- **Wiring fix (2026-05-28):** Removed `RPC → RSS Normalize Batches` parallel fan-out; `Split → Loop Over Items`; filters inside loop; `Loop` done → next batch. Prevents batch N+1 racing per-case processing.
+- **Loop output fix (2026-05-28):** n8n v3 `SplitInBatchesV3` source: `outputNames: ['done','loop']` → **main[0]=done**, **main[1]=loop**. `RSS Normalize Batches` [1]→RPC; `Loop` [1]→qualify; `Loop` [0]→next batch. `reset: true` on both batch nodes.
+- **Tests:** `scripts/supabase/test-rss-normalize.sql` (RPC assertions); parser coverage `test_runtime_config.py`, `test_company_name_normalize.py`, extended `test_readiness.py` (78% line cov, CI floor 60%).
+
+## PRD alignment remediation (2026-05-28)
+
+- **FR-5.7:** Added to `docs/project/prd.md` — SF recency → `generic` | `custom` email template on Account.
+- **Gate policy (reconciles FR-6.3 vs 2026-05-28 note):** Prior bankruptcy on Account → `email_template_recommendation=custom` in SYS-04; auto-suppress only when `outreach_eligible` false (DNC, engagement, dry_run). Repeat-exposure threshold suppress remains in SYS-05 `au_group_evaluate_outreach_gates`.
+- **SYS-04:** `Is DNC?` replaced by `Outreach Eligible?` on `outreach_eligible`; `normalized_name` on `Prepare Creditor Context`; PATCH recommendation before suppress path.
+- **SYS-05:** `RPC Evaluate Outreach Gates` → `Check Gates` → `Unwrap Gate Fields` (removed orphan `Merge Gate Result` connection); T+1 schedule trigger added.
+- **SYS-01B:** Handoff to SYS-02 `7IjPc44k9YaCrmXM` when poll row has `document_url` (mirrors SYS-01).
+- **Wave 2 (manual):** KD-53 creds, AU_GROUP-5.1 SF fields, territory User IDs — enable `SF *` nodes in n8n after creds attached.
+- **Pushed (2026-05-28):** `python3 scripts/n8n/push-workflows.py sys04 sys05 sys01b` → PUT 200 for `YWmFi1GkJqJMB8bJ`, `SWES563HTLR2t9Gv`, `3qtDRBJtKrFUXqhH`.
+- **Scripts:** `patch-sys04-prd-alignment.py`, `patch-sys05-prd-alignment.py`, `patch-sys01b-prd-alignment.py`, `validate-workflow-connections.py`, `push-workflows.py`.
+- **Migration:** `20260602130000_sys01b_parse_handoff_rpc.sql`.
+- **SYS-01B poll scope (2026-05-28):** Dropped `p_limit` / `sys01b_max_cases_per_run` — FR-1.1 requires all Ch.11 cases in target states per nightly run. Migration `20260602140000_sys01b_poll_candidates_all_filtered.sql`; n8n `Load Poll Candidates` body `{}`.
+- **Activation:** [docs/workflows/production-activation-checklist.md](docs/workflows/production-activation-checklist.md).

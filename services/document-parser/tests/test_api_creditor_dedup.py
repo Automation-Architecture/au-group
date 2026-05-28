@@ -228,6 +228,11 @@ class TestParseDocumentCreditorDedup:
     ) -> None:
         monkeypatch.setenv("CREDITOR_DEDUP_ENABLED", "false")
         get_settings.cache_clear()
+        monkeypatch.setattr(
+            "app.core.runtime_config.apply_runtime_config",
+            lambda s: s.model_copy(update={"creditor_dedup_enabled": False}),
+        )
+        get_settings.cache_clear()
         FakeSupabaseClient._documents.clear()
 
         response = client.post(
