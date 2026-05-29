@@ -64,6 +64,16 @@ python3 scripts/ci/vbsec_ci_scan.py --scope all --fail-on critical
 
 vbsec is the **pattern + Bandit** layer. **CodeQL** (dataflow SAST) and **Trivy** (container image) run in parallel on every PR — see [`security-layers.md`](security-layers.md).
 
+## Supabase RPC ACL (Postgres)
+
+After applying migrations, run:
+
+```bash
+psql "$DATABASE_URL" -f scripts/supabase/verify-rpc-acl.sql
+```
+
+Fails if any `public.au_group_*` function is executable by `public`, `anon`, or `authenticated`.
+
 ## Related
 
 - [`security-layers.md`](security-layers.md) — full stack (vbsec, CodeQL, Trivy, pip-audit)

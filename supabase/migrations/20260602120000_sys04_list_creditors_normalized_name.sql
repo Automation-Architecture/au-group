@@ -39,6 +39,7 @@ comment on function public.au_group_list_company_creditors is
   'SYS-04: company creditors with normalized_name + creditor_state for SF match (FR-5.1).';
 
 grant execute on function public.au_group_list_company_creditors(uuid) to service_role;
+revoke execute on function public.au_group_list_company_creditors(uuid) from public;
 
 drop function if exists public.au_group_count_company_creditors(uuid);
 
@@ -59,3 +60,4 @@ as $$
 $$;
 
 grant execute on function public.au_group_count_company_creditors(uuid) to service_role;
+revoke execute on function public.au_group_count_company_creditors(uuid) from public;

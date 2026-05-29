@@ -270,5 +270,10 @@ end;
 $$;
 
 grant execute on function public.au_group_build_lookup_context(jsonb, jsonb) to service_role;
+revoke execute on function public.au_group_build_lookup_context(jsonb, jsonb) from public;
+
 grant execute on function public.au_group_normalize_zoominfo_company_response(jsonb, jsonb, integer) to service_role;
+revoke execute on function public.au_group_normalize_zoominfo_company_response(jsonb, jsonb, integer) from public;
+
 grant execute on function public.au_group_normalize_zoominfo_contact_response(jsonb, jsonb, integer) to service_role;
+revoke execute on function public.au_group_normalize_zoominfo_contact_response(jsonb, jsonb, integer) from public;

@@ -31,6 +31,9 @@ $$;
 comment on function public.au_group_list_company_creditors is
   'SYS-03/04: company creditors; junk + suppression filters via config tables';
 
+grant execute on function public.au_group_list_company_creditors(uuid) to service_role;
+revoke execute on function public.au_group_list_company_creditors(uuid) from public;
+
 create or replace function public.au_group_count_company_creditors(p_bankruptcy_id uuid)
 returns bigint
 language sql
@@ -46,3 +49,6 @@ as $$
     and not public.au_group_is_junk_creditor_name(c.name)
     and not public.au_group_is_suppressed_creditor_name(c.name);
 $$;
+
+grant execute on function public.au_group_count_company_creditors(uuid) to service_role;
+revoke execute on function public.au_group_count_company_creditors(uuid) from public;

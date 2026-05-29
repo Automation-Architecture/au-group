@@ -190,6 +190,9 @@ begin
 end;
 $$;
 
+grant execute on function public.au_group_creditor_pipeline_status(uuid) to service_role;
+revoke execute on function public.au_group_creditor_pipeline_status(uuid) from public;
+
 create or replace function public.au_group_set_creditor_zoominfo_company_id(
   p_creditor_id uuid,
   p_company_id text

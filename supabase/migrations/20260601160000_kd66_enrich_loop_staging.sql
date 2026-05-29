@@ -121,4 +121,7 @@ end;
 $$;
 
 grant execute on function public.au_group_enrich_loop_push(uuid, uuid, jsonb) to service_role;
+revoke execute on function public.au_group_enrich_loop_push(uuid, uuid, jsonb) from public;
+
 grant execute on function public.au_group_enrich_loop_finalize(uuid, uuid, uuid) to service_role;
+revoke execute on function public.au_group_enrich_loop_finalize(uuid, uuid, uuid) from public;

@@ -112,4 +112,7 @@ as $$
 $$;
 
 grant execute on function public.au_group_normalize_rss_item(jsonb) to service_role;
+revoke execute on function public.au_group_normalize_rss_item(jsonb) from public;
+
 grant execute on function public.au_group_normalize_rss_items(jsonb) to service_role;
+revoke execute on function public.au_group_normalize_rss_items(jsonb) from public;

@@ -54,6 +54,8 @@ begin
 end;
 $$;
 
+revoke execute on function public.au_group_audit_config_change() from public;
+
 drop trigger if exists au_group_target_states_audit on public.au_group_target_states;
 create trigger au_group_target_states_audit
   after insert or update or delete on public.au_group_target_states
@@ -76,6 +78,7 @@ comment on function public.au_group_list_target_states is
   'KD-14: active target states for PACER intake and poll filtering';
 
 grant execute on function public.au_group_list_target_states () to service_role;
+revoke execute on function public.au_group_list_target_states () from public;
 
 create or replace function public.au_group_is_target_state(p_state text)
 returns boolean
@@ -96,6 +99,7 @@ comment on function public.au_group_is_target_state is
   'KD-14: true when state is in active target list';
 
 grant execute on function public.au_group_is_target_state (text) to service_role;
+revoke execute on function public.au_group_is_target_state (text) from public;
 
 create or replace function public.au_group_list_pacer_poll_candidates(p_limit int default 20)
 returns setof public.bankruptcies

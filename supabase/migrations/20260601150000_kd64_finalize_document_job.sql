@@ -73,3 +73,4 @@ end;
 $$;
 
 grant execute on function public.au_group_finalize_document_job(uuid, uuid, uuid) to service_role;
+revoke execute on function public.au_group_finalize_document_job(uuid, uuid, uuid) from public;

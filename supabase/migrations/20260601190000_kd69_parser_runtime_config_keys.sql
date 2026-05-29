@@ -30,3 +30,4 @@ as $$
 $$;
 
 grant execute on function public.au_group_config_bool(text, boolean) to service_role;
+revoke execute on function public.au_group_config_bool(text, boolean) from public;

@@ -59,7 +59,10 @@ def normalize_company_name(
 
 
 def build_company_lookup_cache_key(name: str, address: str | None = None) -> str:
-    """MD5 key aligned with au_group_company_lookup_cache_key (name|address)."""
+    """MD5 key aligned with au_group_company_lookup_cache_key (name|address).
+
+    Postgres function is STABLE (rules table); keys can change when DB rules change.
+    """
     norm_name = normalize_company_name(name)
     norm_addr = _WS_RE.sub(" ", (address or "").upper().strip())
     payload = f"{norm_name}|{norm_addr}"

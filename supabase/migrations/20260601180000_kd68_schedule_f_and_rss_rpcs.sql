@@ -152,8 +152,13 @@ end;
 $$;
 
 grant execute on function public.au_group_schedule_f_keyword_hit(text) to service_role;
+revoke execute on function public.au_group_schedule_f_keyword_hit(text) from public;
+
 grant execute on function public.au_group_diff_pacer_favorites(jsonb, uuid[]) to service_role;
+revoke execute on function public.au_group_diff_pacer_favorites(jsonb, uuid[]) from public;
+
 grant execute on function public.au_group_normalize_rss_items(jsonb) to service_role;
+revoke execute on function public.au_group_normalize_rss_items(jsonb) from public;
 
 create or replace function public.au_group_expand_import_rows(p_body jsonb)
 returns jsonb
@@ -174,3 +179,4 @@ end;
 $$;
 
 grant execute on function public.au_group_expand_import_rows(jsonb) to service_role;
+revoke execute on function public.au_group_expand_import_rows(jsonb) from public;
