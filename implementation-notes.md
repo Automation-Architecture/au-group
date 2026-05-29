@@ -155,8 +155,29 @@
 - **Deployed:** `scripts/n8n/patch-sys03-workflow.mjs --push` — single Code node `ZoomInfo Enrich Company` (company search → tier from firmographics → contact search with tier 1→2→3 fallback).
 - **Wiring fixes:** `Loop Creditors` done → `Aggregate Enrichment`; all per-creditor branches loop back; `Prepare SYS-04 Input` → `Execute SYS-04`; removed broken `Edit Fields` nodes; Complete/Pipeline nodes use `$json.*` not `Skip No Creditors` refs.
 - **Summary metrics:** per-creditor dedupe in aggregate; added `zoominfo_company_matched`, `no_contact_found`, `errors`.
-- **Not in this pass:** ZoomInfo Redis cache (NFR-8.2), YAML/DB-configurable tier rules, 429 batching, production credential validation on contact search endpoint shape.
+- **Not in this pass:** ZoomInfo Redis cache (NFR-8.2), ~~YAML/DB-configurable tier rules~~, 429 batching, production credential validation on contact search endpoint shape.
 - **Aggregate fix (2026-05-23):** `$('Skip Individual').all()` throws when that branch never ran (all companies). **Final fix:** loop-end nodes push to `$getWorkflowStaticData('global').enrichResults`; Aggregate reads static data only (no cross-node `.all()`). Reset array in `Attach Job Context`. Prune duplicate canvas copies (`*1` node names). Fix wrong refs like `Merge Bankruptcy Context1`.
+
+## KD-21 — Tier-based targeting rule engine (2026-06-02)
+
+- **Ticket:** KD-21 / FR-4.2 / T3.2 — configurable Enterprise / Mid-Market / SMB tier assignment + title mappings.
+- **Migration:** `supabase/migrations/20260602170000_au_group_tier_targeting_rules.sql`
+  - Tables: `au_group_company_tiers` (`label`, thresholds), `au_group_tier_contact_titles` (`title_pattern`, `sort_order`)
+  - RPCs: `au_group_classify_company_tier`, `au_group_list_tier_contact_titles`, `au_group_get_tier_targeting_config`, `au_group_set_creditor_company_tier`
+  - Column: `creditors.company_tier`, `creditors.company_tier_assigned_at`
+- **Tests:** `scripts/supabase/smoke_tier_classification.sql` (20 embedded cases, ≥95% in CI; null/invalid RPC paths)
+- **Scope trim:** SYS-01 RSS regex migration removed from this branch (not FR-4.2); ship separately if needed.
+- **ACL:** `20260602180000_security_rpc_acl_reapply.sql` + `20260602180200_kd21_security_hardening.sql` (RLS deny, scoped set_creditor, ACL reapply).
+- **n8n security:** helpers require Config `project_url`; fail closed on classify/persist errors; optional `bankruptcy_id` scope on persist.
+- **SYS-03 deploy:** `node scripts/n8n/patch-sys03-tier-rules.mjs --push` on `j26cimQ4S7kN67IP`
+  - Injects `scripts/n8n/lib/sys03-tier-rpc-helpers.js` into `ZoomInfo Enrich Company` Code node
+  - Replaces hardcoded `TIER_TITLES` / `classifyTier` with Supabase RPC calls
+  - HTTP-node alternative: `workflows/pulled/sys-03-tier-rules-snippet.json`
+- **Docs:** `docs/workflows/sys-03-tier-targeting.md`
+- **NFR-7.1 edit path:** Supabase Table Editor → `au_group_company_tiers` (`label`, thresholds) / `au_group_tier_contact_titles` (`title_pattern`); no workflow redeploy needed for title/threshold tweaks.
+- **Remote smoke (2026-06-02):** `au_group_classify_company_tier(100000000, null)` → tier 2 `mid_market`; golden fixture 20/20 = 100% on `umivttszdnsrosbqryia`.
+- **SYS-03 push:** requires `N8N_API_KEY` — run `node scripts/n8n/patch-sys03-tier-rules.mjs --push` after migration lands.
+- **Still KD-23:** full fallback polish + `no_contact_found` flag semantics (basic 1→2→3 loop remains in Code node using `tier_titles_map` from RPCs).
 
 ## SYS-04 Salesforce — no `$env` secrets (2026-05-23)
 

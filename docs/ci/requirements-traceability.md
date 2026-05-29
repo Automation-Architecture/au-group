@@ -20,7 +20,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-3.4** | Page classification 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
 | **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest; `ci-supabase` → SQL smoke | `tests/test_deduplicate_creditors.py`, `tests/test_api_creditor_dedup.py`, `app/dedup/creditors.py`; `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` |
 | **AC-4.1** | ZoomInfo 80%+ match | no | — | AU_GROUP-4; integration tests later |
-| **AC-4.2** | Tier identification 95%+ | no | — | n8n SYS-03 |
+| **AC-4.2** | Tier identification 95%+ | partial | `ci-supabase` → `smoke_tier_classification.sql` | SQL smoke on `au_group_classify_company_tier` (synthetic fixtures); SYS-03 n8n + ZoomInfo 95% sampling still manual |
 | **AC-4.3** | Contacts 80%+ | no | — | n8n SYS-03 |
 | **AC-4.4** | Fallback logic | no | — | n8n SYS-03 |
 | **AC-4.5** | Canonical names | no | — | n8n SYS-03 |

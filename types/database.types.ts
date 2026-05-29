@@ -368,6 +368,8 @@ export type Database = {
           address: string | null
           claim_amount: number | null
           claim_date: string | null
+          company_tier: number | null
+          company_tier_assigned_at: string | null
           confidence_score: number | null
           created_at: string
           dedup_audit: Json | null
@@ -387,6 +389,8 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          company_tier?: number | null
+          company_tier_assigned_at?: string | null
           confidence_score?: number | null
           created_at?: string
           dedup_audit?: Json | null
@@ -406,6 +410,8 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          company_tier?: number | null
+          company_tier_assigned_at?: string | null
           confidence_score?: number | null
           created_at?: string
           dedup_audit?: Json | null
@@ -1086,8 +1092,23 @@ export type Database = {
       }
     }
     Functions: {
+      au_group_classify_company_tier: {
+        Args: { p_employees?: number; p_revenue?: number }
+        Returns: {
+          matched_on: string
+          min_employees: number
+          min_revenue: number
+          tier: number
+          tier_name: string
+        }[]
+      }
+      au_group_get_tier_targeting_config: { Args: never; Returns: Json }
       au_group_jsonb_midpoint_count: { Args: { range: Json }; Returns: number }
       au_group_jsonb_midpoint_usd: { Args: { range: Json }; Returns: number }
+      au_group_list_tier_contact_titles: {
+        Args: { p_tier: number }
+        Returns: { sort_order: number; title: string }[]
+      }
       au_group_merge_creditor_matrix: {
         Args: {
           p_bankruptcy_id: string
@@ -1111,6 +1132,14 @@ export type Database = {
           p_state?: string
         }
         Returns: string
+      }
+      au_group_set_creditor_company_tier: {
+        Args: {
+          p_bankruptcy_id?: string
+          p_creditor_id: string
+          p_tier: number
+        }
+        Returns: boolean
       }
     }
     Enums: {

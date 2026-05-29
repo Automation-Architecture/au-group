@@ -33,7 +33,8 @@ DECLARE
     'zoom_info_contacts', 'salesforce_accounts', 'processing_jobs',
     'schedule_f_queue', 'pipeline_executions',
     'documents', 'document_parse_results', 'form201_extractions', 'creditor_matrix_extractions',
-    'creditor_matrix_rows', 'manual_review_queue'
+    'creditor_matrix_rows', 'manual_review_queue',
+    'au_group_company_tiers', 'au_group_tier_contact_titles', 'au_group_config_audit'
   ];
 BEGIN
   FOREACH t IN ARRAY rls_tables LOOP
@@ -57,7 +58,8 @@ DECLARE
   missing text[] := ARRAY[]::text[];
   policy_tables text[] := ARRAY[
     'documents', 'document_parse_results', 'form201_extractions', 'creditor_matrix_extractions',
-    'creditor_matrix_rows', 'manual_review_queue'
+    'creditor_matrix_rows', 'manual_review_queue',
+    'au_group_company_tiers', 'au_group_tier_contact_titles', 'au_group_config_audit'
   ];
   pol_count int;
 BEGIN
