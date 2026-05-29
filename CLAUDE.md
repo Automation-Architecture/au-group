@@ -8,15 +8,17 @@ AI-powered lead-gen from federal bankruptcy filings. PACER → Schedule F parse 
 
 ## Commands (document-parser)
 
-The one runnable service lives in `services/document-parser/`. No Docker — Railway builds it with Nixpacks (`nixpacks.toml` installs Tesseract + Poppler for OCR). Run from that directory:
+The one runnable service lives in `services/document-parser/`. Run from that directory:
 
 ```bash
-pip install -r requirements.txt                       # + requirements-dev.txt for tests/lint
-uvicorn app.main:app --host 0.0.0.0 --port $PORT       # start (use $PORT, not ${PORT:-8001} — see gotcha below)
-pytest tests/ --ignore=tests/integration -q            # unit tests
-pytest tests/integration/ -m integration -v            # live tests (needs .env, S3, Supabase)
-ruff check .                                            # lint
+./scripts/dev.sh                                         # local dev: venv + deps + uvicorn --reload on PORT (default 8001)
+pip install -r requirements.txt -r requirements-dev.txt  # one-off setup if running pytest/ruff outside dev.sh
+pytest tests/ --ignore=tests/integration -q              # unit tests
+pytest tests/integration/ -m integration -v              # live tests (needs .env, S3, Supabase)
+ruff check .                                             # lint
 ```
+
+**Deploy:** Railway builds with **Nixpacks** (`nixpacks.toml` installs Tesseract + Poppler for OCR and sets `PORT` automatically); production start command is `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (`$PORT` only works where it's set — locally use `./scripts/dev.sh`). A `Dockerfile` also exists for the alternate EC2 path (`scripts/deploy.sh`, `deploy-parser-ec2.yml`).
 
 ## Repo conventions
 
