@@ -29,6 +29,19 @@
 - `processing_jobs`, `document_parse_results`, `au_group_enrich_loop_staging` (operational scratch)
 - Workflow JSON in this repo
 
+## Do-not-drop tables (AAA / engineers)
+
+These overlap canonical tables but are required by the running pipeline — do not drop without a parser + n8n refactor.
+
+| Layer | Tables | Why keep |
+|-------|--------|----------|
+| Parser staging | `form201_extractions`, `creditor_matrix_extractions`, `creditor_matrix_rows` | Idempotent re-parse; parser deletes by `document_id` (`services/document-parser/app/persistence/supabase.py`) |
+| Orchestration | `processing_jobs`, `document_parse_results` | SYS-02 job barrier; KD-64 `au_group_finalize_document_job` aggregates per-doc results |
+| Intake dedup | `bankruptcy_rss_events` | SYS-01 RSS event dedup (`20260528140329`); n8n upserts by `unique_key` |
+| SF dedup map | `salesforce_accounts` | SYS-04 load/upsert map after push (`au_group_upsert_salesforce_account`) |
+| Ops trace | `pipeline_executions` | Daily summary RPC failed-execution counts |
+
+**Removed (out of MVP scope):** `historical_import_batches`, `creditor_exposure_summary` — dropped KD-71 (`20260602150000`); exposure SoT is Salesforce (FR-6.2).
 ## AAA prerequisites (blocking production)
 
 | Task | Owner | Ticket |

@@ -31,8 +31,8 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-5.5** | Active engagement gate | partial | SYS-04 opp/Task 90d → `outreach_eligible` false; `Outreach Eligible?` before SYS-05 | FR-5.7 PATCH Account fields |
 | **AC-5.6** | T+1 outreach | partial | SYS-05 Schedule Trigger 09:00 ET + `smoke-e2e.yml` | SYS-05 `Check Gates` graph; SalesLoft guards |
 | **AC-5.7** | SF recency → email template | partial | SYS-04 `Apply Outreach Gates` + `Email_Template_Recommendation__c` PATCH | FR-5.7; AU_GROUP-5.1 fields |
-| **AC-6.2** | Exposure on SF account | partial | `creditor_exposure_summary`, SYS-08 | Keith Excel column map; SF field sync |
-| **AC-6.3** | Repeat-exposure threshold | partial | `au_group_check_repeat_exposure` RPC | Wire RPC in SYS-05 when creditor_id on handoff |
+| **AC-6.2** | Exposure on SF account | deferred | Salesforce Account / `Bankruptcy_Event__c` | Primary SoT per PRD FR-6.2; Supabase exposure cache removed (KD-71) |
+| **AC-6.3** | Repeat-exposure threshold | partial | `au_group_evaluate_outreach_gates` → `au_group_check_repeat_exposure` (`20260601130000`) | Uses `bankruptcy_creditors`; wire full SYS-05 handoff when creditor_id available |
 | **AC-6.4** | Low-value geography flag | no | — | Phase 2 |
 | **NFR-1.1** | Processing latency / 8 AM | scheduled | `smoke-e2e.yml` cron (strict) | Not PR-blocking |
 | **NFR-1.2** | Throughput (50+ filings/day) | no | — | Load test / prod metrics |
