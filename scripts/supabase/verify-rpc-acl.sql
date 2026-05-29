@@ -47,7 +47,7 @@ begin
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
-    and p.proname = 'au_group_merge_creditor_matrix'
+    and p.proname like 'au_group\_%'
     and not has_function_privilege('service_role', p.oid, 'EXECUTE');
 
   if v_missing is not null then

@@ -46,7 +46,8 @@ begin
           'duplicate_count', 1
         )
       )
-    )
+    ),
+    null::numeric
   );
 
   perform public.au_group_merge_creditor_matrix(
@@ -65,7 +66,8 @@ begin
           'duplicate_count', 1
         )
       )
-    )
+    ),
+    null::numeric
   );
 
   select count(*), max(c.claim_amount), max(c.dedup_audit)
@@ -91,13 +93,13 @@ begin
     raise exception 'smoke failed: expected 2 source_line_numbers, got %', v_lines;
   end if;
 
-  if not (v_lines @> '1'::jsonb and v_lines @> '2'::jsonb) then
+  if not (v_lines @> '[1]'::jsonb and v_lines @> '[2]'::jsonb) then
     raise exception 'smoke failed: source_line_numbers missing 1 or 2: %', v_lines;
   end if;
 
   if v_audit -> 'merged_names' is null
-     or jsonb_array_length(v_audit -> 'merged_names') < 1 then
-    raise exception 'smoke failed: merged_names empty: %', v_audit -> 'merged_names';
+     or not (v_audit -> 'merged_names' @> '"Smoke Test Creditor LLC"'::jsonb) then
+    raise exception 'smoke failed: merged_names missing canonical name: %', v_audit -> 'merged_names';
   end if;
 
   select c.id

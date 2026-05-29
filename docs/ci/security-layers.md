@@ -44,7 +44,7 @@ psql "$DB_URL" -f scripts/supabase/verify-rpc-acl.sql
 
 `au_group_*` functions must be **service_role** only (no `anon` / `authenticated` execute). Migration: `20260602150600_security_rpc_acl_service_role_only.sql`.
 
-KD-40 merge smoke: `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` (runs in `ci-supabase.yml`).
+KD-40 merge smoke: `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` (runs in `ci-supabase.yml`). Requires `20260602150700` (drops legacy `(uuid, jsonb)` overload).
 
 ## Related
 
