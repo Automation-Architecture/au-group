@@ -272,10 +272,12 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 
 **KD-14 target states**
 
-- Migrations: `20260528100000_au_group_target_states.sql` — table + `au_group_list_target_states`, `au_group_is_target_state`, `au_group_list_pacer_poll_candidates`, `au_group_config_audit`.
+- Migrations: `20260528100000_au_group_target_states.sql` — table + RPCs; `20260602150800_au_group_target_states_n8n_override.sql` — `p_states[]` from n8n overrides table when provided.
+- **Source of truth (ops):** n8n Set nodes — SYS-01 **Config supabase** `target_states`; SYS-01B **Config — Target States**. Doc: `docs/workflows/kd14-target-states-n8n.md`. Patch script: `scripts/n8n/patch-target-states-n8n-config.py`.
+- Supabase `au_group_target_states` remains fallback when `p_states` omitted (legacy/audit).
 - Seed: NY, NJ, PA, FL, MI. Applied to remote `umivttszdnsrosbqryia`.
-- **SYS-01B:** `Load Poll Candidates` RPC + `Expand Poll Candidates`; `Config supabase` uses `$env.SUPABASE_URL` only; poll limit from env or `au_group_runtime_config` (no `|| 20` in workflow).
-- **SYS-01 RSS:** Set/IF/HTTP/Merge chain (`Set Normalize Court Id` → court RPC → target-state RPC → `Merge Court Context`) → `Target State Active?`; no Code node for court routing.
+- **SYS-01B:** `Load Poll Candidates` POST `{ p_states }` from **Config — Target States**; `Config supabase` uses `$env.SUPABASE_URL` only; poll limit from env or `au_group_runtime_config` (no `|| 20` in workflow).
+- **SYS-01 RSS:** court RPC → **Set Target State Flags** (in-workflow array check; removed `RPC Is Target State`) → `Combine Court Gate` → `Target State Active?`.
 - **SYS-01B:** `Load Poll Candidates` → `Has Poll Cases` directly (`alwaysOutputData`); removed Expand Code node.
 - **SYS-04:** Territory via Set/IF/HTTP/Merge (same pattern as SYS-00); removed Resolve Territory Rep Code node.
 - **SYS-09:** `Set Slack Message` + Split Out/Set for sheet rows; `Config supabase` uses `$env.SUPABASE_URL` only.
@@ -338,6 +340,7 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **SQL fix (2026-05-29):** ON CONFLICT `dedup_audit` merge used `WHERE ln ~ '^\d+$'` on a SELECT-list alias from `jsonb_array_elements_text` (invalid in PostgreSQL). Fixed to `FROM ... AS elem WHERE elem ~ '^\d+$'`. Forward migration `20260602150500_kd40_merge_creditor_matrix_srf_where_fix.sql` for remote DBs that already have `20260530120000`. Fallback path `v_merged_lines` (lines ~174–191) was already correct.
 - **Vibe-test + security (2026-05-29):** PRD FR-3.5 expanded (persistence targets, `dedup_audit` schema, ON CONFLICT merge, smoke). `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` + `ci-supabase.yml`. RPC ACL: `20260602150600_security_rpc_acl_service_role_only.sql`, `scripts/supabase/verify-rpc-acl.sql`, `scripts/ci/verify-supabase-rpc-acl.sh`; removed `anon`/`authenticated` grant from `20260523140000_au_group_upsert_document_parse_result_rpc.sql`. **Deploy:** apply `20260602150500` + `20260602150600` on remote; confirm n8n uses service_role for Supabase RPC nodes.
 - **Overload fix (2026-05-29):** `20260602150700_drop_merge_creditor_matrix_legacy_overload.sql` drops `(uuid, jsonb)` so two-arg calls resolve to KD-40 `(uuid, jsonb, numeric)`; smoke passes explicit `null::numeric` third arg.
+- **RPC ACL CI (2026-05-29):** `20260602150800` KD-14 target-state RPCs must revoke `anon`/`authenticated` (not only `public`). `20260602150900_security_rpc_acl_reapply.sql` re-runs ACL lockdown last in chain.
 - **n8n:** No workflow change — SYS-02 still calls parser; dedup is server-side.
 - **Deploy:** Apply Supabase migration on remote; redeploy Railway document-parser; KD-36 Schedule E/F extractor can add line numbers using same `source_line_numbers` pattern later.
 - **Remote migration history (2026-05-27):** Schema already live (`source_line_numbers`, `dedup_audit`, merge RPC). MCP applied as `20260527082541_kd40_creditor_dedup_audit`; repo file is `20260530120000_kd40_creditor_dedup_audit.sql`. Repaired remote `schema_migrations` with version `20260530120000` so `supabase db push` does not re-apply DDL. Prefer **Supabase MCP `apply_migration`** when CLI `db push` hangs (no `.supabase` link / interactive password).

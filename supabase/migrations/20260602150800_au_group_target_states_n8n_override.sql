@@ -25,8 +25,10 @@ $$;
 comment on function public.au_group_active_target_states is
   'KD-14: active target state codes; p_states from n8n overrides au_group_target_states table';
 
+revoke all on function public.au_group_active_target_states (text[]) from public;
+revoke all on function public.au_group_active_target_states (text[]) from anon;
+revoke all on function public.au_group_active_target_states (text[]) from authenticated;
 grant execute on function public.au_group_active_target_states (text[]) to service_role;
-revoke execute on function public.au_group_active_target_states (text[]) from public;
 
 drop function if exists public.au_group_is_target_state(text);
 
@@ -50,8 +52,10 @@ $$;
 comment on function public.au_group_is_target_state is
   'KD-14: true when state is active; pass p_states from n8n Config — Target States to skip table lookup';
 
+revoke all on function public.au_group_is_target_state (text, text[]) from public;
+revoke all on function public.au_group_is_target_state (text, text[]) from anon;
+revoke all on function public.au_group_is_target_state (text, text[]) from authenticated;
 grant execute on function public.au_group_is_target_state (text, text[]) to service_role;
-revoke execute on function public.au_group_is_target_state (text, text[]) from public;
 
 drop function if exists public.au_group_list_pacer_poll_candidates(int);
 
@@ -95,5 +99,7 @@ $$;
 comment on function public.au_group_list_pacer_poll_candidates is
   'SYS-01B: poll candidates in target states; pass p_states from n8n Config — Target States';
 
+revoke all on function public.au_group_list_pacer_poll_candidates (int, text[]) from public;
+revoke all on function public.au_group_list_pacer_poll_candidates (int, text[]) from anon;
+revoke all on function public.au_group_list_pacer_poll_candidates (int, text[]) from authenticated;
 grant execute on function public.au_group_list_pacer_poll_candidates (int, text[]) to service_role;
-revoke execute on function public.au_group_list_pacer_poll_candidates (int, text[]) from public;

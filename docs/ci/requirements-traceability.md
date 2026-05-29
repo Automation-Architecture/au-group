@@ -6,7 +6,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 | ID | Requirement summary | Automated | Workflow / job | Notes |
 |----|---------------------|-----------|----------------|-------|
-| **AC-1.1** | Daily PACER filings by 8 AM | partial | `au_group_target_states`, SYS-01B `au_group_list_pacer_poll_candidates`, SYS-01 gate | Admin-configurable states in Supabase; push workflow JSON to n8n cloud |
+| **AC-1.1** | Daily PACER filings by 8 AM | partial | SYS-01 **Config supabase** `target_states`, SYS-01B **Config — Target States**, `au_group_list_pacer_poll_candidates(p_states)` | Edit states in n8n Set nodes; see `docs/workflows/kd14-target-states-n8n.md` |
 | **AC-1.2** | Form 201 debtor metadata 95%+ | no | `docs/ci/manual/pacer-form201.md` | Parser unit tests + manual 95% sampling |
 | **AC-1.3** | Top 20 in Salesforce within 24h | scheduled | `smoke-e2e.yml` | End-to-end via n8n SYS-01→02→03 |
 | **AC-1.4** | Company vs individual 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
