@@ -70,14 +70,24 @@ begin
     null::numeric
   );
 
-  select count(*), max(c.claim_amount), max(c.dedup_audit)
-  into v_row_count, v_claim, v_audit
+  select count(*)
+  into v_row_count
   from public.creditors c
   where lower(trim(c.name)) = lower(trim('Smoke Test Creditor LLC'))
     and lower(trim(coalesce(c.address, ''))) = lower(trim('1 Test Lane'));
 
   if v_row_count <> 1 then
     raise exception 'smoke failed: expected 1 creditor, got %', v_row_count;
+  end if;
+
+  select c.id, c.claim_amount, c.dedup_audit
+  into v_creditor_id, v_claim, v_audit
+  from public.creditors c
+  where lower(trim(c.name)) = lower(trim('Smoke Test Creditor LLC'))
+    and lower(trim(coalesce(c.address, ''))) = lower(trim('1 Test Lane'));
+
+  if v_creditor_id is null then
+    raise exception 'smoke failed: creditor row not found after merge';
   end if;
 
   if v_claim is distinct from 150 then
@@ -101,13 +111,6 @@ begin
      or not (v_audit -> 'merged_names' @> '"Smoke Test Creditor LLC"'::jsonb) then
     raise exception 'smoke failed: merged_names missing canonical name: %', v_audit -> 'merged_names';
   end if;
-
-  select c.id
-  into v_creditor_id
-  from public.creditors c
-  where lower(trim(c.name)) = lower(trim('Smoke Test Creditor LLC'))
-    and lower(trim(coalesce(c.address, ''))) = lower(trim('1 Test Lane'))
-  limit 1;
 
   delete from public.bankruptcy_creditors where bankruptcy_id = v_bid;
   delete from public.creditors where id = v_creditor_id;
