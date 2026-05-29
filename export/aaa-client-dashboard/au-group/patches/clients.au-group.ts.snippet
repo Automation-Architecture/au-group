@@ -1,19 +1,25 @@
 /**
+ * ⚠️ SUPERSEDED (2026-05-29): au-group is now live in the dashboard via
+ * aaa-client-dashboard `clients.ts` + the data repo. This export is a historical
+ * provisioning artifact — do NOT copy it to (re)provision. Kept in sync with
+ * project.config.yaml for reference only.
+ *
  * Paste into app/src/app/config/clients.ts (or equivalent).
  * Rename / reshape fields to match your existing Client type — this mirrors project.config.yaml.
  */
 export const auGroupClientSnippet = {
   slug: "au-group",
   name: "AU Group — Bankruptcy Creditor Intelligence",
-  clientFirstName: "Keith",
+  clientName: "AU Group", // business name shown on the dashboard hero (contact person is Keith)
   engagementType: "Project · AI Agent",
   description:
     "AU Group — AI-powered lead generation platform that monitors federal bankruptcy filings via PACER, extracts creditors from Schedule F documents, enriches them via ZoomInfo, and pushes qualified leads into Salesforce.",
   apiBaseUrl: "https://au-group.railway.app",
-  stage: "discovery",
+  stage: "build",
+  closedStages: ["discovery"],
   started: "2026-05-13",
   targetLaunch: "2026-09-20",
-  slackContactChannel: "#bankruptcy-intelligence",
+  slackContactChannel: "#client-comms", // dashboard contact form (convention); project channel is #au-group-sprint
   jiraProjectKey: "KD",
   jiraBoardUrl:
     "https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451",
