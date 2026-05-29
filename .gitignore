@@ -24,4 +24,4 @@ n8n-reports/
 __pycache__/
 *.pyc
 .n8n-skills-ref
-/test/n8n
+/test/n8nDashboard/
