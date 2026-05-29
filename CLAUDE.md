@@ -25,11 +25,19 @@ ruff check .                                             # lint
 - **Client meeting transcripts** — raw Fireflies transcripts do **NOT** live in this repo. They live in `~/Documents/aaa/Client Docs/AU Group/Meeting Transcripts/`. Only summary + Fireflies ID + decisions land in `client-comms/transcripts/`. Source of truth: global `references/step-01-read-transcripts.md`. (Violated on PR #7 — Copilot caught it.)
 - **DOCX/PDF deliverables** — write directly to `~/Documents/aaa/Client Docs/AU Group/<project>/`, never to the repo.
 - **Supabase migrations** are timestamp-prefixed (`YYYYMMDDhhmmss_*.sql`). Three identifier prefixes are in use, each with a distinct meaning — don't rename between them: `au_group_*` = lead-gen pipeline tables, `sys02a_*` = document-intelligence schema (SYS-02A), `sys02_*` = SYS-02 v2 per-document parse results (e.g. `..._sys02_document_parse_results.sql`). `sys02_` is **not** a typo for `sys02a_`.
+- **`project.config.yaml`** — `client` is the **business name** ("AU Group"), not the contact's name ("Keith"); `stage` tracks reality (`build`, with `discovery` closed). The `export/aaa-client-dashboard/` tree is a **historical transfer package** — still in-repo and CI-validated, but no longer the source of truth for the live dashboard (that's `clients.ts` + the data repo). Don't copy it to (re)provision; don't assume it's dead/deletable either.
 
 ## Runtime gotchas
 
 - **Railway `startCommand` is NOT bash-parsed.** Use `$PORT`, never `${PORT:-8001}` — the literal string is passed to uvicorn and the service crashes on startup. (Fixed in PR #16.)
 - **Copilot review is required before merge, wired via `.github/workflows/copilot-review.yml`** (requests `Copilot` as a reviewer on each PR; restored in `b0802e7` to fix a hanging status check). If it's ever absent the copilot check hangs and PRs sit BLOCKED — see the stale-review note below.
+
+## Client dashboard
+
+Provisioned at **`https://dashboard.automationarchitecture.ai/client/au-group`**. Its config lives in the `aaa-client-dashboard` repo (`clients.ts`, `slugs.yaml`) + `aaa-client-dashboard-data` (`sync` branch) — **not here**; don't look for it in this repo. Stage tracker (Postgres) + GitHub-activity sync drive it.
+
+- **Jira sprint sync is OFF for au-group** (`sync.jira: false` in `slugs.yaml`). **KD is a team-managed Kanban board with no sprints** — `sync_jira.py` *can* sync Kanban (backlog/`/board/{id}/issue` fallback), but enabling it would dump the full ungroomed ~53-issue board, including `[Deferred MVP]` epics (KD-5/6/7) and `ISSUES/BLOCKED`-column cards, onto the client view. Flip on only once the board is groomed for client display.
+- Refresh dashboard content via `/aaa-dashboard-update`; never put finance/credentials/internal IDs in dashboard data — the **dashboard app's** Document Library route (`/client/au-group/docs`) is unauthenticated/public. (Not to be confused with the document-parser's own `/docs` OpenAPI route, which is gated by `EXPOSE_OPENAPI`.)
 
 ## PR workflow notes (this repo)
 
