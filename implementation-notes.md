@@ -457,6 +457,31 @@ After that, `supabase db push` should be a no-op for KD-20. Prefer **Supabase MC
 - **SYS-05:** `RPC Evaluate Outreach Gates` → `Check Gates` → `Unwrap Gate Fields` (removed orphan `Merge Gate Result` connection); T+1 schedule trigger added.
 - **SYS-01B:** Handoff to SYS-02 `7IjPc44k9YaCrmXM` when poll row has `document_url` (mirrors SYS-01).
 - **Wave 2 (manual):** KD-53 creds, AU_GROUP-5.1 SF fields, territory User IDs — enable `SF *` nodes in n8n after creds attached.
+
+## Supabase schema cleanup — KD-70 (2026-05-28)
+
+Post-audit schema drift + security fixes:
+
+| Change | Migration | Notes |
+|--------|-----------|-------|
+| Drop `pipeline_document_results` | `20260528140327` | Legacy; superseded by `document_parse_results`; prod had 0 rows |
+| Backfill `bankruptcy_rss_events` | `20260528140329` | SYS-01 RSS dedup store; version aligned with prod `schema_migrations` |
+| RLS on `au_group_config_audit` | `20260528140330` | NFR-5.3; deny policy for anon/authenticated; trigger writes unchanged |
+| Drop FR-6 P1 exposure cache | `20260602150000` | `historical_import_batches`, `creditor_exposure_summary`, `au_group_recompute_exposure` — SF is SoT |
+
+**Migration drift fix (vibe-test F1):** Repo filenames were re-timestamped to match prod `schema_migrations` (`20260528140327–30`) so `supabase db push` will not re-apply KD-70. Removed duplicate `20260602150000–17000` files.
+
+**Audit trigger smoke:** `scripts/supabase/test-kd70-config-audit.sql` — prod run 2026-05-28 inserted audit row on `au_group_target_states` UPDATE under RLS.
+
+**Local CI:** `supabase db reset` + `verify-supabase-rls.sh` still require Docker Desktop (blocked in dev env 2026-05-28).
+
+**FR-6 P1 (Phase 3) — frozen, not dropped:**
+
+- **FR-6.2 SoT:** Salesforce Account / `Bankruptcy_Event__c` fields (Keith: already in place per PRD).
+- **`creditor_exposure_summary` + `historical_import_batches`:** Dropped in `20260602150000` — FR-6 P1 out of MVP; Salesforce is exposure SoT (FR-6.2).
+- **`au_group_recompute_exposure`:** Dropped with exposure tables; repeat-exposure gate uses `au_group_check_repeat_exposure` on `bankruptcy_creditors`.
+
+**Do-not-drop guardrails:** See `docs/workflows/client-ops-runbook.md` (operational tables) and `docs/architecture/final-tech-stack.md` (parser staging / orchestration).
 - **Pushed (2026-05-28):** `python3 scripts/n8n/push-workflows.py sys04 sys05 sys01b` → PUT 200 for `YWmFi1GkJqJMB8bJ`, `SWES563HTLR2t9Gv`, `3qtDRBJtKrFUXqhH`.
 - **Scripts:** `patch-sys04-prd-alignment.py`, `patch-sys05-prd-alignment.py`, `patch-sys01b-prd-alignment.py`, `validate-workflow-connections.py`, `push-workflows.py`.
 - **Migration:** `20260602130000_sys01b_parse_handoff_rpc.sql`.

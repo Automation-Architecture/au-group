@@ -165,7 +165,7 @@ safety==3.0.1
 
 ## 3. Database
 
-> **AU Group (2026):** Pipeline tables (`bankruptcies`, `creditors`, `bankruptcy_creditors`, `zoom_info_contacts`, `salesforce_accounts`, `processing_jobs`, `schedule_f_queue`, plus `pipeline_executions`) are deployed on **Supabase Postgres** with migrations named `au_group_*`. TypeScript types for the project database live in [`types/database.types.ts`](types/database.types.ts). The RDS option below remains the documented scale-out / alternative from the original architecture debate.
+> **AU Group (2026):** Pipeline tables (`bankruptcies`, `creditors`, `bankruptcy_creditors`, `zoom_info_contacts`, `salesforce_accounts`, `processing_jobs`, `schedule_f_queue`, `bankruptcy_rss_events`, plus `pipeline_executions`) are deployed on **Supabase Postgres** with migrations named `au_group_*`. TypeScript types for the project database live in [`types/database.types.ts`](types/database.types.ts). Parser staging tables (`documents`, `form201_extractions`, `creditor_matrix_extractions`, `creditor_matrix_rows`, `document_parse_results`) and ops tables (`pipeline_executions`, `au_group_enrich_loop_staging`) must not be dropped without a coordinated refactor — see [`docs/workflows/client-ops-runbook.md`](../workflows/client-ops-runbook.md). The RDS option below remains the documented scale-out / alternative from the original architecture debate.
 
 ### Primary Database: PostgreSQL
 
