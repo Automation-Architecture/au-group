@@ -1,10 +1,14 @@
 name: Request Copilot Code Review
 
-# Formally requests `Copilot` as a reviewer on every PR. This is what triggers
-# GitHub's dynamic `copilot-pull-request-reviewer` status check — which the
-# AAA branch-protection ruleset requires as a status check before merge.
+# Formally requests `Copilot` as a reviewer on every PR.
 #
-# Reviews on ruleset-auto-trigger alone do NOT create that status check.
+# The enforced merge gate is this workflow's own `request-copilot-review`
+# CheckRun, which IS visible in the PR-level `statusCheckRollup` that the AAA
+# branch-protection ruleset evaluates. The dynamic `copilot-pull-request-reviewer`
+# check that requesting Copilot also produces is INVISIBLE to the rollup, so it
+# is NOT the gate — requiring it as a context made every PR need `--admin` even
+# when it succeeded (fixed org-wide 2026-05-22).
+#
 # Distributing this workflow to every active AAA repo is the mechanism that
 # makes "wait for Copilot before merging" enforceable platform-wide.
 
