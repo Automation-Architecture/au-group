@@ -1,16 +1,6 @@
--- KD-40 / FR-3.5: creditor dedup audit columns + merge RPC claim sum + dedup_audit merge
-
-alter table public.creditor_matrix_rows
-  add column if not exists source_line_numbers integer[] not null default '{}';
-
-alter table public.creditors
-  add column if not exists dedup_audit jsonb;
-
-comment on column public.creditor_matrix_rows.source_line_numbers is
-  'KD-40: source line numbers from extraction (staging audit)';
-
-comment on column public.creditors.dedup_audit is
-  'KD-40: fuzzy dedup audit (merged_names, source_line_numbers, dedup_group_id)';
+-- KD-40: fix dedup_audit source_line_numbers merge on ON CONFLICT.
+-- WHERE cannot reference SELECT-list aliases from jsonb_array_elements_text SRFs;
+-- filter via FROM ... AS elem WHERE elem ~ '^\d+$' (same pattern as v_source_lines parse).
 
 create or replace function public.au_group_merge_creditor_matrix (
   p_bankruptcy_id uuid,

@@ -89,4 +89,4 @@ grant execute on function public.au_group_upsert_document_parse_result (
   text,
   jsonb,
   text
-) to service_role, anon, authenticated;
+) to service_role;

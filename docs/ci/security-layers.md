@@ -33,6 +33,19 @@ Enable **Settings → Code security →** Dependabot alerts and code scanning fo
 | Semgrep | Overlaps Bandit + vbsec |
 | OWASP ZAP | Needs stable staging API + secrets |
 
+## Supabase RPC ACL (post-migrate)
+
+After `supabase db reset --local` or production `db push`:
+
+```bash
+./scripts/ci/verify-supabase-rpc-acl.sh
+psql "$DB_URL" -f scripts/supabase/verify-rpc-acl.sql
+```
+
+`au_group_*` functions must be **service_role** only (no `anon` / `authenticated` execute). Migration: `20260602150600_security_rpc_acl_service_role_only.sql`.
+
+KD-40 merge smoke: `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` (runs in `ci-supabase.yml`).
+
 ## Related
 
 - [vbsec](./vbsec.md) — rule mapping and local commands
