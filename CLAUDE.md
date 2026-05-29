@@ -29,7 +29,7 @@ ruff check .                                             # lint
 ## Runtime gotchas
 
 - **Railway `startCommand` is NOT bash-parsed.** Use `$PORT`, never `${PORT:-8001}` — the literal string is passed to uvicorn and the service crashes on startup. (Fixed in PR #16.)
-- **Copilot review is gated by the `request-copilot-review` CheckRun — supplied org-side, not by a repo file.** Org ruleset `15788058` injects it as a required workflow on every PR; it runs and lands in the PR-level `statusCheckRollup` even though there is **no** `.github/workflows/copilot-review.yml` in this repo — and you do **not** need to add one (verified on PR #29). The separate dynamic `copilot-pull-request-reviewer` check is invisible to the rollup, so don't treat it as the gate. The only repo-local copilot-aware workflow is `pr-autofix.yml`, which *reacts to* CodeRabbit/Copilot review comments — it does not *request* a review.
+- **Copilot review is required before merge, wired via `.github/workflows/copilot-review.yml`** (requests `Copilot` as a reviewer on each PR; restored in `b0802e7` to fix a hanging status check). If it's ever absent the copilot check hangs and PRs sit BLOCKED — see the stale-review note below.
 
 ## PR workflow notes (this repo)
 
