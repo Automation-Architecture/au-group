@@ -16,7 +16,7 @@
 |---------|------|--------|---------|
 | 1.0 | March 12, 2026 | Automation Architecture | Initial draft |
 | 2.0 | March 12, 2026 | Automation Architecture | Restructured with standardized PRD format |
-| 3.0 | May 29, 2026 | Automation Architecture | **MVP simplification per client.** ZoomInfo narrowed to company-level (FR-4.2/4.3/4.4 deferred); Salesforce focused on creditor account + bankruptcy logging + email variables + recency flag (FR-5.3/5.4/5.6 deferred); new **FR-5.7 Daily Creditor Report** added as the primary deliverable. See MVP Scope banner. |
+| 3.0 | May 29, 2026 | Automation Architecture | **MVP simplification per client.** ZoomInfo narrowed to company-level + **tier classification** (FR-4.2 reframed to a company-tier attribute and kept in MVP; FR-4.3/4.4 decision-maker contact retrieval deferred); Salesforce focused on creditor account + bankruptcy logging + email variables + recency flag (FR-5.3/5.4/5.6 deferred); new **FR-5.6b** email merge variables and **FR-5.7 Daily Creditor Report** added as MVP deliverables. See MVP Scope banner. |
 
 ---
 
@@ -34,7 +34,9 @@ The client simplified the MVP to a daily pipeline plus a decision-support report
 - **NEW FR-5.7** **Daily Creditor Report (Slack)** — the primary MVP deliverable
 
 **Deferred to Phase 2+ (carried forward, not dropped — these remain the strategic roadmap):**
-- **FR-2** Schedule F monitoring queue · **FR-3** multi-format parsing · **FR-4.2/4.3/4.4** tier targeting + decision-maker contact retrieval · **FR-5.3** territory routing · **FR-5.4** do-not-contact suppression · **FR-5.6** automated outreach · **FR-6** historical creditor database · **FR-7** future capabilities
+- **FR-2** Schedule F monitoring queue · **FR-3** multi-format parsing · **FR-4.3/4.4** decision-maker contact retrieval + tier→title fallback · **FR-5.3** territory routing · **FR-5.4** do-not-contact suppression · **FR-5.6** automated outreach · **FR-6** historical creditor database · **FR-7** future capabilities
+
+> Note: several narrative sections below (§1 Success Definition, §3 user stories, §6 Flow 1, §7 Acceptance Criteria, §9 milestones) predate this re-scope and describe the **full Phase 1–3 vision**. Where they reference deferred capabilities (Schedule F, decision-maker contacts, territory routing, DNC suppression, automated outreach, historical DB), read those as **Phase 2+** per this banner; the annotated FRs are authoritative for MVP.
 
 **Entity model (read carefully):** the **creditor** company (the lead AU Group sells to) is enriched in ZoomInfo and becomes/updates the Salesforce **Account**. The **debtor** (the bankrupt company) is the grouping and is recorded as the `Bankruptcy_Event__c` on that creditor account. The report's recency status describes the **creditor's** footprint in Salesforce.
 
@@ -99,13 +101,15 @@ This creates a value proposition that cannot be replicated by competitors workin
 
 ### Success Definition
 
-The product succeeds when:
+> **MVP (Phase 1):** the product succeeds when (1) 100% of daily target-state filings are processed within 24 hours, (2) 80%+ of creditor **companies** are matched in ZoomInfo (company-level), (3) creditors land in Salesforce with bankruptcy logging + email variables, (4) the daily creditor report is delivered to Slack each business day with the recency flag, and (5) manual data entry is eliminated for the standard path. Items below referencing Schedule F, decision-maker contacts, and historical exposure are **Phase 2+** success criteria.
 
-1. 100% of daily filings in target states are processed within 24 hours
-2. Zero Schedule F filings are missed in monitored cases
-3. 80%+ of creditor companies are enriched with decision-maker contacts
-4. Manual data entry is eliminated for standard-path leads
-5. Sales teams consistently use historical exposure data in outreach messaging
+The full-vision product succeeds when:
+
+1. 100% of daily filings in target states are processed within 24 hours `[MVP]`
+2. Zero Schedule F filings are missed in monitored cases `[Phase 2+]`
+3. 80%+ of creditor companies are enriched — company match in MVP; decision-maker contacts `[Phase 2+]`
+4. Manual data entry is eliminated for standard-path leads `[MVP]`
+5. Sales teams consistently use historical exposure data in outreach messaging `[Phase 2+]`
 
 ---
 
@@ -775,31 +779,28 @@ AI agent that cross-references all signals and proactively recommends priority a
 
 **Trigger:** Daily PACER polling runs overnight
 
+> **MVP path.** Steps marked `[P2]` are Phase 2+ (decision-maker contacts, territory routing, DNC suppression, automated outreach) — in MVP the team runs outreach manually from the daily report.
+
 1. **System polls PACER** for new Chapter 11 filings in target states (overnight job)
 2. **System downloads Form 201** (voluntary petition) for each new filing
 3. **System parses debtor metadata** (name, location, industry, estimated assets/liabilities, creditor count)
 4. **System downloads Form 204** (List of Creditors Holding 20 Largest Unsecured Claims)
-5. **System extracts top 20 creditors** (name, address, claim amount)
+5. **System extracts top 20 creditors** (name, city, state, claim amount)
 6. **System classifies creditors** as company or individual (name patterns, entity suffixes)
 7. **For each company creditor:**
-   - System looks up company in ZoomInfo (firmographics)
-   - System applies tier-based targeting rules (Enterprise/Mid-Market/SMB)
-   - System retrieves up to 3 decision-maker contacts ranked by engagement likelihood
-8. **System checks Salesforce** for existing account (match on company name + address)
-9. **If account exists:**
-   - System updates account with new bankruptcy event (debtor, filing date, claim amount, case number, district)
-10. **If account does not exist:**
-    - System creates new account with firmographics + bankruptcy event data
-11. **System applies territory routing** (state-to-rep mapping)
-12. **System checks do-not-contact flag**
-13. **System checks for active engagement** (open opportunities, recent activity within 90 days)
-14. **If net-new qualified lead (no DNC, no active engagement):**
-    - System triggers outreach email via ZoomInfo Engage/SalesLoft (T+1 timing)
-15. **If flagged (DNC or active engagement):**
-    - System alerts assigned rep with context
-16. **Keith reviews daily summary** (8:00 AM): debtor names, filing dates, creditor counts, extracted leads
+   - System looks up the company in ZoomInfo (firmographics + **profile URL**)
+   - System classifies the **company tier** (Enterprise/Mid-Market/SMB) as an attribute
+   - `[P2]` Decision-maker contact retrieval — deferred; contacts selected manually
+8. **System checks Salesforce** for an existing account (match on company name + address)
+9. **If account exists:** update with the new bankruptcy event (debtor, filing date, claim amount, case number, district)
+10. **If account does not exist:** create a new account with firmographics + tier + bankruptcy event data
+11. **System populates email merge variables** on the account
+12. **System checks recent Salesforce activity** (open opportunity OR activity within 90 days) → sets the report **status flag** ("New Salesforce account" / "Existing activity in Salesforce"); **no auto-suppression**
+13. `[P2]` Territory routing, do-not-contact suppression, and automated outreach — deferred
+14. **System posts the Daily Creditor Report to Slack** (8:00 AM): grouped by bankrupt company; per creditor — Creditor, City, State, Claim, Tier, Status, ZoomInfo URL
+15. **Keith reviews the report** and runs outreach manually (generic vs custom email per the status flag)
 
-**Result:** Top 20 creditors from new filings processed within 24 hours; enriched leads in Salesforce; automated outreach launched for qualified leads.
+**Result:** Top-20 creditors from new filings are in Salesforce within 24 hours with bankruptcy context + email variables, and the daily creditor report is delivered to Slack for the team to action. (Automated outreach is Phase 2+.)
 
 ---
 
@@ -906,7 +907,7 @@ AI agent that cross-references all signals and proactively recommends priority a
 
 ---
 
-### AC-2: Schedule F Monitoring Queue
+### AC-2: Schedule F Monitoring Queue `[Phase 2+]`
 
 | Requirement ID | Acceptance Criteria |
 |----------------|---------------------|
@@ -917,7 +918,7 @@ AI agent that cross-references all signals and proactively recommends priority a
 
 ---
 
-### AC-3: Document Parsing Engine
+### AC-3: Document Parsing Engine `[Phase 2+ beyond Form 201/204]`
 
 | Requirement ID | Acceptance Criteria |
 |----------------|---------------------|
@@ -934,9 +935,9 @@ AI agent that cross-references all signals and proactively recommends priority a
 | Requirement ID | Acceptance Criteria |
 |----------------|---------------------|
 | FR-4.1 | 80%+ successful company match rate in ZoomInfo; firmographic data retrieved: revenue, employee count, industry, headquarters location; match confidence score returned |
-| FR-4.2 | Correct tier identified for 95%+ of matched companies; Tier 1 (Enterprise): $1B+; Tier 2 (Mid-Market): $100M–$1B; Tier 3 (SMB): <$100M |
-| FR-4.3 | At least 1 contact returned for 80%+ of matched companies; up to 3 contacts per company ranked by ZoomInfo engagement likelihood score; contacts match tier-based targeting rules |
-| FR-4.4 | Fallback logic correctly applied (tier 1 → tier 2 → tier 3); no creditor skipped due to strict title matching; companies with no matches flagged as "no contact found" |
+| FR-4.2 `[MVP]` | **Company tier classified** as an attribute for 95%+ of matched companies — Enterprise ($1B+), Mid-Market ($100M–$1B), SMB (<$100M); tier stored on the account and shown in the daily report. (No automated contact-title selection in MVP.) |
+| FR-4.3 `[Phase 2+]` | At least 1 contact returned for 80%+ of matched companies; up to 3 contacts per company ranked by ZoomInfo engagement likelihood score; contacts match tier-based targeting rules |
+| FR-4.4 `[Phase 2+]` | Fallback logic correctly applied (tier 1 → tier 2 → tier 3); no creditor skipped due to strict title matching; companies with no matches flagged as "no contact found" |
 | FR-4.5 | Company names shortened using ZoomInfo canonical names and common abbreviations; example: International Business Systems Incorporated → IBM |
 
 ---
@@ -947,14 +948,16 @@ AI agent that cross-references all signals and proactively recommends priority a
 |----------------|---------------------|
 | FR-5.1 | 95%+ correct match/no-match determination on company name + address; existing accounts updated (no duplicates created); new accounts created with all required fields |
 | FR-5.2 | Bankruptcy event fields populated: debtor name, filing date, claim amount, case number, court district, filing type; data visible on account page; historical events preserved (not overwritten) |
-| FR-5.3 | Correct rep assigned for 100% of leads based on state-to-rep territory mapping; rep field populated on account record; territory assignment logic auditable |
-| FR-5.4 | No emails sent to do-not-contact accounts; rep receives flagged lead notification; DNC flag checked before every outreach trigger; 100% suppression rate |
-| FR-5.5 | No emails sent to accounts with active engagements (open opportunities, recent activity within 90 days); rep receives context for manual decision; active engagement detection runs before every outreach trigger |
-| FR-5.6 | Email triggered within 24 hours of lead creation for net-new qualified leads; email sequence launched automatically via ZoomInfo Engage/SalesLoft; T+1 timing (next business day) applied to avoid same-day sends |
+| FR-5.5 `[MVP]` | Recent-activity computed for 100% of creditor accounts on push — flagged "Existing activity in Salesforce" when there is an open opportunity OR any activity within 90 days, else "New Salesforce account"; surfaced as the daily report Status column; **no auto-suppression** in MVP |
+| FR-5.6b `[MVP]` | Email merge variables populated on the account for 100% of pushed creditors (agreed field list); a generic email can be sent with no manual data entry |
+| FR-5.7 `[MVP]` | Daily Creditor Report posted to Slack every business day by 8:00 AM local; grouped by bankrupt company (debtor); each creditor row has Creditor, City, State, Claim ($), Tier, Status, ZoomInfo URL; Status values per FR-5.5 |
+| FR-5.3 `[Phase 2+]` | Correct rep assigned for 100% of leads based on state-to-rep territory mapping; rep field populated on account record; territory assignment logic auditable |
+| FR-5.4 `[Phase 2+]` | No emails sent to do-not-contact accounts; rep receives flagged lead notification; DNC flag checked before every outreach trigger; 100% suppression rate |
+| FR-5.6 `[Phase 2+]` | Email triggered within 24 hours of lead creation for net-new qualified leads; email sequence launched automatically via ZoomInfo Engage/SalesLoft; T+1 timing (next business day) applied to avoid same-day sends |
 
 ---
 
-### AC-6: Historical Creditor Database
+### AC-6: Historical Creditor Database `[Phase 2+]`
 
 | Requirement ID | Acceptance Criteria |
 |----------------|---------------------|
