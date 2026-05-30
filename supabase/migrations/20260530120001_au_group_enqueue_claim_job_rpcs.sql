@@ -6,6 +6,50 @@
 -- The existing au_group_acquire_processing_job (inserts 'running' rows directly)
 -- is untouched — n8n continues using it during parallel-run.
 
+-- ---------------------------------------------------------------------------
+-- Schema reconciliation (replay safety)
+--
+-- processing_job_status was created and processing_jobs.status was migrated to
+-- it via out-of-repo ad-hoc migrations (versions 20260531100000 and/or
+-- 20260602150xxx).  Those files are being recovered; until they land in the
+-- repo, these DO blocks make this migration replayable on a fresh database that
+-- has only the migrations currently committed here.
+-- ---------------------------------------------------------------------------
+
+-- 1. Create the type if it doesn't already exist.
+do $$ begin
+  create type public.processing_job_status as enum (
+    'queued', 'running', 'completed', 'failed', 'retrying'
+  );
+exception
+  when duplicate_object then null;
+end $$;
+
+-- 2. If processing_jobs.status is still typed as au_group_job_status (local-only
+--    replay scenario), migrate it to processing_job_status.  On the live DB the
+--    column is already processing_job_status and this block is a no-op.
+--    Value mapping: 'pending' → 'queued'; 'manual_review_required' → 'failed'.
+do $$
+declare
+  v_col_type text;
+begin
+  select udt_name into v_col_type
+  from information_schema.columns
+  where table_schema = 'public'
+    and table_name   = 'processing_jobs'
+    and column_name  = 'status';
+
+  if v_col_type = 'au_group_job_status' then
+    alter table public.processing_jobs
+      alter column status type public.processing_job_status
+      using case status::text
+        when 'pending'                then 'queued'
+        when 'manual_review_required' then 'failed'
+        else status::text
+      end::public.processing_job_status;
+  end if;
+end $$;
+
 -- Running-singleton indexes for job types not yet covered on the live DB.
 -- Required for au_group_claim_job's unique_violation retry loop to detect when
 -- n8n already holds a running job for a given (bankruptcy_id, job_type).
@@ -75,8 +119,14 @@ begin
     return jsonb_build_object('enqueued', true, 'job_id', v_job_id);
   exception
     when unique_violation then
-      -- Concurrent enqueue hit the queued partial index, or a running-singleton
-      -- index blocked us (n8n acquired a running job between the pre-check and INSERT).
+      -- Two cases: (a) concurrent enqueue hit the queued partial index;
+      -- (b) n8n called au_group_acquire_processing_job between the pre-check and
+      -- this INSERT, inserting a running row.  In case (b) the queued row lands
+      -- alongside n8n's running row — claim_job will skip it via unique_violation
+      -- until n8n's job finishes, then claim it on the next worker cycle.
+      -- An advisory lock could prevent case (b) but would require modifying
+      -- au_group_acquire_processing_job, which is explicitly off-limits during
+      -- parallel-run.  The coexistence is harmless and self-resolving.
       return jsonb_build_object('enqueued', false);
   end;
 end;
@@ -84,6 +134,8 @@ $$;
 
 grant execute on function public.au_group_enqueue_job(uuid, public.au_group_job_type)
   to service_role;
+revoke execute on function public.au_group_enqueue_job(uuid, public.au_group_job_type)
+  from public;
 
 -- ---------------------------------------------------------------------------
 -- au_group_claim_job
@@ -146,3 +198,5 @@ $$;
 
 grant execute on function public.au_group_claim_job(public.au_group_job_type)
   to service_role;
+revoke execute on function public.au_group_claim_job(public.au_group_job_type)
+  from public;
