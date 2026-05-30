@@ -199,7 +199,7 @@ SYS-02 owned both `document_intelligence` and `document_parse` job types.  In co
 **Logic:**
 1. Loop: claim one `document_parse` job at a time until none remain.  
 2. Load `bankruptcy_id`, look up S3 keys for Form 201 + Form 204 PDFs.  
-3. POST `{DOCUMENT_PARSER_URL}/api/v1/parse/document` with `bankruptcy_id` and the Form 204 S3 key (`X-API-Key: {API_KEY}`).  With `ASYNC_PARSE_ENABLED=true`, poll `GET /api/v1/jobs/{document_id}` until `completed` or `failed` (existing async pattern — see README).  
+3. POST `{DOCUMENT_PARSER_URL}/api/v1/parse/document` with `bankruptcy_id`, the Form 204 S3 key, and **`async_mode: true`** in the body (`X-API-Key: {API_KEY}`).  Background processing requires **both** `ASYNC_PARSE_ENABLED=true` (service env) **and** `async_mode: true` (request body — see `ParseDocumentRequest.async_mode` and the router check); otherwise the call runs synchronously and returns no `document_id` to poll.  Then poll `GET /api/v1/jobs/{document_id}` until `completed` or `failed` (existing async pattern — see README).  
 4. The document-parser service writes creditor rows to Supabase and returns structured output; no direct DB write from this stage.  
 5. Mark `document_parse` job `completed`.  
 6. Call `au_group_enqueue_job(bankruptcy_id, 'zoom_info_enrich')` (new RPC) to queue the next stage.  
@@ -299,7 +299,7 @@ Each row is one (creditor × bankruptcy) pair — a creditor appearing in two de
 5. Exit 0 on success; exit 1 on failure (`alerts.py` fires on exception).
 
 **Note on the RPC's `status` column vs. PRD FR-5.5:**  
-The `status` field from the new function also calls `au_group_creditor_pipeline_status`, which returns pipeline progress ("New" / "Pending Enrichment" / "ZoomInfo Enriched" / "Salesforce Synced") — not FR-5.5's recency flag.  This is correct interim behavior while SF is blocked.  When WP-09 is active, the Python report module replaces the pipeline-status string with `salesforce_accounts.sf_recency_status` for rows that have a `salesforce_accounts` record.  No additional RPC rewrite needed.
+The `status` field from the new function also calls `au_group_creditor_pipeline_status`, which returns pipeline progress ("New" / "Pending Enrichment" / "ZoomInfo Enriched" / "Salesforce Synced") — not FR-5.5's recency flag.  This is correct interim behavior while SF is blocked.  When WP-09 is active, the Python report module replaces the pipeline-status string with `salesforce_accounts.sf_recency_status` for rows that have a `salesforce_accounts` record.  **RPC update required (part of the grouped-report migration):** `au_group_creditor_pipeline_status` currently treats only `queued`/`running`/`retrying` enrichment jobs as pending — it must also count the new queue's **`pending`** rows, or pending enrichments will mis-render as "New" instead of "Pending Enrichment".
 
 **The Tier column:** the new grouped function should include `creditors.company_tier` (NULL while ZoomInfo is blocked); `report.py` renders NULL as `—`.
 
@@ -402,7 +402,7 @@ The `n8n_workflow_id` / `n8n_execution_id` columns exist to track n8n runs.  Aft
 ### 6.1 Daily pipeline (MVP happy path)
 
 ```
-06:00 UTC  intake-cron fires (0 9 * * 1-5 during ET, adjust for DST — see OD-1)
+09:00 UTC  intake-cron fires (`0 9 * * 1-5`; exact time/DST handling per OD-1)
 │
 ├─ intake.py: query PACER for prior-day CH11 filings in target states
 ├─ For each new case:
@@ -593,7 +593,7 @@ The n8n instance is shared across all clients.  Decommission is AU Group-specifi
 
 ## 9. Work packages
 
-All WPs are assigned to BE (Yanji).  Effort: S = ~half day, M = 1–2 days, L = 3–5 days.
+All WPs are assigned to BE (Operator).  Effort: S = ~half day, M = 1–2 days, L = 3–5 days.
 
 ---
 
@@ -601,7 +601,7 @@ All WPs are assigned to BE (Yanji).  Effort: S = ~half day, M = 1–2 days, L = 
 
 **Description:** The existing `au_group_acquire_processing_job` RPC creates a job in `running` state and returns `acquired=false` if a running job already exists.  This works for n8n's acquire-and-execute-in-one-step model but is wrong for a producer/consumer split (intake enqueues; worker claims later).  Add two Supabase RPCs:
 
-1. **`au_group_enqueue_job(p_bankruptcy_id, p_job_type)`** — inserts a `pending` row; no-ops (returns `enqueued=false`) if a `pending` OR `running` job already exists for that `(bankruptcy_id, job_type)`.  Uses the existing singleton partial indexes to enforce this.
+1. **`au_group_enqueue_job(p_bankruptcy_id, p_job_type)`** — inserts a `pending` row; no-ops (returns `enqueued=false`) if a `pending` OR `running` job already exists for that `(bankruptcy_id, job_type)`.  The existing singleton partial indexes only enforce uniqueness on `running` rows, so WP-00 **adds a new partial unique index** `... ON processing_jobs (bankruptcy_id, job_type) WHERE status='pending'`; the enqueue does a guarded insert that catches the `unique_violation` (pending dupe) and the running-singleton violation, returning `enqueued=false` in both cases.
 
 2. **`au_group_claim_job(p_job_type)`** — claims one `pending` job atomically: `UPDATE ... SET status='running', started_at=now() WHERE id = (SELECT id FROM processing_jobs WHERE status='pending' AND job_type=$1 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *`.  Catches `unique_violation` from the singleton partial index (another worker or n8n claimed the same bankruptcy's job in a race) and retries on the next row.  Returns the claimed job row, or NULL if nothing pending.
 
@@ -615,6 +615,7 @@ Migration naming: `20260530XXXXXX_au_group_enqueue_and_claim_job_rpcs.sql`.
 - [ ] `au_group_enqueue_job(id, 'document_parse')` inserts `status='pending'` row on first call
 - [ ] Second call with same args returns `{enqueued: false}` (idempotent)
 - [ ] `au_group_enqueue_job` is a no-op when a `running` job already exists (n8n running)
+- [ ] New partial unique index on `(bankruptcy_id, job_type) WHERE status='pending'` created (existing singleton indexes only cover `running`)
 - [ ] `au_group_claim_job('document_parse')` flips one `pending` row to `running`; returns the row
 - [ ] `au_group_claim_job` returns NULL when no pending jobs exist
 - [ ] Two concurrent `au_group_claim_job` calls on the same job: exactly one succeeds; the other skips (race-safe via SKIP LOCKED + unique_violation catch)
@@ -627,7 +628,7 @@ Migration naming: `20260530XXXXXX_au_group_enqueue_and_claim_job_rpcs.sql`.
 
 ### WP-01: Pipeline skeleton + worker drain loop [BE]
 
-**Description:** Create `services/document-parser/pipeline/` directory with `__init__.py`, `settings.py`, and `worker.py`.  `worker.py` is the Railway cron entry-point: on startup (a) call `au_group_fail_stale_processing_jobs`, (b) loop through all `running` `document_parse` jobs and claim them, (c) call the appropriate stage module, (d) exit 0.  Add `pipeline-worker` Railway service config (new service in the same repo/rootDirectory as `document-parser`).
+**Description:** Create `services/document-parser/pipeline/` directory with `__init__.py`, `settings.py`, and `worker.py`.  `worker.py` is the Railway cron entry-point: on startup (a) call `au_group_fail_stale_processing_jobs`, (b) loop — claim one **`pending`** `document_parse` job at a time via `au_group_claim_job` (which atomically flips it `pending`→`running`), (c) dispatch the claimed job to the appropriate stage module, repeat until `claim` returns NULL, (d) exit 0.  Add `pipeline-worker` Railway service config (new service in the same repo/rootDirectory as `document-parser`).
 
 **Dependencies:** WP-00.
 
@@ -711,7 +712,7 @@ Migration naming: `20260530XXXXXX_au_group_enqueue_and_claim_job_rpcs.sql`.
 - [ ] Court search scoped to `au_group_target_states` (read from Supabase runtime config table)
 - [ ] Form 201 + Form 204 PDFs stored in S3 `raw-documents/{case_number}/form-201.pdf` and `form-204.pdf`
 - [ ] `bankruptcies` row upserted (no duplicate on re-run for same `case_number`)
-- [ ] `document_parse` job acquired; `acquired=false` handled without error
+- [ ] `document_parse` job **enqueued** via `au_group_enqueue_job`; `enqueued=false` (already pending/running) handled without error
 - [ ] `pacer_poll` `processing_job` row set to `completed` or `failed` per ADR-001
 - [ ] Dry-run mode (`PACER_DRY_RUN=true`): logs discovery without writing to DB or S3
 - [ ] Integration test (with test PACER account or stub): verifies at least one case is found and enqueued
@@ -722,15 +723,15 @@ Migration naming: `20260530XXXXXX_au_group_enqueue_and_claim_job_rpcs.sql`.
 
 ### WP-06: Parse module (queue drain → document-parser API) [BE]
 
-**Description:** Create `pipeline/parse.py`.  Claim `document_parse` jobs from queue; POST to `document-parser /api/v1/parse/document` (async mode); poll until completion; mark job completed; acquire `zoom_info_enrich`.
+**Description:** Create `pipeline/parse.py`.  Claim `document_parse` jobs from the queue (`au_group_claim_job`); POST to `document-parser /api/v1/parse/document` (async mode); poll until completion; mark job completed; **enqueue** `zoom_info_enrich` (`au_group_enqueue_job`).
 
 **Dependencies:** WP-01.
 
 **Acceptance criteria:**
-- [ ] Claims `document_parse` job via `au_group_acquire_processing_job`
+- [ ] Claims `document_parse` job via `au_group_claim_job` (consumes a `pending` row)
 - [ ] Async mode: polls `GET /api/v1/jobs/{document_id}` until `completed` or `failed`
-- [ ] On parser return `manual_review_required=true`: marks job `manual_review_required` (do not acquire enrich job)
-- [ ] On parser return `completed`: marks job `completed`; acquires `zoom_info_enrich`
+- [ ] On parser return `manual_review_required=true`: marks job `manual_review_required` (do **not** enqueue enrich job)
+- [ ] On parser return `completed`: marks job `completed`; **enqueues** `zoom_info_enrich` via `au_group_enqueue_job`
 - [ ] On parse failure after 3 retries: marks job `failed`; fires `alerts.py`
 - [ ] `X-API-Key` header sent; 401/403 errors surface as fatal (do not retry)
 - [ ] Unit test: mock `/parse/document` endpoint; verify job state transitions
@@ -859,13 +860,13 @@ After WP-08 + WP-09 complete:
 | ID | Question | Options | Owner | Blocker? |
 |---|---|---|---|---|
 | **OD-1** | Report timing: 8 AM ET = 13:00 UTC (EST, Nov–Mar) or 12:00 UTC (EDT, Mar–Nov). Should the cron fire at 13:00 UTC year-round (sometimes 9 AM ET in summer) or follow DST? | (a) Fixed 13:00 UTC (simple; 1hr late in EDT) · (b) Two schedules switched manually · (c) Accept 12:00 UTC (early in EST) | Operator + Keith | No — pick before WP-03 deploy |
-| **OD-2** | Tier storage: persist `company_tier` on `creditors` table (recommended — simpler report join) OR only on `zoom_info_contacts`? | Recommended: `creditors.company_tier` (WP-04) | Yanji | No — WP-04 |
+| **OD-2** | Tier storage: persist `company_tier` on `creditors` table (recommended — simpler report join) OR only on `zoom_info_contacts`? | Recommended: `creditors.company_tier` (WP-04) | Operator | No — WP-04 |
 | **OD-3** | ZoomInfo API rate limits and batch size for the production key. | Verify actual tier limits from KD-53 credentials before coding `enrich_batch_size` | Keith / Engineering | Blocks WP-08 |
 | **OD-4** | Exact email merge variable field list on SF Account (FR-5.6b). Which Account fields do AU Group's email templates reference? | Confirm via salesforce-audit.md §3.1 with Keith | Keith | Blocks WP-09 |
 | **OD-5** | Salesforce recent-activity rule (FR-5.5): which Opportunity stages count? Objects: Opportunity + Task/Event (add EmailMessage?). Does a prior `Bankruptcy_Event__c` on the account also set "Existing activity"? | Confirm from salesforce-audit.md §3.2 with Keith | Keith | Blocks WP-09 |
 | **OD-6** | SF account deduplication external ID: does `Pipeline_Creditor_ID__c` exist on Account in the org, or should `simple-salesforce` upsert on a different field? | Check during salesforce-audit.md §4 checklist | Eng (post SF access) | Blocks WP-09 |
 | **OD-7** | PACER intake: does AU Group want intake to cover Chapter 7 and Subchapter V filings in addition to Chapter 11 (PRD Q5/Q7)? | CH11-only (safe default) vs. all three | Keith | Blocks WP-05 scope |
-| **OD-8** | PACER intake credential path: the existing creds (`PACER_USERNAME`/`PACER_PASSWORD`) — confirm PACER Case Locator API vs. PACER CM/ECF UI scrape. The `adr-001` references "PACER poll" but the actual API surface is not specified in the repo. | PACER Case Locator REST API (preferred) vs. CM/ECF scrape | Yanji (verify PACER API access) | Blocks WP-05 implementation |
+| **OD-8** | PACER intake credential path: the existing creds (`PACER_USERNAME`/`PACER_PASSWORD`) — confirm PACER Case Locator API vs. PACER CM/ECF UI scrape. The `adr-001` references "PACER poll" but the actual API surface is not specified in the repo. | PACER Case Locator REST API (preferred) vs. CM/ECF scrape | Operator (verify PACER API access) | Blocks WP-05 implementation |
 
 ---
 
