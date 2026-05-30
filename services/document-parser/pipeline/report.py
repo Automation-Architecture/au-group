@@ -4,7 +4,7 @@ Invoked by the daily-report Railway cron service:
     python -m pipeline.report
 
 Calls au_group_daily_creditor_report_grouped(), groups rows by debtor,
-formats the Slack message per spec §4.3, and posts to SLACK_WEBHOOK_URL.
+formats the Slack message per spec §4.3, and posts via Slack chat.postMessage.
 
 Exit 0 on success, exit 1 on any unhandled failure (after alerting).
 
@@ -22,9 +22,9 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
-import httpx
+import httpx  # noqa: F401 — kept for _call_grouped_report_rpc
 
-from pipeline.alerts import send_error_alert
+from pipeline.alerts import post_slack, send_error_alert
 from pipeline.settings import get_pipeline_settings
 
 logger = logging.getLogger(__name__)
@@ -119,14 +119,9 @@ def _format_debtor_block(debtor_name: str, rows: list[dict[str, Any]]) -> str:
 # Slack posting
 # ---------------------------------------------------------------------------
 
-def _post_slack(webhook_url: str, text: str) -> None:
-    with httpx.Client(timeout=15) as client:
-        resp = client.post(webhook_url, json={"text": text})
-        resp.raise_for_status()
-
-
 def _build_and_post_report(
-    webhook_url: str,
+    bot_token: str,
+    channel_id: str,
     data: dict[str, Any],
 ) -> None:
     rows: list[dict[str, Any]] = data.get("rows") or []
@@ -141,7 +136,7 @@ def _build_and_post_report(
     )
 
     if not rows:
-        _post_slack(webhook_url, header + "\n\nNo new creditors in this window.")
+        post_slack(bot_token, channel_id, header + "\n\nNo new creditors in this window.")
         return
 
     # Group by debtor; sort debtors by filing_date DESC; creditors within by claim DESC.
@@ -164,13 +159,13 @@ def _build_and_post_report(
         for name in sorted_debtors:
             blocks.append("---")
             blocks.append(_format_debtor_block(name, by_debtor[name]))
-        _post_slack(webhook_url, "\n\n".join(blocks))
+        post_slack(bot_token, channel_id, "\n\n".join(blocks))
     else:
         # Multi-message: header first, then one message per debtor group.
-        _post_slack(webhook_url, header)
+        post_slack(bot_token, channel_id, header)
         for name in sorted_debtors:
             body = "---\n\n" + _format_debtor_block(name, by_debtor[name])
-            _post_slack(webhook_url, body)
+            post_slack(bot_token, channel_id, body)
 
 
 # ---------------------------------------------------------------------------
@@ -195,18 +190,20 @@ def main() -> None:
         send_error_alert(
             stage="report.py — RPC",
             error=str(exc),
-            webhook_url=settings.slack_webhook_url,
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
         )
         sys.exit(1)
 
     try:
-        _build_and_post_report(settings.slack_webhook_url, data)
+        _build_and_post_report(settings.slack_bot_token, settings.slack_channel_id, data)
     except Exception as exc:
         logger.error("Failed to post Slack report: %s", exc)
         send_error_alert(
             stage="report.py — Slack post",
             error=str(exc),
-            webhook_url=settings.slack_webhook_url,
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
         )
         sys.exit(1)
 

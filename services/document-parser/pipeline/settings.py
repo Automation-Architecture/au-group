@@ -23,7 +23,10 @@ class PipelineSettings(BaseSettings):
 
     supabase_url: str
     supabase_service_role_key: str
-    slack_webhook_url: str
+    # Slack posting: bot token + channel ID (chat.postMessage).
+    # No incoming webhook needed — the bot just needs to be a channel member.
+    slack_bot_token: str
+    slack_channel_id: str  # e.g. C0B3PHV37SR for #au-group-sprint
 
     supabase_http_timeout_sec: float = 60.0
     app_env: str = "development"
