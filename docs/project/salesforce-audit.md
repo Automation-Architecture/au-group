@@ -1,7 +1,7 @@
 # Salesforce Audit — AU Group (Bankruptcy Creditor Intelligence)
 
 **Date:** May 29, 2026
-**Status:** Started — **design audit complete; live-org introspection BLOCKED on KD-53** (production Salesforce credentials not yet gathered).
+**Status:** Started — **design audit complete; live-org introspection blocked by a Salesforce login-IP/VPN lockout** (credentials exist; access tripped a network restriction).
 **Scope basis:** the simplified MVP (Brief v2.0 / PRD v3.0). See the MVP Scope banner in `prd.md`.
 
 This audit reconciles the **designed** Salesforce schema (built into the backlog + the SYS-04 Salesforce Push workflow) against the **re-scoped MVP**, and defines exactly what must be confirmed against the client's live org once access lands.
@@ -12,11 +12,12 @@ This audit reconciles the **designed** Salesforce schema (built into the backlog
 
 | | |
 |---|---|
-| `sf`/`sfdx` CLI authenticated | ❌ none |
-| Salesforce creds available (1Password / Secrets Manager) | ❌ none — `/prod/salesforce/oauth` not yet populated |
-| Blocker | **KD-53** — "Gather Production Credentials for Salesforce and ZoomInfo" (trials blocked: *"Salesforce: Something went wrong"*). KD-53 **blocks** KD-4 (Salesforce epic). |
+| Salesforce production credentials | ✅ **exist** (login/Connected App access obtained) |
+| Current live access | ⚠️ **locked out** — a login over **VPN** tripped Salesforce's login-IP / network-access restriction and the session was kicked |
+| `sf`/`sfdx` CLI on this machine | ❌ not installed/authed (separate from the lockout) |
+| Net blocker for the live audit | **Restore Salesforce access** (the IP/login restriction) — **not** missing credentials |
 
-**Therefore:** the live-org parts of this audit (do these objects/fields already exist? exact merge variables? activity objects? edition? name conflicts?) **cannot be answered until KD-53 delivers an integration user + OAuth creds.** Everything below marked 🔵 is a live-org confirmation item.
+**Therefore:** the credentials half of KD-53 is effectively in hand; the live-org parts of this audit (🔵 items below) are blocked only by the **Salesforce IP/login restriction**, which is quick to resolve — see §5. Salesforce blocks logins from untrusted IPs; a VPN changes the apparent source IP, which triggers a security challenge or lockout.
 
 ---
 
@@ -96,7 +97,11 @@ Once an integration user + OAuth creds exist (`/prod/salesforce/oauth`), introsp
 
 ## 5. Next steps
 
-1. **Unblock KD-53** — get the integration user + OAuth creds from Keith (gates the live audit + the whole SF stage).
-2. Add `Company_Tier__c` (+ ZoomInfo-URL decision) to the KD-4 field set (§2).
-3. Get Keith's answers to §3.1 (merge variables) and §3.2 (recent-activity rules).
-4. Once creds land: run the §4 checklist against the org (or a sandbox), then resume the SYS-04 Salesforce Push build (currently erroring — likely the missing creds).
+1. **Restore Salesforce access** (the live blocker — creds exist). Options, fastest first:
+   - **Log in from a trusted IP** — disconnect the VPN (or use an exit node whose IP is already trusted) and log in from the IP the org expects.
+   - **Append the security token** on API logins from a new IP (`password` + `securityToken`); reset the token if needed (Setup → reset security token).
+   - **Admin relaxes / allowlists the IP** — add the IP (or range) to the integration user **profile's Login IP Ranges**, or to **Setup → Network Access (Trusted IP Ranges)**, so logins from it skip verification.
+   - First determine whether it's a **user** lockout (a "verify your identity" email) or an **org IP policy** — the fix differs.
+2. ✅ `Company_Tier__c` + `ZoomInfo_URL__c` added to the field set (KD-10).
+3. Get Keith's answers to §3.1 (email merge variables) and §3.2 (recent-activity object/stage rules).
+4. Once access is restored: run the §4 checklist against the org (or a sandbox), then re-test the **SYS-04 Salesforce Push** build (currently erroring — re-run now that creds are usable).
