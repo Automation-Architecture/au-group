@@ -6,6 +6,13 @@ Agent-facing notes for working in this repo. The README is the human entry point
 
 AI-powered lead-gen from federal bankruptcy filings. PACER → Schedule F parse → ZoomInfo enrichment → Salesforce. Deployed stack: **Supabase Postgres + Railway (FastAPI document-parser) + n8n**. See `README.md` for the full topology.
 
+## Current direction (as of 2026-05-30) — READ FIRST
+
+- **MVP was simplified (May 2026, PRD v3.0 / Brief v2.0).** Pipeline = PACER → ZoomInfo **company** match + tier-as-attribute → Salesforce (account + bankruptcy logging + email vars + recency flag) → **daily Slack creditor report** (grouped by debtor: Creditor·City·State·Claim·Tier·Status·ZoomInfo URL). Decision-maker **contacts are manual**; Schedule F / automated outreach / historical DB are **Phase 2+ deferred** (the MVP-scope banner in `docs/project/prd.md` governs).
+- **The pipeline is being re-platformed OFF n8n → code-native.** Don't build new n8n workflows; the 26 AU-Group n8n workflows are slated for decommission after a parallel-run. Build per **`docs/architecture/n8n-to-code-native-migration.md`** (FastAPI on Railway + the Supabase `processing_jobs` queue; enqueue/claim RPCs). Tracked in Jira **KD epics E9/E10/E11 (KD-54…KD-70)**. **Unblocked build path:** KD-57 (queue RPCs) → KD-60 (grouped report RPC + `report.py` + cron) → KD-61 (parse). **WP-04 column migration must precede WP-03 grouped RPC** (it selects `creditors.company_tier`).
+- **Salesforce stage is access-blocked** (not creds — see `docs/project/salesforce-audit.md`): creds exist but a VPN/login-IP lockout blocks the live org. The two new SF fields the re-scope needs (`Company_Tier__c`, `ZoomInfo_URL__c`) are on KD-10.
+- **Gotchas:** the Jira REST/Agile API token (1Password "Atlassian", Engineering vault) is **stale/401** — sprint creation is blocked on a fresh token. The Atlassian **MCP is authed as the former engineer (Yanji)** — revoke + re-auth as the operator.
+
 ## Commands (document-parser)
 
 The one runnable service lives in `services/document-parser/`. Run from that directory:
