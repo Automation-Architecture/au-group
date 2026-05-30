@@ -562,8 +562,8 @@ class PipelineSettings(BaseSettings):
 | 0 | **WP-00 Enqueue RPC + claim RPC** — `pending` state + `FOR UPDATE SKIP LOCKED` dequeue | No | Immediately (blocks WP-01/05/06) |
 | 1 | WP-01 Pipeline module skeleton + `worker.py` drain loop | No | After WP-00 |
 | 2 | WP-02 `alerts.py` (Slack error util) | No | Immediately (parallel) |
-| 3 | WP-03 `report.py` + report RPC debtor-grouping fix + Railway cron service | No | After WP-00 + WP-01 |
-| 4 | WP-04 DB migrations (company_tier + sf_recency_status columns) | No | Immediately |
+| 4 | WP-04 DB migrations (company_tier + sf_recency_status columns) | No | Immediately (must precede WP-03 — its grouped RPC selects `creditors.company_tier`) |
+| 3 | WP-03 `report.py` + report RPC debtor-grouping fix + Railway cron service | No | After WP-00 + WP-01 **+ WP-04** (the grouped RPC selects `creditors.company_tier`, so the column must exist first) |
 | 5 | WP-05 `intake.py` — PACER polling + S3 + enqueue | No (PACER creds exist) | After WP-00 |
 | 6 | WP-06 `parse.py` — queue drain → document-parser endpoint | No | After WP-00 |
 | 7 | WP-07 `report.py` Tier + recency rendering (render-only; no RPC change — grouped RPC already returns `company_tier`) | Partial (Tier blocked on ZoomInfo) | WP-03/04 done |
