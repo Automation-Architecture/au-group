@@ -2,7 +2,7 @@
 
 **Date:** May 29, 2026
 **Status:** Started — **design audit complete; live-org introspection blocked by a Salesforce login-IP/VPN lockout** (credentials exist; access tripped a network restriction).
-**Scope basis:** the simplified MVP (Brief v2.0 / PRD v3.0). See the MVP Scope banner in `prd.md`.
+**Scope basis:** the simplified MVP (Brief v2.0 / PRD v3.0). See the MVP Scope banner in [prd.md](prd.md).
 
 This audit reconciles the **designed** Salesforce schema (built into the backlog + the SYS-04 Salesforce Push workflow) against the **re-scoped MVP**, and defines exactly what must be confirmed against the client's live org once access lands.
 
@@ -72,7 +72,7 @@ These should be added to the KD-4 / KD-5.1.2 field set (and to KD-21 / KD-19 acc
 ## 3. Open decisions (needed to complete the MVP build)
 
 1. 🔵 **Email merge variables (FR-5.6b).** Which Account/standard fields do AU Group's email templates actually reference? We populate those on push. *Needs Keith + the live template.* — feeds KD-29 / new KD-5 field list.
-2. 🔵 **"Recent activity" definition (FR-5.5).** Designed logic = **open Opportunity** (stages Open/Negotiation/Closed-Won) **OR** Task/Event with `CreatedDate > NOW()-90d`. Confirm: which **objects** count (add `EmailMessage`? logged calls?), which **opp stages**, and whether prior `Bankruptcy_Event__c` on the account also flips it to `custom` (KD-29 currently says yes). *Needs Keith.*
+2. 🔵 **"Recent activity" definition (FR-5.5).** Designed logic (from the backlog) = a relevant **Opportunity** on the account **OR** a Task/Event with `CreatedDate > NOW()-90d`. ⚠️ The backlog lists Opportunity stages `Open` / `Negotiation` / **`Closed-Won`** — note `Closed-Won` is *not* an "open" opp, so **confirm which stages actually count** (any non-Closed-Lost? only open? recently-won within N days?). Also confirm: which **objects** count (add `EmailMessage`? logged calls?), and whether a prior `Bankruptcy_Event__c` on the account also flips it to `custom` (KD-29 currently says yes). *Needs Keith.*
 3. 🔵 **Tier + ZoomInfo URL storage** (see §2) — create the two new Account fields, or keep ZoomInfo URL in the pipeline DB only.
 4. 🔵 **Org context** — Salesforce **edition** (custom objects need Enterprise-class), **sandbox** availability for smoke tests, and **name conflicts** with any existing `Bankruptcy_Event__c`-like objects/fields or existing assignment rules.
 
@@ -91,7 +91,7 @@ Once an integration user + OAuth creds exist (`/prod/salesforce/oauth`), introsp
 - [ ] Edition supports custom objects; sandbox available for smoke tests
 - [ ] No conflicting existing objects/fields/assignment rules
 
-**Credentials to collect** (from `production-credentials-client-checklist.md`, secret path `/prod/salesforce/oauth`): Connected App **client_id**, **client_secret**, **refresh_token**, **instance_url** — never in repo/chat.
+**Credentials to collect** (from [production-credentials-client-checklist.md](production-credentials-client-checklist.md), secret path `/prod/salesforce/oauth`): Connected App **client_id**, **client_secret**, **refresh_token**, **instance_url** — never in repo/chat.
 
 ---
 
