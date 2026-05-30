@@ -40,6 +40,16 @@ begin
     and column_name  = 'status';
 
   if v_col_type = 'au_group_job_status' then
+    -- Drop partial indexes whose predicates reference the old au_group_job_status
+    -- enum before the ALTER — PostgreSQL cannot rebuild index predicates across a
+    -- column type change.  The CREATE UNIQUE INDEX IF NOT EXISTS calls below
+    -- recreate all of them with correct processing_job_status casts.
+    drop index if exists idx_processing_jobs_one_running_pacer_poll;
+    drop index if exists idx_processing_jobs_one_running_document_parse;
+    drop index if exists idx_processing_jobs_one_running_zoom_info_enrich;
+    drop index if exists idx_processing_jobs_one_running_doc_intel;
+    drop index if exists idx_processing_jobs_one_running_salesforce_push;
+
     alter table public.processing_jobs
       alter column status type public.processing_job_status
       using case status::text
@@ -98,6 +108,14 @@ begin
   end if;
 
   -- Fast-path: avoid the exception branch for the common non-concurrent case.
+  -- TOCTOU note: au_group_acquire_processing_job can insert a running row after
+  -- this check passes but before the INSERT below.  In that case the INSERT still
+  -- succeeds — running-singleton indexes filter on status='running' and cannot
+  -- block a 'queued' INSERT — so enqueued=true is returned despite the running
+  -- job.  The queued row coexists harmlessly: claim_job skips it (unique_violation
+  -- on the running-singleton when trying to UPDATE to 'running') until n8n's job
+  -- finishes, then claims it on the next worker cycle.  Fixing this fully requires
+  -- an advisory lock shared with acquire — off-limits during parallel-run.
   if exists (
     select 1
     from   public.processing_jobs
@@ -119,14 +137,13 @@ begin
     return jsonb_build_object('enqueued', true, 'job_id', v_job_id);
   exception
     when unique_violation then
-      -- Two cases: (a) concurrent enqueue hit the queued partial index;
-      -- (b) n8n called au_group_acquire_processing_job between the pre-check and
-      -- this INSERT, inserting a running row.  In case (b) the queued row lands
-      -- alongside n8n's running row — claim_job will skip it via unique_violation
-      -- until n8n's job finishes, then claim it on the next worker cycle.
-      -- An advisory lock could prevent case (b) but would require modifying
-      -- au_group_acquire_processing_job, which is explicitly off-limits during
-      -- parallel-run.  The coexistence is harmless and self-resolving.
+      -- unique_violation here comes only from
+      -- idx_processing_jobs_one_queued_per_bankruptcy_type: a concurrent enqueue
+      -- already inserted a queued row for this (bankruptcy_id, job_type) pair.
+      -- Running-singleton indexes filter on status='running' and cannot block
+      -- this 'queued' INSERT.  The n8n TOCTOU race (acquire inserting a running
+      -- row after the pre-check) does NOT trigger a unique_violation — it lets
+      -- the INSERT succeed and returns enqueued=true; see the TOCTOU note above.
       return jsonb_build_object('enqueued', false);
   end;
 end;
