@@ -562,11 +562,11 @@ class PipelineSettings(BaseSettings):
 | 0 | **WP-00 Enqueue RPC + claim RPC** — `pending` state + `FOR UPDATE SKIP LOCKED` dequeue | No | Immediately (blocks WP-01/05/06) |
 | 1 | WP-01 Pipeline module skeleton + `worker.py` drain loop | No | After WP-00 |
 | 2 | WP-02 `alerts.py` (Slack error util) | No | Immediately (parallel) |
-| 3 | WP-03 `report.py` + report RPC debtor-grouping fix + Railway cron service | No | After WP-00 + WP-01 |
-| 4 | WP-04 DB migrations (company_tier + sf_recency_status columns) | No | Immediately |
+| 4 | WP-04 DB migrations (company_tier + sf_recency_status columns) | No | Immediately (must precede WP-03 — its grouped RPC selects `creditors.company_tier`) |
+| 3 | WP-03 `report.py` + report RPC debtor-grouping fix + Railway cron service | No | After WP-00 + WP-01 **+ WP-04** (the grouped RPC selects `creditors.company_tier`, so the column must exist first) |
 | 5 | WP-05 `intake.py` — PACER polling + S3 + enqueue | No (PACER creds exist) | After WP-00 |
 | 6 | WP-06 `parse.py` — queue drain → document-parser endpoint | No | After WP-00 |
-| 7 | WP-07 Report RPC upgrade (add Tier column) + `report.py` Tier + recency mapping | Partial (Tier blocked on ZoomInfo) | WP-04 done |
+| 7 | WP-07 `report.py` Tier + recency rendering (render-only; no RPC change — grouped RPC already returns `company_tier`) | Partial (Tier blocked on ZoomInfo) | WP-03/04 done |
 | 8 | WP-08 `enrich.py` — ZoomInfo company match + tier | ❌ KD-53 (ZoomInfo key) | When ZoomInfo unblocked |
 | 9 | WP-09 `salesforce.py` — SF push + recency flag | ❌ SF VPN/IP + KD-53 | When SF + ZI unblocked |
 | 10 | WP-10 Parallel-run validation + n8n decommission | No (after WP parity) | After WP-06 for report; WP-09 for full |
@@ -740,16 +740,16 @@ Migration naming: `20260530XXXXXX_au_group_enqueue_and_claim_job_rpcs.sql`.
 
 ---
 
-### WP-07: Report RPC + report.py Tier column [BE]
+### WP-07: report.py Tier + recency rendering [BE]
 
-**Description:** Create migration adding `company_tier` to `au_group_daily_creditor_report_rows` output.  Update `report.py` to (a) show `company_tier` in Tier column, (b) for rows with a `salesforce_accounts` record, replace pipeline-status with `sf_recency_status`.
+**Description:** **Render-only — no RPC migration.** The grouped report RPC (`au_group_daily_creditor_report_grouped`, created in WP-03) already returns `company_tier` (NULL until WP-08), and `report.py` calls that grouped function — so the column already flows through.  Update `report.py` to (a) render `company_tier` in the Tier column, (b) for rows with a `salesforce_accounts` record, replace the interim pipeline-status with `sf_recency_status`.  (Do NOT add the column to the flat `au_group_daily_creditor_report_rows` function — that RPC is not the one `report.py` uses; adding it there would never reach the report.)
 
-**Dependencies:** WP-03, WP-04.
+**Dependencies:** WP-03 (grouped RPC), WP-04 (`company_tier` column). Tier values populate once WP-08 runs; recency once WP-09 runs.
 
 **Acceptance criteria:**
-- [ ] Migration adds `tier` to RPC output: `c.company_tier::text as tier` (NULL → empty string)
-- [ ] `report.py` renders Tier as `Enterprise`/`Mid-Market`/`SMB` or `—` if NULL
-- [ ] `report.py` renders Status as `sf_recency_status` when `salesforce_accounts` record exists; pipeline-progress otherwise
+- [ ] `report.py` renders Tier as `Enterprise`/`Mid-Market`/`SMB` or `—` if NULL (sourced from the grouped RPC's `company_tier`)
+- [ ] `report.py` renders Status as `sf_recency_status` when a `salesforce_accounts` record exists; pipeline-progress string otherwise
+- [ ] No change to the flat `au_group_daily_creditor_report_rows` RPC
 - [ ] Existing RPC unit tests pass
 
 **Estimated effort:** S
