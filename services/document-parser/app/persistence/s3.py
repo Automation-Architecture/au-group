@@ -61,6 +61,8 @@ class S3Client:
             raise _client_error_to_exception(exc, s3_key) from exc
 
     def put_bytes(self, s3_key: str, content: bytes, content_type: str = "application/octet-stream") -> None:
+<<<<<<< HEAD
+=======
         """Write binary content to an ocr-outputs/ or parsed-outputs/ key.
 
         NOT for raw-documents/ uploads — those go through _PipelineS3 in
@@ -68,6 +70,7 @@ class S3Client:
         credentials.  validate_s3_key enforces that only ocr-outputs/ and
         parsed-outputs/ prefixes are accepted here.
         """
+>>>>>>> origin/main
         validate_s3_key(s3_key, operation="write")
         try:
             self._client.put_object(
