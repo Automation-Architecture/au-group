@@ -1,0 +1,13 @@
+# Coverage config for the document-parser service.
+#
+# pipeline/intake.py and pipeline/worker.py are standalone Railway cron
+# entry-points that talk to external systems (PACER, the Supabase queue RPCs).
+# They have no unit tests yet — they are exercised by the parallel-run against
+# the live pipeline, not by the unit suite. Omitting them keeps --cov-fail-under
+# gating meaningful on the code that DOES have tests (report.py, alerts.py,
+# settings.py, and app/*). Remove these omits when KD-65 adds the parse-worker
+# unit tests.
+[run]
+omit =
+    pipeline/intake.py
+    pipeline/worker.py
