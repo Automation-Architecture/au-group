@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -128,7 +128,7 @@ def _build_and_post_report(
     debtor_count: int = data.get("debtor_count") or 0
     creditor_count: int = data.get("creditor_count") or 0
 
-    today = datetime.now(tz=timezone.utc).strftime("%a %-d %b %Y")
+    today = datetime.now(tz=UTC).strftime("%a %-d %b %Y")
     header = (
         f"*Daily Creditor Report — {today}*\n"
         f"Processed {creditor_count} company creditor{'s' if creditor_count != 1 else ''} "
