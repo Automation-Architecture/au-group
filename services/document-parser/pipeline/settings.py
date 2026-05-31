@@ -42,6 +42,11 @@ class PipelineSettings(BaseSettings):
     aws_secret_access_key: str | None = None
     s3_endpoint: str | None = None
 
+    # Worker skip flags — disable blocked stages during parallel-run (KD-58)
+    skip_enrich: bool = False   # SKIP_ENRICH=true disables zoom_info_enrich dispatch
+    skip_sf: bool = False       # SKIP_SF=true disables salesforce_push dispatch
+    worker_max_runtime_sec: int = 1500  # 25 min — exit before the 30-min cron interval
+
     supabase_http_timeout_sec: float = 60.0
     app_env: str = "development"
 
