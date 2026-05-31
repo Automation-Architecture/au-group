@@ -309,7 +309,7 @@ begin
 
   if v_state is null then
     return query
-    select null::char(2), v_court_id::varchar, false, 'unknown_court'::text;
+    select null::char(2), null::varchar, false, 'unknown_court'::text;
     return;
   end if;
 

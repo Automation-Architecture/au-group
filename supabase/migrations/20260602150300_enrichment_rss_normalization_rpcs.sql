@@ -181,7 +181,11 @@ declare
   v_err         text;
 begin
   if p_status_code = 429 then
-    return v_ctx || jsonb_build_object('statusCode', 429);
+    return v_ctx || jsonb_build_object(
+      'statusCode',           429,
+      'zoominfo_status',      'rate_limited',
+      'zoominfo_match_status','rate_limited'
+    );
   end if;
 
   v_body := coalesce(p_body, '{}'::jsonb);
@@ -330,7 +334,12 @@ declare
   v_sorted   jsonb;
 begin
   if p_status_code = 429 then
-    return v_base || jsonb_build_object('statusCode', 429, 'contacts_saved', 0);
+    return v_base || jsonb_build_object(
+      'statusCode',           429,
+      'contacts_saved',       0,
+      'zoominfo_status',      'rate_limited',
+      'zoominfo_match_status','rate_limited'
+    );
   end if;
 
   if coalesce(v_body->>'error', v_body->>'message') is not null then
@@ -381,7 +390,8 @@ begin
     ));
   end loop;
 
-  select coalesce(jsonb_agg(e order by (e->>'engagement_score')::numeric desc nulls last), '[]'::jsonb)
+  -- Order by engagement_score first, then limit to top 3.
+  select coalesce(jsonb_agg(e), '[]'::jsonb)
   into v_sorted
   from (
     select e
@@ -617,7 +627,7 @@ create or replace function public.au_group_enrich_loop_finalize(
 )
 returns jsonb
 language plpgsql
-stable security definer
+volatile security definer
 set search_path to public
 as $$
 declare

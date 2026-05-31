@@ -19,7 +19,9 @@ exception
   when duplicate_object then null;
 end $$;
 
--- bankruptcy_chapter used by bankruptcies.chapter_type (replaces au_group_chapter_type on live).
+-- bankruptcy_chapter: additional chapter enum for the code-native pipeline.
+-- Note: bankruptcies.chapter_type column remains au_group_chapter_type on the base schema;
+-- this enum is an additional type used by new pipeline code, not a column replacement.
 do $$ begin
   create type public.bankruptcy_chapter as enum ('7', '11', '13', '15');
 exception
@@ -175,11 +177,15 @@ $$;
 
 -- Applied to bankruptcies and creditors (confirmed via pg_trigger on live).
 -- Use DROP/CREATE for PG15 compatibility (CREATE OR REPLACE TRIGGER is PG16+).
+-- Also drop the old *_set_updated_at triggers from the base migration (20260215180000)
+-- so only one BEFORE UPDATE trigger fires per table.
+drop trigger if exists bankruptcies_set_updated_at on public.bankruptcies;
 drop trigger if exists update_bankruptcies_updated_at on public.bankruptcies;
 create trigger update_bankruptcies_updated_at
   before update on public.bankruptcies
   for each row execute function public.update_updated_at_column();
 
+drop trigger if exists creditors_set_updated_at on public.creditors;
 drop trigger if exists update_creditors_updated_at on public.creditors;
 create trigger update_creditors_updated_at
   before update on public.creditors
