@@ -78,6 +78,19 @@ create unique index if not exists idx_processing_jobs_one_running_zoom_info_enri
   where status = 'running'::processing_job_status
     and job_type = 'zoom_info_enrich'::au_group_job_type;
 
+-- These two were created by 20260520140000_sys02_document_parse_results.sql and are
+-- dropped in the reconciliation block above when status was au_group_job_status.
+-- They must be recreated here with the correct processing_job_status cast.
+create unique index if not exists idx_processing_jobs_one_running_doc_intel
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'document_intelligence'::au_group_job_type;
+
+create unique index if not exists idx_processing_jobs_one_running_salesforce_push
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'salesforce_push'::au_group_job_type;
+
 -- One queued job per (bankruptcy_id, job_type).  The running-singleton indexes
 -- cover status='running'; this covers status='queued' across all job types.
 create unique index if not exists idx_processing_jobs_one_queued_per_bankruptcy_type
