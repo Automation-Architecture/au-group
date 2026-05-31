@@ -5,8 +5,22 @@
 - PCL API User Guide: https://pacer.uscourts.gov/sites/default/files/files/PCL-API-Document_3.pdf (Dec 2022)
 - Developer Resources: https://pacer.uscourts.gov/file-case/developer-resources
 
-**Retrieved:** 2026-05-31  
-**Saved for:** `pipeline/intake.py` — OD-8 resolution: Case Locator REST for discovery, CM/ECF for document download.  
+**Retrieved:** 2026-05-31
+
+> ⚠️ **OD-8 UNDECIDED (2026-05-31)** — This document covers **Option B** (official PACER PCL REST API).
+>
+> **Option A — PACER Monitor** (`pacermonitor.com`, Fitch Solutions): Keith already has a subscription.
+> Their REST API offers normalized JSON from 200+ courts + programmatic document downloads, which would
+> eliminate the UNVERIFIED CM/ECF scraping in the current `PacerClient`. API docs are gated — awaiting
+> Keith's trial access from `support@pacermonitor.com`. If PACER Monitor supports Ch.11/state/date
+> filtering and Form 204 download, **prefer Option A** and replace only the `PacerClient` class.
+>
+> **Option B — This document** (PCL REST + CM/ECF document download): use if PACER Monitor cannot
+> support daily new-filing discovery or Form 204 retrieval.
+>
+> See `docs/architecture/n8n-to-code-native-migration.md` OD-8 for full decision context.
+
+**Saved for:** `pipeline/intake.py` (Option B path — PCL REST for discovery, CM/ECF for document download).  
 See: `docs/architecture/n8n-to-code-native-migration.md` §4.2 Stage 0
 
 ---
