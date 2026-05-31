@@ -365,6 +365,7 @@ export type Database = {
           address: string | null
           claim_amount: number | null
           claim_date: string | null
+          company_tier: number | null
           confidence_score: number | null
           created_at: string
           id: string
@@ -383,6 +384,7 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          company_tier?: number | null
           confidence_score?: number | null
           created_at?: string
           id?: string
@@ -401,6 +403,7 @@ export type Database = {
           address?: string | null
           claim_amount?: number | null
           claim_date?: string | null
+          company_tier?: number | null
           confidence_score?: number | null
           created_at?: string
           id?: string
@@ -877,6 +880,7 @@ export type Database = {
           id: string
           last_sync_at: string
           salesforce_account_id: string
+          sf_recency_status: string | null
           territory_rep: string | null
         }
         Insert: {
@@ -885,6 +889,7 @@ export type Database = {
           id?: string
           last_sync_at?: string
           salesforce_account_id: string
+          sf_recency_status?: string | null
           territory_rep?: string | null
         }
         Update: {
@@ -893,6 +898,7 @@ export type Database = {
           id?: string
           last_sync_at?: string
           salesforce_account_id?: string
+          sf_recency_status?: string | null
           territory_rep?: string | null
         }
         Relationships: [

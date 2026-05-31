@@ -173,19 +173,25 @@ Replaces: SYS-01 RSS Intelligence + SYS-01B PACER Nightly Poll + SYS-00 utility 
 - `AU_GROUP_TARGET_STATES` — comma-separated state abbreviations (or read from `au_group_target_states` Supabase table per migration `20260528100000_au_group_target_states.sql`)  
 
 **Logic:**
-1. Query PACER for new Chapter 11 filings since last successful run (use `bankruptcies.created_at` max or a `last_run_at` config key in `au_group_runtime_config`).  
-2. For each new case: download Form 201 (voluntary petition) + Form 204 (top-20 creditor list); store both PDFs in S3 under `raw-documents/{case_number}/`.  
+1. Query PACER Case Locator REST API for new Chapter 11 filings since last successful run (use `intake_last_run_at` key in `au_group_runtime_config`).  
+   - Auth: `POST https://pacer.login.uscourts.gov/services/cso-auth` → 128-char `nextGenCSO` token  
+   - Search: `POST https://pcl.uscourts.gov/pcl-public-api/rest/cases/find` with `jurisdictionType:"bk"`, `federalBankruptcyChapter:["11"]`, `courtId:[<per-state court IDs>]`, `dateFiledFrom/To`  
+   - Response contains `caseLink` (CM/ECF docket URL) per case  
+2. For each new case: download **Form 204 only** (top-20 creditor list) from the court's CM/ECF system using the PACER session token; store PDF in S3 under `raw-documents/{case_number}/form_204.pdf`.  
+   - **MVP decision (2026-05-31):** Form 201 (voluntary petition) download is Phase 2+. Debtor metadata (name, court, filing date) comes from the PCL response; estimated assets/liabilities from Form 201 are not needed for the creditor-extraction MVP.  
 3. Call `au_group_upsert_bankruptcy` RPC (existing, migration `20260515150100`) to insert/update the `bankruptcies` row.  
-4. Call `au_group_enqueue_job(bankruptcy_id, 'document_parse')` (new RPC from WP-00) — inserts a `pending` job; no-ops if `pending` or `running` already exists.  
-5. Insert a `pacer_poll` `processing_job` row (status `completed` or `failed`) per ADR-001.  
+4. Call `au_group_enqueue_job(bankruptcy_id, 'document_parse')` (new RPC from WP-00) — inserts a `queued` job; no-ops if a `queued` or `running` job already exists for the same `(bankruptcy_id, job_type)`.  
+5. Insert a `pacer_poll` `processing_jobs` row (status `completed` or `failed`) per ADR-001.  
 6. On any error: call `pipeline/alerts.py` → Slack.  
 
 **Outputs:**
 - `bankruptcies` rows upserted  
-- `processing_jobs` rows with `job_type='document_parse'`, `status='pending'`  
-- PDFs in S3  
+- `processing_jobs` rows with `job_type='document_parse'`, `status='queued'`  
+- Form 204 PDFs in S3 (`raw-documents/{case_number}/form_204.pdf`)  
 
-**Idempotency:** `bankruptcies.case_number` is UNIQUE; `au_group_upsert_bankruptcy` is idempotent.  `au_group_enqueue_job` is a no-op if a `pending` or `running` job already exists for the same `(bankruptcy_id, job_type)` — uses the existing singleton partial index to enforce this.
+**Idempotency:** `bankruptcies.case_number` is UNIQUE; `au_group_upsert_bankruptcy` is idempotent.  `au_group_enqueue_job` is a no-op if a `queued` or `running` job already exists for the same `(bankruptcy_id, job_type)` — uses the singleton partial indexes to enforce this.
+
+**Note on job status terminology:** The live Supabase DB uses `processing_job_status` enum with `queued` (not `pending` as originally specced). See `docs/architecture/supabase-live-schema-state.md`.
 
 #### Stage 1: Parse (`pipeline/parse.py`)
 
@@ -194,11 +200,11 @@ SYS-02 owned both `document_intelligence` and `document_parse` job types.  In co
 
 **Trigger:** `pipeline-worker` cron service drains the queue every 30 min.
 
-**Queue claim:** call `au_group_claim_job('document_parse')` (new RPC from WP-00) — `UPDATE processing_jobs SET status='running', started_at=now() WHERE id = (SELECT id FROM processing_jobs WHERE status='pending' AND job_type=$1 ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED) RETURNING *`.  Returns the claimed job or NULL if nothing pending.  The singleton partial index ensures at most one `running` job per `(bankruptcy_id, job_type)` — if the UPDATE would violate it (because n8n is holding a running job for this bankruptcy), the `unique_violation` is caught and the row is skipped (parallel-run mutual exclusion preserved).
+**Queue claim:** call `au_group_claim_job('document_parse')` (new RPC from WP-00) — atomically selects the oldest `queued` row (`status='queued'::processing_job_status`) FOR UPDATE SKIP LOCKED, flips it to `running`, stamps `started_at`.  Returns the claimed job or NULL if nothing queued.  The singleton partial index ensures at most one `running` job per `(bankruptcy_id, job_type)` — if the UPDATE would violate it (n8n holds a running job for this bankruptcy), the `unique_violation` is caught and the row is skipped (parallel-run mutual exclusion preserved).
 
 **Logic:**
 1. Loop: claim one `document_parse` job at a time until none remain.  
-2. Load `bankruptcy_id`, look up S3 keys for Form 201 + Form 204 PDFs.  
+2. Load `bankruptcy_id`, look up S3 key for Form 204 PDF (`raw-documents/{case_number}/form_204.pdf`).  
 3. POST `{DOCUMENT_PARSER_URL}/api/v1/parse/document` with `bankruptcy_id`, the Form 204 S3 key, and **`async_mode: true`** in the body (`X-API-Key: {API_KEY}`).  Background processing requires **both** `ASYNC_PARSE_ENABLED=true` (service env) **and** `async_mode: true` (request body — see `ParseDocumentRequest.async_mode` and the router check); otherwise the call runs synchronously and returns no `document_id` to poll.  Then poll `GET /api/v1/jobs/{document_id}` until `completed` or `failed` (existing async pattern — see README).  
 4. The document-parser service writes creditor rows to Supabase and returns structured output; no direct DB write from this stage.  
 5. Mark `document_parse` job `completed`.  
@@ -207,7 +213,7 @@ SYS-02 owned both `document_intelligence` and `document_parse` job types.  In co
 **Outputs:**
 - `creditors` + `bankruptcy_creditors` rows (written by document-parser service, not by this stage directly)  
 - `processing_jobs` row `document_parse` → `completed`  
-- `processing_jobs` row `zoom_info_enrich` → `pending`  
+- `processing_jobs` row `zoom_info_enrich` → `queued`  
 
 **Idempotency:** document-parser's merge RPC (`au_group_upsert_document_parse_result`, migration `20260523140000`) is idempotent on `(bankruptcy_id, creditor_name)`.
 

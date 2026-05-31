@@ -16,7 +16,7 @@ jobs:
         uses: ./.github/actions/setup-parser-ci
 
       - name: Ruff lint
-        run: ruff check app tests
+        run: ruff check app pipeline tests
 
       - name: Run tests with coverage
         run: |
@@ -25,7 +25,7 @@ jobs:
           export APP_ENV=development
           export RATE_LIMIT_ENABLED=false
           pytest tests/ -q --ignore=tests/integration -m "not smoke" \
-            --cov=app --cov-report=term-missing --cov-fail-under=60
+            --cov=app --cov=pipeline --cov-report=term-missing --cov-fail-under=60
 
       - name: Dummy PDF API smoke tests
         run: |

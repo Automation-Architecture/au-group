@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
+
 
 import httpx
 
@@ -29,7 +29,7 @@ def post_slack(bot_token: str, channel_id: str, text: str) -> None:
 def send_error_alert(
     stage: str,
     error: str,
-    bankruptcy_id: Optional[str] = None,
+    bankruptcy_id: str | None = None,
     *,
     bot_token: str,
     channel_id: str,
