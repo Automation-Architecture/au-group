@@ -22,7 +22,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
-import httpx  # noqa: F401 — kept for _call_grouped_report_rpc
+import httpx
 
 from pipeline.alerts import post_slack, send_error_alert
 from pipeline.settings import get_pipeline_settings

@@ -24,7 +24,10 @@ class PipelineSettings(BaseSettings):
     supabase_url: str
     supabase_service_role_key: str
     # Slack posting: bot token + channel ID (chat.postMessage).
-    # No incoming webhook needed — the bot just needs to be a channel member.
+    # SLACK_WEBHOOK_URL is NOT used — we switched from incoming webhooks to the
+    # Slack bot API (chat.postMessage) so the bot can post to any channel it is
+    # a member of without a per-channel webhook URL.  Set SLACK_BOT_TOKEN and
+    # SLACK_CHANNEL_ID in the Railway service environment instead.
     slack_bot_token: str
     slack_channel_id: str  # e.g. C0B3PHV37SR for #au-group-sprint
 
