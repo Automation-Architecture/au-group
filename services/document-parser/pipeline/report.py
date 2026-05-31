@@ -19,10 +19,17 @@ from __future__ import annotations
 import logging
 import sys
 from collections import defaultdict
+<<<<<<< HEAD
 from datetime import date, datetime, timezone
 from typing import Any
 
 import httpx  # noqa: F401 — kept for _call_grouped_report_rpc
+=======
+from datetime import UTC, date, datetime
+from typing import Any
+
+import httpx
+>>>>>>> origin/main
 
 from pipeline.alerts import post_slack, send_error_alert
 from pipeline.settings import get_pipeline_settings
@@ -46,7 +53,10 @@ def _call_grouped_report_rpc(
     timeout: float,
 ) -> dict[str, Any]:
     """Call au_group_daily_creditor_report_grouped() and return the parsed JSONB."""
+<<<<<<< HEAD
     # Migration: 20260603120000_au_group_daily_creditor_report_grouped.sql (PR #41)
+=======
+>>>>>>> origin/main
     url = supabase_url.rstrip("/") + "/rest/v1/rpc/au_group_daily_creditor_report_grouped"
     headers = {
         "apikey": service_role_key,
@@ -129,7 +139,11 @@ def _build_and_post_report(
     debtor_count: int = data.get("debtor_count") or 0
     creditor_count: int = data.get("creditor_count") or 0
 
+<<<<<<< HEAD
     today = datetime.now(tz=timezone.utc).strftime("%a %-d %b %Y")
+=======
+    today = datetime.now(tz=UTC).strftime("%a %-d %b %Y")
+>>>>>>> origin/main
     header = (
         f"*Daily Creditor Report — {today}*\n"
         f"Processed {creditor_count} company creditor{'s' if creditor_count != 1 else ''} "
@@ -140,6 +154,7 @@ def _build_and_post_report(
         post_slack(bot_token, channel_id, header + "\n\nNo new creditors in this window.")
         return
 
+<<<<<<< HEAD
     # Group by (debtor_name, case_number) to handle same-name debtors with distinct cases.
     by_debtor: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
@@ -149,27 +164,52 @@ def _build_and_post_report(
 
     def _debtor_filing_date(key: tuple[str, str]) -> str:
         first = by_debtor[key][0]
+=======
+    # Group by debtor; sort debtors by filing_date DESC; creditors within by claim DESC.
+    by_debtor: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        by_debtor[row.get("debtor_name") or "(unknown debtor)"].append(row)
+
+    def _debtor_filing_date(name: str) -> str:
+        first = by_debtor[name][0]
+>>>>>>> origin/main
         return first.get("filing_date") or ""
 
     sorted_debtors = sorted(by_debtor.keys(), key=_debtor_filing_date, reverse=True)
 
+<<<<<<< HEAD
     for key in sorted_debtors:
         by_debtor[key].sort(key=lambda r: _parse_claim(r.get("claim") or ""), reverse=True)
+=======
+    for name in sorted_debtors:
+        by_debtor[name].sort(key=lambda r: _parse_claim(r.get("claim") or ""), reverse=True)
+>>>>>>> origin/main
 
     if creditor_count <= _SPLIT_THRESHOLD:
         # Single message: header + all debtor blocks.
         blocks = [header]
+<<<<<<< HEAD
         for key in sorted_debtors:
             debtor_name, _ = key
             blocks.append("---")
             blocks.append(_format_debtor_block(debtor_name, by_debtor[key]))
+=======
+        for name in sorted_debtors:
+            blocks.append("---")
+            blocks.append(_format_debtor_block(name, by_debtor[name]))
+>>>>>>> origin/main
         post_slack(bot_token, channel_id, "\n\n".join(blocks))
     else:
         # Multi-message: header first, then one message per debtor group.
         post_slack(bot_token, channel_id, header)
+<<<<<<< HEAD
         for key in sorted_debtors:
             debtor_name, _ = key
             body = "---\n\n" + _format_debtor_block(debtor_name, by_debtor[key])
+=======
+        for name in sorted_debtors:
+            body = "---\n\n" + _format_debtor_block(name, by_debtor[name])
+>>>>>>> origin/main
             post_slack(bot_token, channel_id, body)
 
 

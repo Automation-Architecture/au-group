@@ -38,6 +38,7 @@ ruff check .                                             # lint
 
 - **Railway `startCommand` is NOT bash-parsed.** Use `$PORT`, never `${PORT:-8001}` — the literal string is passed to uvicorn and the service crashes on startup. (Fixed in PR #16.)
 - **Copilot review is required before merge, wired via `.github/workflows/copilot-review.yml`** (requests `Copilot` as a reviewer on each PR; restored in `b0802e7` to fix a hanging status check). If it's ever absent the copilot check hangs and PRs sit BLOCKED — see the stale-review note below.
+- **Supabase live schema has drifted from local migration files** — see `docs/architecture/supabase-live-schema-state.md` for the full divergence map before writing any migration. Key facts: (1) `processing_jobs.status` type is `processing_job_status` (not `au_group_job_status`); use `'queued'::processing_job_status` — the value `pending` does not exist. (2) `processing_jobs` has extra columns `worker_name` and `job_payload` not in any local file. (3) Five migration versions are registered in `schema_migrations` but have no local file counterpart. (4) Migration `20260530120000` is a phantom (version registered, SQL never ran) — start new migrations at `20260530120001` or later.
 
 ## Client dashboard
 
