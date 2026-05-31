@@ -28,6 +28,17 @@ class PipelineSettings(BaseSettings):
     slack_bot_token: str
     slack_channel_id: str  # e.g. C0B3PHV37SR for #au-group-sprint
 
+    # PACER credentials (intake stage)
+    pacer_username: str = ""
+    pacer_password: str = ""
+
+    # S3 (shared with document-parser web service)
+    s3_bucket: str = "bankruptcy-creditor-docs"
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    s3_endpoint: str | None = None
+
     supabase_http_timeout_sec: float = 60.0
     app_env: str = "development"
 

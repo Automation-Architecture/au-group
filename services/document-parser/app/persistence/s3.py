@@ -60,6 +60,18 @@ class S3Client:
         except ClientError as exc:
             raise _client_error_to_exception(exc, s3_key) from exc
 
+    def put_bytes(self, s3_key: str, content: bytes, content_type: str = "application/octet-stream") -> None:
+        validate_s3_key(s3_key, operation="write")
+        try:
+            self._client.put_object(
+                Bucket=self._bucket,
+                Key=s3_key,
+                Body=content,
+                ContentType=content_type,
+            )
+        except ClientError as exc:
+            raise _client_error_to_exception(exc, s3_key) from exc
+
     def put_json(self, s3_key: str, content: str) -> None:
         validate_s3_key(s3_key, operation="write")
         try:
