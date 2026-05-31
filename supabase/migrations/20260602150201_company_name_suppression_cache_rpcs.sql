@@ -249,7 +249,7 @@ revoke execute on function public.au_group_build_lookup_context(jsonb, jsonb)
 create or replace function public.au_group_active_target_states(
   p_states text[] default null
 )
-returns setof character
+returns setof char(2)
 language sql
 stable security definer
 set search_path to public
@@ -279,7 +279,7 @@ revoke execute on function public.au_group_active_target_states(text[])
 -- ---------------------------------------------------------------------------
 create or replace function public.au_group_resolve_court_and_target_state(p_court_id text)
 returns table(
-  bankruptcy_state character,
+  bankruptcy_state char(2),
   court_district   character varying,
   is_target_state  boolean,
   skip_reason      text

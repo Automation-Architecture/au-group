@@ -66,9 +66,9 @@ begin
   );
   v_court   := (regexp_match(v_link, 'ecf\.([a-z]+)\.uscourts\.gov', 'i'))[1];
   v_guid    := coalesce(v_item->>'guid', v_item->>'id', v_link);
-  v_doc_url := (regexp_match(v_content, 'href=[''""]([^''"\"]*doc1[^''"\"]+)[''""]', 'i'))[1];
+  v_doc_url := (regexp_match(v_content, 'href=[''"]([^''" ]*doc1[^''" ]+)[''"]', 'i'))[1];
   if v_doc_url is null then
-    v_doc_url := (regexp_match(v_content, 'https://ecf\.[^''\" ]+/doc1/[^''\" ]+', 'i'))[1];
+    v_doc_url := (regexp_match(v_content, 'https://ecf\.[^'' ]+/doc1/[^'' ]+', 'i'))[1];
   end if;
 
   v_debtor := btrim(regexp_replace(
@@ -384,7 +384,10 @@ begin
   select coalesce(jsonb_agg(e order by (e->>'engagement_score')::numeric desc nulls last), '[]'::jsonb)
   into v_sorted
   from (
-    select e from jsonb_array_elements(v_contacts) e limit 3
+    select e
+    from jsonb_array_elements(v_contacts) e
+    order by (e->>'engagement_score')::numeric desc nulls last
+    limit 3
   ) sub;
 
   return v_base || jsonb_build_object(
@@ -457,10 +460,10 @@ begin
       nullif(trim(v_elem->>'title'), ''),
       nullif(trim(v_elem->>'email'), ''),
       nullif(trim(v_elem->>'phone'), ''),
-      coalesce((v_elem->>'company_revenue')::numeric,  p_company_revenue),
-      coalesce((v_elem->>'company_employee_count')::integer, p_company_employee_count),
-      coalesce(nullif(trim(v_elem->>'company_industry'), ''), p_company_industry),
-      coalesce((v_elem->>'engagement_score')::integer, 0)
+      coalesce(nullif(v_elem->>'company_revenue', '')::numeric,        p_company_revenue),
+      coalesce(nullif(v_elem->>'company_employee_count', '')::integer, p_company_employee_count),
+      coalesce(nullif(trim(v_elem->>'company_industry'), ''),          p_company_industry),
+      coalesce(nullif(v_elem->>'engagement_score', '')::integer, 0)
     );
     v_saved := v_saved + 1;
   end loop;

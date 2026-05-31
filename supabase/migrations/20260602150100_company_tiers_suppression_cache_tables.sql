@@ -20,7 +20,10 @@ create table if not exists public.au_group_company_tiers (
   constraint au_group_company_tiers_tier_check check (tier >= 1 and tier <= 3)
 );
 
-create or replace trigger au_group_company_tiers_set_updated_at
+alter table public.au_group_company_tiers enable row level security;
+
+drop trigger if exists au_group_company_tiers_set_updated_at on public.au_group_company_tiers;
+create trigger au_group_company_tiers_set_updated_at
   before update on public.au_group_company_tiers
   for each row execute function public.set_updated_at();
 
@@ -43,10 +46,13 @@ create table if not exists public.au_group_company_name_rules (
     check (char_length(pattern) <= 200)
 );
 
+alter table public.au_group_company_name_rules enable row level security;
+
 create index if not exists idx_au_group_company_name_rules_priority
   on public.au_group_company_name_rules (enabled, priority, id);
 
-create or replace trigger au_group_company_name_rules_set_updated_at
+drop trigger if exists au_group_company_name_rules_set_updated_at on public.au_group_company_name_rules;
+create trigger au_group_company_name_rules_set_updated_at
   before update on public.au_group_company_name_rules
   for each row execute function public.set_updated_at();
 
@@ -61,6 +67,8 @@ create table if not exists public.au_group_schedule_f_keywords (
   created_at timestamptz not null default now()
 );
 
+alter table public.au_group_schedule_f_keywords enable row level security;
+
 -- ---------------------------------------------------------------------------
 -- 4. au_group_suppression_keywords  (keyword-based creditor suppression)
 -- ---------------------------------------------------------------------------
@@ -72,6 +80,8 @@ create table if not exists public.au_group_suppression_keywords (
   created_at timestamptz not null default now()
 );
 
+alter table public.au_group_suppression_keywords enable row level security;
+
 -- ---------------------------------------------------------------------------
 -- 5. au_group_suppression_lenders  (lender-name-based creditor suppression)
 -- ---------------------------------------------------------------------------
@@ -82,6 +92,8 @@ create table if not exists public.au_group_suppression_lenders (
   notes      text,
   created_at timestamptz not null default now()
 );
+
+alter table public.au_group_suppression_lenders enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- 6. au_group_zoominfo_company_cache  (TTL cache for ZoomInfo company lookups)
@@ -98,10 +110,13 @@ create table if not exists public.au_group_zoominfo_company_cache (
   updated_at        timestamptz not null default now()
 );
 
+alter table public.au_group_zoominfo_company_cache enable row level security;
+
 create index if not exists idx_au_group_zoominfo_company_cache_expires
   on public.au_group_zoominfo_company_cache (expires_at);
 
-create or replace trigger au_group_zoominfo_company_cache_set_updated_at
+drop trigger if exists au_group_zoominfo_company_cache_set_updated_at on public.au_group_zoominfo_company_cache;
+create trigger au_group_zoominfo_company_cache_set_updated_at
   before update on public.au_group_zoominfo_company_cache
   for each row execute function public.set_updated_at();
 
@@ -116,6 +131,8 @@ create table if not exists public.au_group_enrich_loop_staging (
   updated_at  timestamptz not null default now(),
   primary key (job_id, creditor_id)
 );
+
+alter table public.au_group_enrich_loop_staging enable row level security;
 
 create index if not exists idx_au_group_enrich_loop_staging_job
   on public.au_group_enrich_loop_staging (job_id);
@@ -132,6 +149,8 @@ create table if not exists public.au_group_tier_contact_titles (
   created_at    timestamptz not null default now(),
   constraint idx_au_group_tier_contact_titles_tier_pattern unique (tier, title_pattern)
 );
+
+alter table public.au_group_tier_contact_titles enable row level security;
 
 create index if not exists idx_au_group_tier_contact_titles_tier
   on public.au_group_tier_contact_titles (tier, sort_order)

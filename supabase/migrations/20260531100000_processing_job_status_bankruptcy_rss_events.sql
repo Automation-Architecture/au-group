@@ -110,6 +110,8 @@ create table if not exists public.bankruptcy_rss_events (
   qualified    boolean default false
 );
 
+alter table public.bankruptcy_rss_events enable row level security;
+
 create unique index if not exists idx_rss_event_dedupe
   on public.bankruptcy_rss_events (case_number, court_id, event_number);
 
@@ -134,11 +136,13 @@ end;
 $$;
 
 -- Applied to bankruptcies and creditors (confirmed via pg_trigger on live).
--- Use OR REPLACE so replay does not error on existing triggers.
-create or replace trigger update_bankruptcies_updated_at
+-- Use DROP/CREATE for PG15 compatibility (CREATE OR REPLACE TRIGGER is PG16+).
+drop trigger if exists update_bankruptcies_updated_at on public.bankruptcies;
+create trigger update_bankruptcies_updated_at
   before update on public.bankruptcies
   for each row execute function public.update_updated_at_column();
 
-create or replace trigger update_creditors_updated_at
+drop trigger if exists update_creditors_updated_at on public.creditors;
+create trigger update_creditors_updated_at
   before update on public.creditors
   for each row execute function public.update_updated_at_column();
