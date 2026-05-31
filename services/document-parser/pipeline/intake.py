@@ -360,8 +360,11 @@ class _PipelineS3:
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)
             return True
-        except ClientError:
-            return False
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -400,7 +403,7 @@ def _get_active_court_ids(supabase_url: str, key: str, timeout: float) -> list[s
         resp.raise_for_status()
         active_states = {r["state"] for r in resp.json()}
 
-    return [r["court_id"] for r in rows if r["state"] in active_states]
+    return [_correct_court_id(r["court_id"]) for r in rows if r["state"] in active_states]
 
 
 def _get_last_run_date(supabase_url: str, key: str, timeout: float) -> date:
@@ -453,6 +456,12 @@ def _form_204_s3_key(case_number_full: str) -> str:
 # Court mapping cache
 # ---------------------------------------------------------------------------
 
+# DB data bug: Michigan Eastern is stored as 'maeb'; correct PACER ID is 'mieb'.
+def _correct_court_id(court_id: str) -> str:
+    """Normalise a DB court_id to the real PACER court ID (no bk suffix)."""
+    return "mieb" if court_id == "maeb" else court_id
+
+
 def _get_court_mapping(supabase_url: str, key: str, timeout: float) -> dict[str, dict]:
     """Return {court_id: {state, court_district}} for all active courts."""
     with httpx.Client(timeout=timeout) as client:
@@ -462,7 +471,8 @@ def _get_court_mapping(supabase_url: str, key: str, timeout: float) -> dict[str,
             params={"select": "court_id,state,court_district", "active": "eq.true"},
         )
         resp.raise_for_status()
-    return {r["court_id"]: r for r in resp.json()}
+    # Remap any known DB data errors so lookup keys match real PACER court IDs.
+    return {_correct_court_id(r["court_id"]): r for r in resp.json()}
 
 
 # ---------------------------------------------------------------------------
@@ -477,13 +487,19 @@ def _upsert_bankruptcy(
     timeout: float,
 ) -> Optional[str]:
     """Call au_group_upsert_bankruptcy RPC. Returns bankruptcy UUID or None on error."""
-    # PCL courtId has 'k' suffix; DB court_id does not.
-    db_court_id = case.court_id.rstrip("k").rstrip("b") + "b" if case.court_id.endswith("bk") else case.court_id[:-1]
-    # Strip trailing 'k' to recover the DB court_id (e.g. nysbk → nysb)
-    db_court_id = case.court_id[:-1] if case.court_id.endswith("k") else case.court_id
-    court = court_mapping.get(db_court_id, {})
-    court_district = court.get("court_district", case.court_id)
-    state          = court.get("state", "")
+    # Strip trailing 'k' to recover the DB court_id (e.g. nysbk → nysb),
+    # then normalise via _correct_court_id so mieb/maeb resolve to the same key.
+    db_court_id = _correct_court_id(
+        case.court_id[:-1] if case.court_id.endswith("k") else case.court_id
+    )
+    court = court_mapping.get(db_court_id)
+    if not court:
+        raise ValueError(
+            f"Missing court mapping for PACER court_id={case.court_id!r} "
+            f"(resolved db_court_id={db_court_id!r})"
+        )
+    court_district = court["court_district"]
+    state = court["state"]
 
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
@@ -509,6 +525,7 @@ def _enqueue_document_parse(
     timeout: float,
 ) -> None:
     """Call au_group_enqueue_job for document_parse. No-ops if already queued/running."""
+    # Migration: 20260530120001_au_group_enqueue_claim_job_rpcs.sql (PR #39)
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
             f"{supabase_url.rstrip('/')}/rest/v1/rpc/au_group_enqueue_job",
@@ -533,12 +550,29 @@ def _insert_pacer_poll_job(
             f"{supabase_url.rstrip('/')}/rest/v1/processing_jobs",
             headers=_supabase_headers(key),
             json={
-                "job_type":     "pacer_poll",
-                "status":       status,
+                "job_type":      "pacer_poll",
+                "status":        status,
                 "bankruptcy_id": bankruptcy_id,
+                "completed_at":  datetime.now(tz=timezone.utc).isoformat(),
             },
         )
         resp.raise_for_status()
+
+
+# ---------------------------------------------------------------------------
+# Supabase existence check (used by compound idempotency gate)
+# ---------------------------------------------------------------------------
+
+def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeout: float) -> bool:
+    """Return True if a bankruptcies row already exists for this case_number."""
+    with httpx.Client(timeout=timeout) as client:
+        resp = client.get(
+            f"{supabase_url.rstrip('/')}/rest/v1/bankruptcies",
+            headers={**_supabase_headers(key), "Prefer": "count=exact"},
+            params={"select": "id", "case_number": f"eq.{case_number}", "limit": "1"},
+        )
+        resp.raise_for_status()
+    return bool(resp.json())
 
 
 # ---------------------------------------------------------------------------
@@ -555,6 +589,7 @@ def run(dry_run: bool = False) -> IntakeResult:
 
     if not settings.pacer_username or not settings.pacer_password:
         logger.error("PACER_USERNAME / PACER_PASSWORD not set — cannot run intake")
+        result.errors.append("fatal: missing PACER credentials")
         return result
 
     sb_url = settings.supabase_url
@@ -574,6 +609,7 @@ def run(dry_run: bool = False) -> IntakeResult:
             bot_token=settings.slack_bot_token,
             channel_id=settings.slack_channel_id,
         )
+        result.errors.append(f"fatal: config read failed: {exc}")
         return result
 
     if not court_ids:
@@ -595,6 +631,7 @@ def run(dry_run: bool = False) -> IntakeResult:
             bot_token=settings.slack_bot_token,
             channel_id=settings.slack_channel_id,
         )
+        result.errors.append(f"fatal: PACER auth failed: {exc}")
         return result
 
     # 3. Search for new cases
@@ -610,6 +647,7 @@ def run(dry_run: bool = False) -> IntakeResult:
             bot_token=settings.slack_bot_token,
             channel_id=settings.slack_channel_id,
         )
+        result.errors.append(f"fatal: PCL search failed: {exc}")
         return result
 
     result.cases_found = len(cases)
@@ -626,8 +664,14 @@ def run(dry_run: bool = False) -> IntakeResult:
     for case in cases:
         s3_key = _form_204_s3_key(case.case_number_full)
 
-        if s3.key_exists(s3_key):
-            logger.debug("Form 204 already in S3, skipping: %s", s3_key)
+        # Compound idempotency gate: S3 key AND a persisted bankruptcy row.
+        # If S3 upload succeeded but _upsert_bankruptcy() failed on a prior run,
+        # s3.key_exists() alone would silently skip the case forever.
+        # Only mark as done when both exist; otherwise fall through to retry DB work.
+        if s3.key_exists(s3_key) and _bankruptcy_row_exists(
+            case.case_number_full, sb_url, sb_key, sb_t
+        ):
+            logger.debug("Form 204 + DB row already present, skipping: %s", s3_key)
             result.cases_skipped += 1
             continue
 
@@ -646,6 +690,13 @@ def run(dry_run: bool = False) -> IntakeResult:
         except Exception as exc:
             logger.error("S3 upload failed for %s: %s", case.case_number_full, exc)
             result.errors.append(f"{case.case_number_full}: S3 upload failed")
+            send_error_alert(
+                stage="intake.py — S3 upload",
+                error=str(exc),
+                bankruptcy_id=case.case_number_full,
+                bot_token=settings.slack_bot_token,
+                channel_id=settings.slack_channel_id,
+            )
             result.cases_skipped += 1
             continue
 
@@ -677,6 +728,13 @@ def run(dry_run: bool = False) -> IntakeResult:
                 bot_token=settings.slack_bot_token,
                 channel_id=settings.slack_channel_id,
             )
+            result.errors.append(f"{case.case_number_full}: enqueue failed")
+            try:
+                _insert_pacer_poll_job(bankruptcy_id, "failed", sb_url, sb_key, sb_t)
+            except Exception as poll_exc:
+                logger.warning("failed pacer_poll row insert also failed for %s: %s", bankruptcy_id, poll_exc)
+            result.cases_skipped += 1
+            continue
 
         # 4e. Insert pacer_poll completed row (ADR-001)
         try:
