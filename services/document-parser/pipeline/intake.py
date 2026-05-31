@@ -32,8 +32,7 @@ import logging
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import UTC, date, datetime
 
 import boto3
 import httpx
@@ -246,7 +245,7 @@ class PacerClient:
     # docket HTML and downloaded with the PACER session cookie.
     # ------------------------------------------------------------------
 
-    def download_form_204(self, case_link: str, token: str) -> Optional[bytes]:
+    def download_form_204(self, case_link: str, token: str) -> bytes | None:
         """Download the Form 204 (top-20 creditor list) PDF from CM/ECF.
 
         UNVERIFIED — cannot validate without live PACER credentials against
@@ -300,7 +299,7 @@ class PacerClient:
         return pdf_resp.content
 
 
-def _find_form_204_url(html: str, base_url: str) -> Optional[str]:
+def _find_form_204_url(html: str, base_url: str) -> str | None:
     """Scan CM/ECF docket HTML for a link that looks like Form 204.
 
     Matches link text containing common Form 204 identifiers (case-insensitive).
@@ -485,7 +484,7 @@ def _upsert_bankruptcy(
     supabase_url: str,
     key: str,
     timeout: float,
-) -> Optional[str]:
+) -> str | None:
     """Call au_group_upsert_bankruptcy RPC. Returns bankruptcy UUID or None on error."""
     # Strip trailing 'k' to recover the DB court_id (e.g. nysbk → nysb),
     # then normalise via _correct_court_id so mieb/maeb resolve to the same key.
@@ -553,7 +552,7 @@ def _insert_pacer_poll_job(
                 "job_type":      "pacer_poll",
                 "status":        status,
                 "bankruptcy_id": bankruptcy_id,
-                "completed_at":  datetime.now(tz=timezone.utc).isoformat(),
+                "completed_at":  datetime.now(tz=UTC).isoformat(),
             },
         )
         resp.raise_for_status()
@@ -563,7 +562,7 @@ def _insert_pacer_poll_job(
 # Supabase existence check (used by compound idempotency gate)
 # ---------------------------------------------------------------------------
 
-def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeout: float) -> Optional[str]:
+def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeout: float) -> str | None:
     """Return the bankruptcy UUID if a row exists for this case_number, or None."""
     with httpx.Client(timeout=timeout) as client:
         resp = client.get(
