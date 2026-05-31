@@ -4,14 +4,17 @@ Agent-facing notes for working in this repo. The README is the human entry point
 
 ## What this is
 
-AI-powered lead-gen from federal bankruptcy filings. PACER → Schedule F parse → ZoomInfo enrichment → Salesforce. Deployed stack: **Supabase Postgres + Railway (FastAPI document-parser) + n8n**. See `README.md` for the full topology.
+AI-powered lead-gen from federal bankruptcy filings. MVP flow: PACER (Form 204 top-20 creditor list) → OCR/parse → ZoomInfo company match → Salesforce → daily Slack creditor report. Deployed stack: **Supabase Postgres + Railway (FastAPI document-parser + code-native pipeline cron services)**. n8n is in a **parallel-run pending decommission** (not the build target — see "Current direction"). See `README.md` for the full topology.
 
-## Current direction (as of 2026-05-30) — READ FIRST
+## Current direction (as of 2026-05-31) — READ FIRST
 
 - **MVP was simplified (May 2026, PRD v3.0 / Brief v2.0).** Pipeline = PACER → ZoomInfo **company** match + tier-as-attribute → Salesforce (account + bankruptcy logging + email vars + recency flag) → **daily Slack creditor report** (grouped by debtor: Creditor·City·State·Claim·Tier·Status·ZoomInfo URL). Decision-maker **contacts are manual**; Schedule F / automated outreach / historical DB are **Phase 2+ deferred** (the MVP-scope banner in `docs/project/prd.md` governs).
-- **The pipeline is being re-platformed OFF n8n → code-native.** Don't build new n8n workflows; the 26 AU-Group n8n workflows are slated for decommission after a parallel-run. Build per **`docs/architecture/n8n-to-code-native-migration.md`** (FastAPI on Railway + the Supabase `processing_jobs` queue; enqueue/claim RPCs). Tracked in Jira **KD epics E9/E10/E11 (KD-54…KD-70)**. **Unblocked build path:** KD-57 (queue RPCs) → KD-60 (grouped report RPC + `report.py` + cron) → KD-61 (parse). **WP-04 column migration must precede WP-03 grouped RPC** (it selects `creditors.company_tier`).
-- **Salesforce stage is access-blocked** (not creds — see `docs/project/salesforce-audit.md`): creds exist but a VPN/login-IP lockout blocks the live org. The two new SF fields the re-scope needs (`Company_Tier__c`, `ZoomInfo_URL__c`) are on KD-10.
-- **Gotchas:** the Jira REST/Agile API token is **stale/401** — sprint creation is blocked on a fresh token (rotate it in 1Password). The Atlassian **MCP is authed as a former team member** — revoke that access and re-auth the connection as the operator. (Operational specifics — names, exact secret locations — live in the session-pickup memory, not the repo.)
+- **The pipeline is being re-platformed OFF n8n → code-native.** Don't build new n8n workflows; the 26 AU-Group n8n workflows are slated for decommission after a parallel-run. Build per **`docs/architecture/n8n-to-code-native-migration.md`** (FastAPI on Railway + the Supabase `processing_jobs` queue; enqueue/claim RPCs). Tracked in Jira **KD epics E9/E10/E11 (KD-54…KD-70)**.
+- **Pipeline scaffold is BUILT + merged to main.** The code-native modules live in `services/document-parser/pipeline/`: `worker.py` (queue drain loop, KD-58), `intake.py` (PACER PCL discovery + Form 204 → S3, KD-63/64), `report.py` (daily Slack report, KD-61), `alerts.py` (Slack error alerts, KD-59), `settings.py`. Queue RPCs (`au_group_enqueue_job`/`au_group_claim_job`, KD-57), the grouped report RPC (KD-60), and the `company_tier`/`sf_recency_status` columns (KD-62) are all merged. **Three Railway cron services are live** in project `au-group-be`: `intake-cron` (`0 9 * * 1-5`), `pipeline-worker` (`*/30`, currently `SKIP_ENRICH=true`+`SKIP_SF=true`), `daily-report` (`0 13 * * 1-5`).
+- **Next unblocked card: KD-65** (`parse.py` — the `document_parse` worker stage; worker skeleton + claim RPC already live). When done, remove the `pipeline/intake.py` + `pipeline/worker.py` omits from `services/document-parser/.coveragerc` and add their unit tests.
+- **OD-8 still open** (PACER data source): Keith has a **PACER Monitor** subscription (`pacermonitor.com`) — `intake.py` is built against the official **PCL REST** API (Option B) but if PACER Monitor supports Ch.11/state/date search + Form 204 download, swap only the `PacerClient` class (Option A). Awaiting Keith's PACER Monitor API docs. Both options in `docs/architecture/n8n-to-code-native-migration.md` OD-8 + `pacer-pcl-api-reference.md`.
+- **Three stages BLOCKED on client/external access:** (1) **ZoomInfo enrichment (KD-67)** — Keith's account (`Woods@au-group.com`) is not API-enabled; he must email `integrationsupport@zoominfo.com`. (2) **Salesforce push (KD-68)** — VPN/login-IP lockout on the live org (creds exist; see `docs/project/salesforce-audit.md`); the two new SF fields the re-scope needs (`Company_Tier__c`, `ZoomInfo_URL__c`) are on KD-10. (3) **PACER credentials** — Keith requests API access from PACER Monitor support.
+- **Gotchas:** the Jira REST/Agile API token may still be stale (rotate in 1Password if sprint/Agile-API calls 401 — note KD is a Kanban board with no sprints, so this rarely matters). The Atlassian **MCP is now re-authed as the operator** (Brad) — Jira reads/writes go under his account. (Operational specifics — names, exact secret locations — live in the session-pickup memory, not the repo.)
 
 ## Commands (document-parser)
 
@@ -60,9 +63,11 @@ Provisioned at **`https://dashboard.automationarchitecture.ai/client/au-group`**
 | Domain | Path |
 |---|---|
 | FastAPI document parser (SYS-02A) | `services/document-parser/` |
+| Code-native pipeline modules + cron entrypoints | `services/document-parser/pipeline/` (`worker.py`, `intake.py`, `report.py`, `alerts.py`, `settings.py`) |
+| Coverage config (omits untested cron entrypoints) | `services/document-parser/.coveragerc` |
 | Supabase schema | `supabase/migrations/` |
-| Architecture decisions | `docs/architecture/` (final tech stack, ADR-001 RSS vs PACER) |
-| n8n workflow specs | `docs/workflows/`, `docs/n8n/` |
+| Architecture decisions | `docs/architecture/` — n8n→code-native migration, supabase-live-schema-state, pacer-pcl-api-reference, salesforce-audit, final-tech-stack, ADR-001 RSS vs PACER |
+| n8n workflow specs (legacy, decommission-pending) | `docs/workflows/`, `docs/n8n/` |
 | Project metadata | `project.config.yaml` |
 | TypeScript DB types | `types/database.types.ts` |
 | Discovery artifacts (historical) | `references/step-NN-*.md`, `docs/throughput-log.md` |
