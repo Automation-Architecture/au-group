@@ -50,6 +50,16 @@ begin
     and column_name  = 'status';
 
   if v_col_type = 'au_group_job_status' then
+    -- Drop partial indexes whose WHERE predicates reference the au_group_job_status
+    -- enum before the ALTER -- PostgreSQL cannot rebuild index predicates across a
+    -- column type change.  CREATE UNIQUE INDEX IF NOT EXISTS after this block
+    -- recreates them with correct processing_job_status casts.
+    drop index if exists idx_processing_jobs_one_running_pacer_poll;
+    drop index if exists idx_processing_jobs_one_running_document_parse;
+    drop index if exists idx_processing_jobs_one_running_zoom_info_enrich;
+    drop index if exists idx_processing_jobs_one_running_doc_intel;
+    drop index if exists idx_processing_jobs_one_running_salesforce_push;
+
     alter table public.processing_jobs
       alter column status type public.processing_job_status
       using case status::text
@@ -59,6 +69,34 @@ begin
       end::public.processing_job_status;
   end if;
 end $$;
+
+-- Recreate the running-singleton indexes with correct processing_job_status casts.
+-- These are no-ops on the live DB (column was already migrated before this file ran).
+-- On a fresh replay they are dropped (above) and recreated here.
+create unique index if not exists idx_processing_jobs_one_running_pacer_poll
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'pacer_poll'::au_group_job_type;
+
+create unique index if not exists idx_processing_jobs_one_running_document_parse
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'document_parse'::au_group_job_type;
+
+create unique index if not exists idx_processing_jobs_one_running_zoom_info_enrich
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'zoom_info_enrich'::au_group_job_type;
+
+create unique index if not exists idx_processing_jobs_one_running_doc_intel
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'document_intelligence'::au_group_job_type;
+
+create unique index if not exists idx_processing_jobs_one_running_salesforce_push
+  on public.processing_jobs (bankruptcy_id)
+  where status = 'running'::processing_job_status
+    and job_type = 'salesforce_push'::au_group_job_type;
 
 -- ---------------------------------------------------------------------------
 -- 3. Extra columns on processing_jobs (not in local original migration)
