@@ -563,8 +563,8 @@ def _insert_pacer_poll_job(
 # Supabase existence check (used by compound idempotency gate)
 # ---------------------------------------------------------------------------
 
-def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeout: float) -> bool:
-    """Return True if a bankruptcies row already exists for this case_number."""
+def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeout: float) -> Optional[str]:
+    """Return the bankruptcy UUID if a row exists for this case_number, or None."""
     with httpx.Client(timeout=timeout) as client:
         resp = client.get(
             f"{supabase_url.rstrip('/')}/rest/v1/bankruptcies",
@@ -572,7 +572,8 @@ def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeou
             params={"select": "id", "case_number": f"eq.{case_number}", "limit": "1"},
         )
         resp.raise_for_status()
-    return bool(resp.json())
+    rows = resp.json()
+    return rows[0]["id"] if rows else None
 
 
 # ---------------------------------------------------------------------------
@@ -667,10 +668,14 @@ def run(dry_run: bool = False) -> IntakeResult:
         # Compound idempotency gate: S3 key AND a persisted bankruptcy row.
         # If S3 upload succeeded but _upsert_bankruptcy() failed on a prior run,
         # s3.key_exists() alone would silently skip the case forever.
-        # Only mark as done when both exist; otherwise fall through to retry DB work.
-        if s3.key_exists(s3_key) and _bankruptcy_row_exists(
-            case.case_number_full, sb_url, sb_key, sb_t
-        ):
+        # If both exist but enqueue never fired (prior run failed at that step),
+        # call _enqueue_document_parse() — it no-ops if already queued/running.
+        existing_id = _bankruptcy_row_exists(case.case_number_full, sb_url, sb_key, sb_t)
+        if s3.key_exists(s3_key) and existing_id:
+            try:
+                _enqueue_document_parse(existing_id, sb_url, sb_key, sb_t)
+            except Exception as exc:
+                logger.warning("Idempotency re-enqueue failed for %s: %s", case.case_number_full, exc)
             logger.debug("Form 204 + DB row already present, skipping: %s", s3_key)
             result.cases_skipped += 1
             continue
@@ -680,6 +685,12 @@ def run(dry_run: bool = False) -> IntakeResult:
         if pdf_bytes is None:
             logger.warning("Form 204 not found for %s (%s)", case.case_number_full, case.case_title)
             result.errors.append(f"{case.case_number_full}: Form 204 not found")
+            send_error_alert(
+                stage="intake.py — Form 204 download",
+                error=f"Form 204 not found in CM/ECF docket for {case.case_number_full}",
+                bot_token=settings.slack_bot_token,
+                channel_id=settings.slack_channel_id,
+            )
             result.cases_skipped += 1
             continue
 
@@ -751,6 +762,13 @@ def run(dry_run: bool = False) -> IntakeResult:
             _set_last_run_date(sb_url, sb_key, sb_t, until)
         except Exception as exc:
             logger.error("Failed to update intake_last_run_at: %s", exc)
+            send_error_alert(
+                stage="intake.py — set last run date",
+                error=str(exc),
+                bot_token=settings.slack_bot_token,
+                channel_id=settings.slack_channel_id,
+            )
+            result.errors.append(f"non-fatal: intake_last_run_at update failed: {exc}")
 
     return result
 
