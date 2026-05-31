@@ -3,14 +3,12 @@
 from unittest.mock import call, patch
 
 import pytest
-
 from pipeline.report import (
     _SPLIT_THRESHOLD,
     _build_and_post_report,
     _format_creditor_line,
     _parse_claim,
 )
-
 
 # ---------------------------------------------------------------------------
 # _parse_claim
