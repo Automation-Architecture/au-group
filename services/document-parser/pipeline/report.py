@@ -22,7 +22,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 from typing import Any
 
-import httpx  # noqa: F401 — kept for _call_grouped_report_rpc
+import httpx
 
 from pipeline.alerts import post_slack, send_error_alert
 from pipeline.settings import get_pipeline_settings
@@ -128,7 +128,8 @@ def _build_and_post_report(
     debtor_count: int = data.get("debtor_count") or 0
     creditor_count: int = data.get("creditor_count") or 0
 
-    today = datetime.now(tz=timezone.utc).strftime("%a %-d %b %Y")
+    dt = datetime.now(tz=timezone.utc)
+    today = f"{dt.strftime('%a')} {dt.day} {dt.strftime('%b %Y')}"
     header = (
         f"*Daily Creditor Report — {today}*\n"
         f"Processed {creditor_count} company creditor{'s' if creditor_count != 1 else ''} "

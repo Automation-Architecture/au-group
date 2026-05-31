@@ -55,6 +55,11 @@ _PAGE_SIZE  = 54  # PCL returns max 54 per immediate search page
 # PCL requires the 'bk' suffix — we append it at call time.
 # NOTE: 'maeb' in the DB is a data error; correct PACER ID for Michigan Eastern
 # is 'mieb'.  This mapping uses the correct PACER IDs regardless of DB state.
+#
+# This constant is used as a hardcoded fallback in _get_active_court_ids() when
+# au_group_court_mappings returns an empty list (e.g. on first run before the
+# table is seeded).  The authoritative source is the Supabase table; this
+# constant exists only to prevent a silent no-op on a cold start.
 _STATE_TO_COURT_IDS: dict[str, list[str]] = {
     "NY": ["nysb", "nyeb"],          # Southern + Eastern (largest Ch11 volume)
     "NJ": ["njb"],
@@ -173,7 +178,7 @@ class PacerClient:
         if not tok:
             tok = self.authenticate()
 
-        pcl_court_ids = [cid + "bk" for cid in court_ids]
+        pcl_court_ids = [cid + "k" for cid in court_ids]
         body = {
             "jurisdictionType":       "bk",
             "federalBankruptcyChapter": [str(chapter)],
@@ -346,6 +351,13 @@ class _PipelineS3:
         self._bucket = s.s3_bucket
 
     def put_bytes(self, key: str, data: bytes, content_type: str = "application/pdf") -> None:
+        # IAM note: this writes to raw-documents/ which is outside the
+        # document-parser service's IAM grants (ocr-outputs/* + parsed-outputs/*).
+        # The intake-cron Railway service requires separate AWS credentials with
+        # PutObject on raw-documents/*.
+        # TODO(KD-64): configure PACER_AWS_ACCESS_KEY_ID / PACER_AWS_SECRET_ACCESS_KEY
+        # env vars on the intake-cron service so it uses its own IAM principal
+        # distinct from the document-parser service.
         self._client.put_object(
             Bucket=self._bucket,
             Key=key,
@@ -357,8 +369,11 @@ class _PipelineS3:
         try:
             self._client.head_object(Bucket=self._bucket, Key=key)
             return True
-        except ClientError:
-            return False
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -397,7 +412,23 @@ def _get_active_court_ids(supabase_url: str, key: str, timeout: float) -> list[s
         resp.raise_for_status()
         active_states = {r["state"] for r in resp.json()}
 
-    return [r["court_id"] for r in rows if r["state"] in active_states]
+    court_ids = [r["court_id"] for r in rows if r["state"] in active_states]
+
+    if not court_ids:
+        # Fallback: use the hardcoded mapping when the DB table is empty
+        # (e.g. first run before au_group_court_mappings is seeded).
+        # The authoritative source is au_group_court_mappings in Supabase.
+        logger.warning(
+            "au_group_court_mappings returned no active rows; "
+            "falling back to _STATE_TO_COURT_IDS hardcoded mapping"
+        )
+        court_ids = [
+            cid
+            for ids in _STATE_TO_COURT_IDS.values()
+            for cid in ids
+        ]
+
+    return court_ids
 
 
 def _get_last_run_date(supabase_url: str, key: str, timeout: float) -> date:
@@ -425,9 +456,7 @@ def _get_last_run_date(supabase_url: str, key: str, timeout: float) -> date:
 def _set_last_run_date(supabase_url: str, key: str, timeout: float, run_date: date) -> None:
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
-            f"{supabase_url.rstrip('/')}/rest/v1/rpc/au_group_upsert_runtime_config"
-            if False  # fallback to direct upsert
-            else f"{supabase_url.rstrip('/')}/rest/v1/au_group_runtime_config",
+            f"{supabase_url.rstrip('/')}/rest/v1/au_group_runtime_config",
             headers={**_supabase_headers(key), "Prefer": "resolution=merge-duplicates"},
             json={
                 "config_key":   "intake_last_run_at",
@@ -445,7 +474,7 @@ def _set_last_run_date(supabase_url: str, key: str, timeout: float, run_date: da
 def _form_204_s3_key(case_number_full: str) -> str:
     """Normalize case number for use as an S3 key component."""
     safe = re.sub(r"[^a-zA-Z0-9._-]", "-", case_number_full)
-    return f"raw-documents/{safe}/form_204.pdf"
+    return f"raw-documents/{safe}/form-204.pdf"
 
 
 # ---------------------------------------------------------------------------
@@ -466,24 +495,47 @@ def run(dry_run: bool = False) -> IntakeResult:
         return result
 
     # 1. Read config from Supabase
-    court_ids = _get_active_court_ids(
-        settings.supabase_url, settings.supabase_service_role_key,
-        settings.supabase_http_timeout_sec,
-    )
+    try:
+        court_ids = _get_active_court_ids(
+            settings.supabase_url, settings.supabase_service_role_key,
+            settings.supabase_http_timeout_sec,
+        )
+        since = _get_last_run_date(
+            settings.supabase_url, settings.supabase_service_role_key,
+            settings.supabase_http_timeout_sec,
+        )
+    except Exception as exc:
+        logger.error("Config read from Supabase failed: %s", exc)
+        from pipeline.alerts import send_error_alert
+        send_error_alert(
+            stage="intake.py — config read",
+            error=str(exc),
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+        return result
+
     if not court_ids:
         logger.warning("No active court IDs found in au_group_court_mappings — nothing to search")
         return result
 
-    since = _get_last_run_date(
-        settings.supabase_url, settings.supabase_service_role_key,
-        settings.supabase_http_timeout_sec,
-    )
     until = date.today()
     logger.info("Intake: courts=%s since=%s until=%s dry_run=%s", court_ids, since, until, dry_run)
 
     # 2. Authenticate to PACER
-    pacer  = PacerClient(settings.pacer_username, settings.pacer_password)
-    token  = pacer.authenticate()
+    pacer = PacerClient(settings.pacer_username, settings.pacer_password)
+    try:
+        token = pacer.authenticate()
+    except Exception as exc:
+        logger.error("PACER authentication failed: %s", exc)
+        from pipeline.alerts import send_error_alert
+        send_error_alert(
+            stage="intake.py — PACER auth",
+            error=str(exc),
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+        return result
 
     # 3. Search for new cases
     cases, token = pacer.search_new_cases(
