@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from pipeline.alerts import post_slack, send_error_alert
 
 
