@@ -10,8 +10,27 @@
 -- 20260529140000 predates the queued/running/retrying enrichment-pending check,
 -- which exists on the live DB via an out-of-repo migration (PR #40).
 --
--- CI replay dependency: creditors.company_tier (PR #40) and processing_job_status
--- (PR #39) must both be present.  Stack this PR on #39 + #40 before merging.
+-- CI replay dependency: creditors.company_tier (PR #43) and processing_job_status
+-- (PR #39) must be present.  The DO blocks below make this migration replayable
+-- in CI without those PRs merged first.
+
+-- ---------------------------------------------------------------------------
+-- 0. Replay-safety guards
+-- ---------------------------------------------------------------------------
+
+-- Ensure processing_job_status enum exists (created by 20260530120001 / PR #39).
+do $$ begin
+  create type public.processing_job_status as enum (
+    'queued', 'running', 'completed', 'failed', 'retrying'
+  );
+exception
+  when duplicate_object then null;
+end $$;
+
+-- Ensure creditors.company_tier exists (created by 20260603130000 / PR #43).
+alter table public.creditors
+  add column if not exists company_tier smallint
+    check (company_tier >= 1 and company_tier <= 3);
 
 -- ---------------------------------------------------------------------------
 -- 1. au_group_creditor_pipeline_status (replay-safe version)
