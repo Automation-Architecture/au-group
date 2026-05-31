@@ -16,10 +16,10 @@
 -- ---------------------------------------------------------------------------
 -- 1. au_group_creditor_pipeline_status (replay-safe version)
 --
--- Adds the queued/running/retrying check so "Pending Enrichment" renders
--- correctly for jobs in the new code-native queue (not just ZoomInfo contacts).
--- On the live DB this is a no-op replace; on a fresh replay it upgrades the
--- failed-only version from 20260529140000.
+-- Re-asserts the body from 20260529160000 so this migration is self-contained
+-- when stacked after #39 + #40 but before that migration is replayed in order.
+-- On the live DB and on any replay that already ran 20260529160000 this is a
+-- no-op replace (CREATE OR REPLACE).
 -- ---------------------------------------------------------------------------
 create or replace function public.au_group_creditor_pipeline_status(p_creditor_id uuid)
 returns text
@@ -92,7 +92,8 @@ revoke execute on function public.au_group_creditor_pipeline_status(uuid) from p
 --   { since, debtor_count, creditor_count, rows: [ { debtor_name, case_number,
 --     filing_date, creditor, city, state, claim, status, tier, zoominfo_url } ] }
 --
--- tier is sourced from creditors.company_tier (int2, NULL when not yet enriched).
+-- tier is sourced from creditors.company_tier (smallint 1–3: 1=Enterprise,
+-- 2=Mid-Market, 3=SMB; NULL when not yet enriched).
 -- Downstream report.py renders NULL tier as an em dash.
 -- ---------------------------------------------------------------------------
 create or replace function public.au_group_daily_creditor_report_grouped(
