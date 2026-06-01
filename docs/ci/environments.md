@@ -20,15 +20,15 @@ GitHub **Environments** gate deployments and hold secrets. Configure in repo **S
 |-------------|---------|------------|------------------|
 | **pr** | Pull request CI only | None | `ci.yml`, path-filtered jobs |
 | **staging** | **PR integration tests (strict)** | Optional reviewers | `integration-tests.yml`, `ci.yml` integration job |
-| **production** | Cron post-deploy smoke; manual-approval gate for `deploy-n8n.yml` | **Required reviewers** (manual approval) | `deploy-n8n.yml`, `smoke-e2e.yml` (cron) |
+| **production** | Cron post-deploy smoke + manual-dispatch deploys | **Required reviewers** (manual approval) | `smoke-e2e.yml` (cron); `deploy-parser-ec2.yml` (dispatch, Phase 4); `deploy-supabase.yml` (deploy job **disabled**, KD-74) |
 
 ## Branch → environment
 
 | Branch | CI | CD |
 |--------|----|----|
 | PR → `main` / `develop` | All path-filtered jobs | None |
-| `main` push | Same | **Parser → Railway native source connection** (auto, not a GH Action); **Supabase → MCP apply (manual, not `db push`)**; n8n when paths change |
-| `workflow_dispatch` | Re-run CI; n8n deploy per inputs | n8n only |
+| `main` push | Same | **Parser → Railway native source connection** (auto, not a GH Action); **Supabase → MCP apply (manual, not `db push`)**. No repo-driven CD workflow runs on push. |
+| `workflow_dispatch` | Re-run CI | `deploy-parser-ec2.yml` (Phase 4 EC2); `smoke-e2e.yml` |
 
 ## Secrets (repository or environment)
 
