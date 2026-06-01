@@ -47,6 +47,17 @@ class PipelineSettings(BaseSettings):
     skip_sf: bool = False       # SKIP_SF=true disables salesforce_push dispatch
     worker_max_runtime_sec: int = 1500  # 25 min — exit before the 30-min cron interval
 
+    # Document-parser HTTP API (parse stage — KD-65). The worker calls the
+    # document-parser web service over Railway private networking to OCR/parse
+    # Form 204 PDFs.  DOCUMENT_PARSER_URL points at the web service's internal
+    # address; DOCUMENT_PARSER_API_KEY is its X-API-Key (set as a Railway
+    # reference variable to the web service's API_KEY).
+    document_parser_url: str = "http://au-group.railway.internal:8080"
+    document_parser_api_key: str = ""
+    parse_poll_interval_sec: float = 5.0
+    parse_poll_timeout_sec: float = 600.0   # 10 min ceiling per document
+    parse_max_retries: int = 3              # transient httpx errors before giving up
+
     supabase_http_timeout_sec: float = 60.0
     app_env: str = "development"
 

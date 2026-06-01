@@ -125,6 +125,15 @@ def _requeue_job(job_id: str, supabase_url: str, key: str, timeout: float) -> No
 class _SkipJob(Exception):
     """Raised by _dispatch when a skip flag is active; the drain loop requeues the job."""
 
+
+class _StageHandled(Exception):
+    """Raised by a stage module that has already set the job's terminal state itself.
+
+    Used by parse.py for the manual-review path: the stage marks the job failed
+    (with an explanatory error_message) and raises this so the drain loop neither
+    completes it, requeues it, nor fires a generic error alert.
+    """
+
 def _dispatch(job: dict[str, Any], settings: Any) -> None:
     """Dispatch the claimed job to the appropriate stage module.
 
@@ -237,6 +246,11 @@ def run() -> int:
                 # Stage module not yet built — requeue so it is retried when KD-65/67/68 land.
                 logger.info("%s — requeueing job %s", exc, job_id)
                 _requeue_job(job_id, sb_url, sb_key, sb_t)
+
+            except _StageHandled as exc:
+                # Stage already set the job's terminal state (e.g. parse → manual review).
+                # Do not complete, requeue, or alert — just log and move to the next job.
+                logger.info("Job %s handled by stage (no completion): %s", job_id, exc)
 
             except Exception as exc:
                 logger.error("%s job %s failed: %s", job_type, job_id, exc)
