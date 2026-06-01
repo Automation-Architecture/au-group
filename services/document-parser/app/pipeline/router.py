@@ -17,8 +17,10 @@ from app.core.logging import log_event
 from app.core.request_context import bind_request_id, reset_request_id
 from app.core.s3_validation import validate_s3_key
 from app.core.url_safety import download_url_to_path
+from app.dedup.creditors import deduplicate_creditors
 from app.extractors.creditor_matrix import extract_creditor_matrix
 from app.extractors.form201 import extract_form201
+from app.extractors.schedules import parse_schedule_ef
 from app.extractors.structured_pdf import (
     StructuredPdfResult,
     extract_structured_pdf,
@@ -40,9 +42,11 @@ from app.ocr.tesseract_engine import TesseractOcrEngine
 from app.persistence.s3 import S3Client
 from app.persistence.supabase import SupabaseClient
 from app.pipeline.background_jobs import release_background_slot, try_acquire_background_slot
+from app.pipeline.filing_types import is_creditor_list_filing
 from app.pipeline.job_status import (
     JOB_STATUS_FAILED,
     JOB_STATUS_PROCESSING,
+    RAW_CREDITORS_MERGED,
     failed_job_raw,
     job_status_from_raw,
     mark_raw_completed,
@@ -88,13 +92,127 @@ class DocumentPipeline:
         if self._db.get_bankruptcy(bankruptcy_id) is None:
             raise BankruptcyNotFoundError(bankruptcy_id)
 
+    def _dedup_creditors_if_enabled(
+        self, creditors: list[CreditorRow], *, log: bool = False
+    ) -> tuple[list[CreditorRow], dict[str, int] | None]:
+        if not creditors or not self._settings.creditor_dedup_enabled:
+            return creditors, None
+        deduped, stats = deduplicate_creditors(
+            creditors,
+            threshold=self._settings.creditor_dedup_threshold,
+        )
+        dedup_stats = {
+            "original_count": stats.original_count,
+            "deduped_count": stats.deduped_count,
+            "duplicates_removed": stats.duplicates_removed,
+        }
+        if log and stats.duplicates_removed > 0:
+            log_event(logger, "creditor_dedup", **dedup_stats)
+        return deduped, dedup_stats
+
+    @staticmethod
+    def _creditor_matrix_row_payload(creditor: CreditorRow, extraction_id: str) -> dict:
+        return {
+            "extraction_id": extraction_id,
+            "creditor_name": creditor.creditor_name,
+            "address": creditor.address,
+            "claim_amount": creditor.claim_amount,
+            "entity_type": creditor.entity_type,
+            "source_line_numbers": creditor.source_line_numbers or [],
+        }
+
+    def _with_deduped_creditors(self, response: ParseDocumentResponse) -> ParseDocumentResponse:
+        """Align API creditors list with KD-40 dedup (e.g. after cache hit + backfill)."""
+        if not is_creditor_list_filing(response.filing_type) or not response.creditors:
+            return response
+        deduped, _ = self._dedup_creditors_if_enabled(list(response.creditors))
+        return response.model_copy(update={"creditors": deduped})
+
+    def _raw_with_deduped_creditors(self, raw: dict, filing_type: FilingType | None) -> dict:
+        """Ensure job-status / cached raw payloads expose deduped creditors for matrix filings."""
+        if not is_creditor_list_filing(filing_type):
+            return raw
+        creditors = self._creditors_from_raw(raw)
+        if not creditors:
+            return raw
+        deduped, _ = self._dedup_creditors_if_enabled(creditors)
+        updated = dict(raw)
+        updated["creditors"] = [c.model_dump() for c in deduped]
+        return updated
+
+    def _creditors_merged_in_raw(self, raw: dict) -> bool:
+        return bool(self._coerce_mapping(raw).get(RAW_CREDITORS_MERGED))
+
+    def _mark_creditors_merged(self, document_id: UUID) -> None:
+        """Record that merge_creditors ran so cache backfill does not re-sum claims."""
+        if not self._db._enabled:
+            return
+        row = self._db.get_document(document_id)
+        if not row:
+            return
+        raw = dict(self._coerce_mapping(row.get("raw_extraction")))
+        if raw.get(RAW_CREDITORS_MERGED):
+            return
+        raw[RAW_CREDITORS_MERGED] = True
+        doc_payload = SupabaseClient.document_payload(
+            bankruptcy_id=UUID(str(row["bankruptcy_id"])) if row.get("bankruptcy_id") else None,
+            s3_key=str(row.get("s3_key", "")),
+            content_sha256=str(row.get("content_sha256", "")),
+            page_count=int(row.get("page_count") or 0),
+            filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
+            parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
+            ocr_used=bool(row.get("ocr_used")),
+            parser_version=str(row.get("parser_version", self._settings.parser_version)),
+            raw_extraction=raw,
+        )
+        doc_payload["id"] = str(document_id)
+        self._db.upsert_document(doc_payload)
+
+    def _sync_cached_matrix_raw_extraction(self, content_hash: str) -> None:
+        """Persist deduped creditors + dedup_stats when serving a cache hit (KD-40 audit)."""
+        if not self._db._enabled:
+            return
+        row = self._db.find_document_by_hash(content_hash, self._settings.parser_version)
+        if not row:
+            return
+        filing_type = FilingType(row.get("filing_type", FilingType.UNKNOWN.value))
+        if not is_creditor_list_filing(filing_type):
+            return
+        raw = self._coerce_mapping(row.get("raw_extraction"))
+        creditors = self._creditors_from_raw(raw)
+        if not creditors:
+            return
+        deduped, dedup_stats = self._dedup_creditors_if_enabled(creditors, log=True)
+        if dedup_stats is None:
+            return
+        updated_creditors = [c.model_dump() for c in deduped]
+        if raw.get("dedup_stats") == dedup_stats and raw.get("creditors") == updated_creditors:
+            return
+        raw = dict(raw)
+        raw["creditors"] = updated_creditors
+        raw["dedup_stats"] = dedup_stats
+        doc_payload = SupabaseClient.document_payload(
+            bankruptcy_id=UUID(str(row["bankruptcy_id"])) if row.get("bankruptcy_id") else None,
+            s3_key=str(row.get("s3_key", "")),
+            content_sha256=str(row.get("content_sha256", content_hash)),
+            page_count=int(row.get("page_count") or 0),
+            filing_type=filing_type,
+            parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
+            ocr_used=bool(row.get("ocr_used")),
+            parser_version=str(row.get("parser_version", self._settings.parser_version)),
+            raw_extraction=raw,
+        )
+        if row.get("id"):
+            doc_payload["id"] = str(row["id"])
+        self._db.upsert_document(doc_payload)
+
     def _backfill_creditor_merge(
         self,
         *,
         bankruptcy_id: UUID | None,
         response: ParseDocumentResponse,
     ) -> None:
-        """Merge cached matrix creditors into creditors / bankruptcy_creditors when RPC was skipped."""
+        """Merge cached matrix creditors when the initial parse never completed merge_creditors."""
         if (
             not self._db._enabled
             or bankruptcy_id is None
@@ -103,17 +221,26 @@ class DocumentPipeline:
             or response.validation is None
         ):
             return
+        if response.document_id is not None:
+            doc_row = self._db.get_document(response.document_id)
+            if doc_row and self._creditors_merged_in_raw(
+                self._coerce_mapping(doc_row.get("raw_extraction"))
+            ):
+                return
         try:
+            creditors, _ = self._dedup_creditors_if_enabled(list(response.creditors))
             merged = self._db.merge_creditors(
                 bankruptcy_id,
-                response.creditors,
+                creditors,
                 confidence_score=response.validation.confidence_score,
             )
+            if response.document_id is not None:
+                self._mark_creditors_merged(response.document_id)
             log_event(
                 logger,
                 "creditor_merge_backfill",
                 bankruptcy_id=str(bankruptcy_id),
-                creditor_count=len(response.creditors),
+                creditor_count=len(creditors),
                 merged_count=merged,
                 confidence_score=response.validation.confidence_score,
             )
@@ -121,7 +248,7 @@ class DocumentPipeline:
             logger.warning(
                 "creditor_merge_backfill_failed bankruptcy_id=%s creditor_count=%s: %s",
                 bankruptcy_id,
-                len(response.creditors),
+                len(response.creditors or []),
                 exc,
                 exc_info=True,
             )
@@ -416,6 +543,7 @@ class DocumentPipeline:
                 content_hash, force=force, bankruptcy_id=bankruptcy_id
             )
             if cached is not None:
+                self._sync_cached_matrix_raw_extraction(content_hash)
                 self._backfill_creditor_merge(bankruptcy_id=bankruptcy_id, response=cached)
                 return cached, False, None, None, None, False
 
@@ -553,10 +681,11 @@ class DocumentPipeline:
         merged_count = 0
 
         if creditors is not None:
-            if filing_type != FilingType.CREDITOR_MATRIX:
+            if not is_creditor_list_filing(filing_type):
                 raise ValueError(
                     f"creditors apply not supported for filing_type={filing_type.value}"
                 )
+            creditors, dedup_stats = self._dedup_creditors_if_enabled(creditors, log=True)
             validation = validate_creditor_matrix(creditors)
             if validation.manual_review_required:
                 raise ValueError(
@@ -566,14 +695,7 @@ class DocumentPipeline:
 
             extraction_id = uuid4()
             matrix_rows = [
-                {
-                    "extraction_id": str(extraction_id),
-                    "creditor_name": c.creditor_name,
-                    "address": c.address,
-                    "claim_amount": c.claim_amount,
-                    "entity_type": c.entity_type,
-                }
-                for c in creditors
+                self._creditor_matrix_row_payload(c, str(extraction_id)) for c in creditors
             ]
             self._db.replace_creditor_matrix_extraction(
                 {
@@ -595,6 +717,9 @@ class DocumentPipeline:
             raw = self._coerce_mapping(doc_row.get("raw_extraction"))
             raw["manual_review_required"] = False
             raw["creditors"] = [c.model_dump() for c in creditors]
+            if dedup_stats is not None:
+                raw["dedup_stats"] = dedup_stats
+            raw[RAW_CREDITORS_MERGED] = True
             validation_block = raw.get("validation")
             if isinstance(validation_block, dict):
                 validation_block["manual_review_required"] = False
@@ -717,13 +842,27 @@ class DocumentPipeline:
 
             form201 = None
             creditors = None
+            dedup_stats: dict[str, int] | None = None
             if filing_type == FilingType.FORM_201:
                 form201 = extract_form201(text, structured)
                 validation = validate_form201(form201, ocr_used=ocr_used)
             elif filing_type == FilingType.CREDITOR_MATRIX:
                 creditors = extract_creditor_matrix(text, structured)
+                if creditors:
+                    creditors, dedup_stats = self._dedup_creditors_if_enabled(
+                        creditors, log=True
+                    )
                 validation = validate_creditor_matrix(
-                    creditors, ocr_used=ocr_used, ocr_confidence=ocr_confidence
+                    creditors or [], ocr_used=ocr_used, ocr_confidence=ocr_confidence
+                )
+            elif filing_type == FilingType.SCHEDULE:
+                creditors = parse_schedule_ef(text, structured)
+                if creditors:
+                    creditors, dedup_stats = self._dedup_creditors_if_enabled(
+                        creditors, log=True
+                    )
+                validation = validate_creditor_matrix(
+                    creditors or [], ocr_used=ocr_used, ocr_confidence=ocr_confidence
                 )
             else:
                 validation = should_review_for_error("unknown_filing_type")
@@ -753,18 +892,19 @@ class DocumentPipeline:
                 ),
             )
 
-            raw_extraction = mark_raw_completed(
-                {
-                    "text_preview": text[:2000],
-                    "filing_type": filing_type.value,
-                    "ocr_confidence": ocr_confidence,
-                    "parsed_s3_key": parsed_key,
-                    "validation": validation.model_dump(),
-                    "manual_review_required": validation.manual_review_required,
-                    "form201": form201.model_dump() if form201 else None,
-                    "creditors": [c.model_dump() for c in creditors] if creditors else None,
-                }
-            )
+            raw_payload: dict = {
+                "text_preview": text[:2000],
+                "filing_type": filing_type.value,
+                "ocr_confidence": ocr_confidence,
+                "parsed_s3_key": parsed_key,
+                "validation": validation.model_dump(),
+                "manual_review_required": validation.manual_review_required,
+                "form201": form201.model_dump() if form201 else None,
+                "creditors": [c.model_dump() for c in creditors] if creditors else None,
+            }
+            if is_creditor_list_filing(filing_type) and dedup_stats is not None:
+                raw_payload["dedup_stats"] = dedup_stats
+            raw_extraction = mark_raw_completed(raw_payload)
 
             doc_payload = SupabaseClient.document_payload(
                 bankruptcy_id=bankruptcy_id,
@@ -807,13 +947,7 @@ class DocumentPipeline:
             if creditors and bankruptcy_id:
                 extraction_id = uuid4()
                 matrix_rows = [
-                    {
-                        "extraction_id": str(extraction_id),
-                        "creditor_name": row.creditor_name,
-                        "address": row.address,
-                        "claim_amount": row.claim_amount,
-                        "entity_type": row.entity_type,
-                    }
+                    self._creditor_matrix_row_payload(row, str(extraction_id))
                     for row in creditors
                 ]
                 self._db.replace_creditor_matrix_extraction(
@@ -834,6 +968,7 @@ class DocumentPipeline:
                         creditors,
                         confidence_score=validation.confidence_score,
                     )
+                    self._mark_creditors_merged(active_document_id)
 
             if validation.manual_review_required and not self._db.has_pending_manual_review(
                 active_document_id
@@ -857,7 +992,7 @@ class DocumentPipeline:
                 self._db.upsert_case_status(
                     bankruptcy_id,
                     has_creditor_matrix=(
-                        filing_type == FilingType.CREDITOR_MATRIX and bool(creditors)
+                        is_creditor_list_filing(filing_type) and bool(creditors)
                     ),
                     lifecycle_stage="parsed",
                 )
@@ -957,9 +1092,10 @@ class DocumentPipeline:
         validation = self._validation_from_cached_row(row, raw)
         if document_id and self._db.has_pending_manual_review(document_id):
             validation = validation.model_copy(update={"manual_review_required": True})
-        return ParseDocumentResponse(
+        filing_type = FilingType(row.get("filing_type", FilingType.UNKNOWN.value))
+        response = ParseDocumentResponse(
             status="completed",
-            filing_type=FilingType(row.get("filing_type", FilingType.UNKNOWN.value)),
+            filing_type=filing_type,
             parse_mode=ParseMode(row.get("parse_mode", ParseMode.STRUCTURED.value)),
             ocr_used=bool(row.get("ocr_used")),
             page_count=int(row.get("page_count") or 0),
@@ -970,6 +1106,7 @@ class DocumentPipeline:
             creditors=self._creditors_from_raw(raw),
             validation=validation,
         )
+        return self._with_deduped_creditors(response)
 
     def get_document_status(self, document_id: UUID) -> dict | None:
         return self._db.get_document(document_id)
@@ -1007,13 +1144,17 @@ class DocumentPipeline:
         validation = self._validation_from_cached_row(row, raw)
         if self._db.has_pending_manual_review(document_id):
             validation = validation.model_copy(update={"manual_review_required": True})
+        filing_type = FilingType(filing) if filing else None
+        result = (
+            self._raw_with_deduped_creditors(raw, filing_type) if raw else None
+        )
         return JobStatusResponse(
             document_id=document_id,
             status="completed" if raw else "pending",
             parser_version=str(row.get("parser_version", "")),
-            filing_type=FilingType(filing) if filing else None,
+            filing_type=filing_type,
             manual_review_required=validation.manual_review_required,
-            result=raw if raw else None,
+            result=result,
         )
 
     def list_review_queue(

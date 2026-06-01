@@ -1,0 +1,2 @@
+# Align with pip-audit.toml — disputed PyJWT weak-encryption advisory (no fixed release yet).
+CVE-2025-45768

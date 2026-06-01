@@ -6,7 +6,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 | ID | Requirement summary | Automated | Workflow / job | Notes |
 |----|---------------------|-----------|----------------|-------|
-| **AC-1.1** | Daily PACER filings by 8 AM | partial | `au_group_target_states`, SYS-01B `au_group_list_pacer_poll_candidates`, SYS-01 gate | Admin-configurable states in Supabase; push workflow JSON to n8n cloud |
+| **AC-1.1** | Daily PACER filings by 8 AM | partial | SYS-01 **Config supabase** `target_states`, SYS-01B **Config — Target States**, `au_group_list_pacer_poll_candidates(p_states)` | Edit states in n8n Set nodes; see `docs/workflows/kd14-target-states-n8n.md` |
 | **AC-1.2** | Form 201 debtor metadata 95%+ | no | `docs/ci/manual/pacer-form201.md` | Parser unit tests + manual 95% sampling |
 | **AC-1.3** | Top 20 in Salesforce within 24h | scheduled | `smoke-e2e.yml` | End-to-end via n8n SYS-01→02→03 |
 | **AC-1.4** | Company vs individual 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
@@ -14,11 +14,11 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **AC-2.2** | Schedule F within 7 days | scheduled | `smoke-e2e.yml` | SYS-06/07 not in deploy manifest |
 | **AC-2.3** | Alert context complete | no | — | Product/n8n alert nodes |
 | **AC-2.4** | PACER favorites approval | partial | `docs/workflows/sys-07-pacer-favorites.md`, SYS-06/07 n8n | Deploy `deploy-mvp.mjs --wave=1`; manual Keith test |
-| **AC-3.1** | Structured Schedule E/F 95%+ | yes | `ci-parser` → pytest | `tests/test_schedules*.py`, fixtures |
+| **AC-3.1** | Structured Schedule E/F 95%+ | partial | `ci-parser` → pytest | `tests/test_schedules.py`, `tests/test_api_schedule_ef.py` (happy path); 95% accuracy sampling still manual |
 | **AC-3.2** | Simple list extraction | yes | `ci-parser` → pytest | `tests/test_creditor_matrix.py` |
 | **AC-3.3** | OCR + low-confidence flag | yes | `ci-parser` → pytest | `tests/test_validation.py`, `tests/test_api_review.py`, `tests/test_pipeline_*.py` |
 | **AC-3.4** | Page classification 90%+ | yes | `ci-parser` → pytest | `tests/test_classifier.py` |
-| **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest | `tests/test_idempotency.py` |
+| **AC-3.5** | Fuzzy dedup | yes | `ci-parser` → pytest; `ci-supabase` → SQL smoke | `tests/test_deduplicate_creditors.py`, `tests/test_api_creditor_dedup.py`, `app/dedup/creditors.py`; `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` |
 | **AC-4.1** | ZoomInfo 80%+ match | no | — | AU_GROUP-4; integration tests later |
 | **AC-4.2** | Tier identification 95%+ | no | — | n8n SYS-03 |
 | **AC-4.3** | Contacts 80%+ | no | — | n8n SYS-03 |
@@ -56,12 +56,12 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | **NFR-8.2** | API cost optimization | no | — | ZoomInfo cache — prod |
 | **NFR-9.1** | CAN-SPAM | no | — | Engage/SalesLoft templates |
 | **NFR-9.2** | Data retention | no | — | S3 lifecycle + SF policy |
-| **NFR-5** | Security / deps | yes | `ci-security` (always), `ci-parser` pip-audit | vbsec 21 rules on every PR |
+| **NFR-5** | Security / deps | yes | `ci-security`, `ci-codeql`, `ci-trivy`, `ci-parser` pip-audit | vbsec + CodeQL + Trivy fs on every PR |
 | **AU_GROUP-8.1** | Unit + integration tests | yes | `ci-parser`, `integration-tests` | PR: runs when secrets set; skip + warn if missing. Cron: strict. Optional `INTEGRATION_CI_STRICT=true` |
 | **AU_GROUP-8.2** | CI/CD pipeline | yes | `ci.yml`, deploy workflows | Deploy runs security + smoke (strict) |
 | **AU_GROUP-8.3** | CloudWatch dashboards | no | — | Infra outside repo |
 | **AU_GROUP-8.4** | Sentry | no | — | Phase 5 |
-| **AU_GROUP-8.5** | Security scan | yes | `ci-security` on every PR + deploy | gitleaks + bandit + pip/npm audit + patterns |
+| **AU_GROUP-8.5** | Security scan | yes | `ci-security`, `ci-codeql`, `ci-trivy` on every PR + parser deploy | vbsec + CodeQL + Trivy fs + pip/npm audit |
 
 ## Workflow file index
 
@@ -75,6 +75,8 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | Export package | `.github/workflows/ci-export.yml` | Called by `ci.yml`; validates `export/aaa-client-dashboard/` |
 | Playwright E2E | `.github/workflows/ci-playwright.yml` | Called by ci.yml |
 | vbsec security | `.github/workflows/ci-security.yml` | **Every** PR/push; all deploy workflows |
+| CodeQL (parser) | `.github/workflows/ci-codeql.yml` | **Every** PR/push; parser deploy workflows |
+| Trivy fs (parser deps) | `.github/workflows/ci-trivy.yml` | **Every** PR/push; parser deploy workflows |
 | Deploy parser (Railway) | `.github/workflows/deploy-parser-railway.yml` | push main, dispatch → smoke strict |
 | Deploy n8n | — | No standalone workflow file currently present; remove stale `deploy-n8n.yml` reference |
 | Deploy Supabase | `.github/workflows/deploy-supabase.yml` | push main → security |
@@ -83,7 +85,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 
 ## CI gate behavior (2026-05)
 
-- **Security:** runs on every PR/push (`ci.yml`), not path-filtered.
+- **Security:** `security`, `codeql`, and `trivy` run on every PR/push (`ci.yml`), not path-filtered.
 - **Integration:** runs when `services/document-parser/**` changes; skips with warning if staging secrets missing (unless `INTEGRATION_CI_STRICT=true` or weekly cron).
 - **all-green:** path-matched jobs must `success`; security always required.
 - **Smoke:** `strict=true` on deploy and daily cron — fails if `PARSER_*_URL` / n8n secrets missing.
@@ -94,4 +96,5 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 - [Rollback](./rollback.md)
 - [Manual tests](./manual/README.md)
 - [vbsec](./vbsec.md)
+- [Security layers](./security-layers.md)
 - [PR auto-fix (no merge)](./pr-autofix.md)

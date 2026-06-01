@@ -71,3 +71,54 @@ Provisioned at **`https://dashboard.automationarchitecture.ai/client/au-group`**
 | Project metadata | `project.config.yaml` |
 | TypeScript DB types | `types/database.types.ts` |
 | Discovery artifacts (historical) | `references/step-NN-*.md`, `docs/throughput-log.md` |
+
+=== SYSTEM UNDERSTANDING ===
+
+Trust Boundaries:
+- Internet/client → FastAPI: X-API-Key OR Bearer JWT (no per-resource authZ)
+- FastAPI → Supabase: service_role (RLS bypass; god-mode on tables + RPCs)
+- FastAPI → S3: AWS creds; reads only raw-documents/* pattern
+- FastAPI → HTTP(S) document_url: gated by flags + host suffix + SSRF checks
+- FastAPI → file://: dev-only; blocked in production; chrooted to LOCAL_FILE_ROOT
+- Supabase anon/authenticated: restrictive deny on SYS-02A tables; no au_group_* EXECUTE
+- CI: verify-rpc-acl.sql + smoke_merge_creditor_matrix_dedup_audit.sql post-migrate
+
+Data Flow:
+1. Auth (verify_auth) → route handler → DocumentPipeline
+2. _resolve_pdf: s3_key | https? URL | file:// (dev)
+3. _parse_document_sync OR async background → same sync path
+4. Classify → extract → in-process dedup → validate
+5. Persist: documents + extractions (REST) + merge/upsert (RPC)
+6. Review: queue REST read; apply/resolve → RPC + optional merge
+
+State Machines:
+- Job: raw_extraction processing → completed | failed
+- Merge idempotency: RAW_CREDITORS_MERGED after au_group_merge_creditor_matrix
+- Review: pending | in_review → resolved (apply may merge first)
+- Cache: content_sha256 + parser_version; force/backfill rules in _lookup_cached_document
+
+Invariants (global):
+- API_KEY non-empty; ≥32 chars in production
+- JWT: HS256, type=access, sub required; login rate-limited
+- au_group_* RPC: service_role EXECUTE only (reapply migration last)
+- s3_key read: ^raw-documents/[case]/[doc].pdf$
+- document_url: disabled unless allow_document_url + non-empty suffix allowlist
+- merge_creditors skipped when validation.manual_review_required
+- file:// never unlinked by _should_unlink_temp (only s3 + http(s) temps deleted)
+
+Attack Surface (entry points):
+- Unauth: GET /health, GET /health/ready (dependency probe labels)
+- Auth: POST /api/v1/auth/login
+- Auth: all other /api/v1/* (parse, extract, review)
+- Egress: document_url fetch; S3 read/write
+- Secrets in env: API_KEY, JWT_SECRET, service_role, AWS keys
+
+Assumptions Registry:
+| ID | Assumption | Conf |
+|----|------------|------|
+| A1 | Only operators/n8n hold API_KEY | MED |
+| A2 | service_role never in browser clients | MED |
+| A3 | expose_openapi=false in prod | HIGH |
+| A4 | JWT subject unused for authorization | HIGH |
+| A5 | DNS at URL-check time ≈ DNS at connect time | LOW |
+| A6 | au_group_merge_creditor_matrix enforces integrity in SQL | MED (not line-audited) |

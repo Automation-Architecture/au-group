@@ -1001,11 +1001,11 @@ As a backend engineer, I need OCR capability for scanned/handwritten Schedule F 
 As a backend engineer, I need to deduplicate creditor entries within a single filing (same company listed multiple times with slight variations) so that we don't create duplicate enrichment requests.
 
 **Acceptance Criteria:**
-- ✅ Duplicate creditors consolidated using fuzzy matching
-- ✅ Fuzzy match threshold: 85% similarity on company name
-- ✅ Total claim amounts summed for duplicates
-- ✅ Deduplication applied before ZoomInfo enrichment
-- ✅ Original creditor count vs. deduplicated count logged
+- [x] Duplicate creditors consolidated using fuzzy matching (KD-40 — `app/dedup/creditors.py`)
+- [x] Fuzzy match threshold: 85% on normalized name+address (`CREDITOR_DEDUP_THRESHOLD`, RapidFuzz)
+- [x] Total claim amounts summed for duplicates
+- [x] Deduplication applied before ZoomInfo enrichment (parser → `merge_creditors` before SYS-03)
+- [x] Original creditor count vs. deduplicated count logged (`raw_extraction.dedup_stats`, structured log `creditor_dedup`)
 
 **Tasks:**
 
@@ -1017,10 +1017,9 @@ As a backend engineer, I need to deduplicate creditor entries within a single fi
 **Subtasks:**
 - Install RapidFuzz library
 - Implement `deduplicate_creditors(creditors_list)` function
-- Calculate Levenshtein similarity for all creditor name pairs
-- Threshold: > 85% similarity = duplicate
-- Group duplicates together (using Union-Find or similar algorithm)
-- For each duplicate group: keep first entry, sum claim amounts, discard others
+- RapidFuzz `token_set_ratio` on normalized name + address
+- Threshold: ≥ 85% similarity = duplicate (`CREDITOR_DEDUP_THRESHOLD`)
+- Group duplicates (Union-Find); canonical row by confidence; sum claim amounts
 - Return deduplicated list
 
 **Acceptance Criteria:**
@@ -1037,14 +1036,14 @@ As a backend engineer, I need to deduplicate creditor entries within a single fi
 
 **Subtasks:**
 - Add deduplication step after creditor extraction (before database save)
-- Log original count vs. deduplicated count to `processing_jobs`
-- Add CloudWatch metric: `CreditorDeduplicationRate` (duplicates / total)
-- Update database save logic to use deduplicated list
+- Log counts to `documents.raw_extraction.dedup_stats` + structured log `creditor_dedup` (Railway parser; not `processing_jobs`)
+- CloudWatch metric deferred (ops via log/monitoring); see implementation-notes.md
+- Database save uses deduplicated list via `au_group_merge_creditor_matrix`
 
 **Acceptance Criteria:**
-- Deduplication runs automatically in pipeline
-- Duplicate count logged
-- Metric tracked in CloudWatch
+- [x] Deduplication runs automatically in pipeline
+- [x] Duplicate count logged (`dedup_stats` / `creditor_dedup`)
+- [ ] CloudWatch metric (deferred — not in Railway stack)
 
 ---
 

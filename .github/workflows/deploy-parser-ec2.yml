@@ -17,8 +17,14 @@ jobs:
     with:
       scope: diff
 
+  codeql:
+    uses: ./.github/workflows/ci-codeql.yml
+
+  trivy:
+    uses: ./.github/workflows/ci-trivy.yml
+
   deploy-ec2:
-    needs: [ci, security]
+    needs: [ci, security, codeql, trivy]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-parser-ec2-production-${{ github.repository }}

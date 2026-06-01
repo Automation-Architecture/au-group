@@ -34,9 +34,16 @@ jobs:
       code: ${{ steps.code.outputs.any }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
+        if: github.event_name != 'pull_request'
+        with:
+          fetch-depth: 0
+
+      - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
+        if: github.event_name != 'pull_request'
         id: filter
         with:
+          # Use git diff instead of PR files API (avoids diff-not-available / throttling).
+          token: ""
           filters: |
             parser:
               - 'services/document-parser/**'
@@ -66,6 +73,11 @@ jobs:
       - name: Detect code-path changes
         id: code
         run: |
+          # PRs run the full suite; skip paths-filter (avoids GitHub diff API outages).
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "any=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           any=false
           for flag in \
             "${{ steps.filter.outputs.parser }}" \
@@ -112,8 +124,25 @@ jobs:
     with:
       scope: diff
 
+  codeql:
+    uses: ./.github/workflows/ci-codeql.yml
+
+  trivy:
+    uses: ./.github/workflows/ci-trivy.yml
+
   all-green:
-    needs: [changes, parser, integration, supabase, playwright, export, security]
+    needs:
+      [
+        changes,
+        parser,
+        integration,
+        supabase,
+        playwright,
+        export,
+        security,
+        codeql,
+        trivy,
+      ]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -125,7 +154,9 @@ jobs:
             "${{ needs.supabase.result }}" \
             "${{ needs.playwright.result }}" \
             "${{ needs.export.result }}" \
-            "${{ needs.security.result }}"; do
+            "${{ needs.security.result }}" \
+            "${{ needs.codeql.result }}" \
+            "${{ needs.trivy.result }}"; do
             if [ "${result}" = "failure" ]; then
               echo "A required CI job failed"
               exit 1
@@ -149,6 +180,8 @@ jobs:
           require "${{ needs.playwright.result }}" "playwright"
           require "${{ needs.export.result }}" "export"
           require "${{ needs.security.result }}" "security"
+          require "${{ needs.codeql.result }}" "codeql"
+          require "${{ needs.trivy.result }}" "trivy"
           echo "CI gate passed (full PR suite)"
 
       - name: Require path-matched jobs succeeded
@@ -172,9 +205,17 @@ jobs:
             echo "::error::security must succeed on every run"
             exit 1
           fi
+          if [ "${{ needs.codeql.result }}" != "success" ]; then
+            echo "::error::codeql must succeed on every run"
+            exit 1
+          fi
+          if [ "${{ needs.trivy.result }}" != "success" ]; then
+            echo "::error::trivy must succeed on every run"
+            exit 1
+          fi
           echo "CI gate passed"
 
       - name: Block trivial pushes to main/develop without code checks
         if: github.event_name == 'push' && needs.changes.outputs.code != 'true'
         run: |
-          echo "::warning::Push did not touch parser/supabase/e2e paths — only security ran."
+          echo "::warning::Push did not touch parser/supabase/e2e paths — only security, codeql, and trivy ran."

@@ -60,8 +60,13 @@ python3 scripts/ci/vbsec_ci_scan.py --scope all --fail-on critical
 # then: /vbs-scan-security lang=en
 ```
 
+## Layered security (CodeQL + Trivy)
+
+vbsec is the **pattern + Bandit** layer. **CodeQL** (dataflow SAST) and **Trivy** (filesystem scan — `trivy fs` as run by [`ci-trivy.yml`](../../.github/workflows/ci-trivy.yml)) run in parallel on every PR — see [`security-layers.md`](security-layers.md).
+
 ## Related
 
+- [`security-layers.md`](security-layers.md) — full stack (vbsec, CodeQL, Trivy, pip-audit)
 - [`requirements-traceability.md`](requirements-traceability.md) — AU_GROUP-8.5
 - [`ci-parser.yml`](../../.github/workflows/ci-parser.yml) — also runs pip-audit on parser-only PRs
 - [`pip-audit.toml`](../../services/document-parser/pip-audit.toml) — parser CVE ignore list for OUTDATED-DEPENDENCY

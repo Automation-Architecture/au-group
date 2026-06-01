@@ -31,8 +31,14 @@ jobs:
     with:
       scope: diff
 
+  codeql:
+    uses: ./.github/workflows/ci-codeql.yml
+
+  trivy:
+    uses: ./.github/workflows/ci-trivy.yml
+
   deploy-staging:
-    needs: [ci, security]
+    needs: [ci, security, codeql, trivy]
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
     runs-on: ubuntu-latest
     concurrency:
@@ -62,7 +68,7 @@ jobs:
       environment: staging
 
   deploy-production:
-    needs: [ci, security]
+    needs: [ci, security, codeql, trivy]
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')

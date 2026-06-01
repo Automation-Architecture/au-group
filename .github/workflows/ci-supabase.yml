@@ -60,6 +60,22 @@ jobs:
           chmod +x scripts/ci/verify-supabase-rls.sh
           ./scripts/ci/verify-supabase-rls.sh
 
+      - name: Verify RPC ACL (local)
+        run: |
+          chmod +x scripts/ci/verify-supabase-rpc-acl.sh
+          ./scripts/ci/verify-supabase-rpc-acl.sh
+
+      - name: KD-40 merge RPC smoke (local)
+        run: |
+          set -euo pipefail
+          DB_URL="$(supabase status -o json | python3 -c "import json,sys; print(json.load(sys.stdin).get('DB_URL',''))")"
+          if [ -z "${DB_URL}" ]; then
+            echo "::error::Could not resolve local DB_URL for KD-40 smoke"
+            exit 1
+          fi
+          export PGPASSWORD=""
+          psql "${DB_URL}" -v ON_ERROR_STOP=1 -f scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql
+
       - name: Stop Supabase local
         if: always()
         run: supabase stop --no-backup 2>/dev/null || true

@@ -57,3 +57,44 @@ def test_build_job_status_failed() -> None:
     assert status is not None
     assert status.status == "failed"
     assert status.error == "OCR timeout"
+
+
+def test_build_job_status_dedupes_creditors_in_result() -> None:
+    pipeline = DocumentPipeline()
+    document_id = uuid4()
+    raw = mark_raw_completed(
+        {
+            "filing_type": "CREDITOR_MATRIX",
+            "creditors": [
+                {
+                    "creditor_name": "ABC Corp",
+                    "address": "123 Main St",
+                    "claim_amount": 100.0,
+                },
+                {
+                    "creditor_name": "ABC Corporation",
+                    "address": "123 Main St",
+                    "claim_amount": 50.0,
+                },
+            ],
+        }
+    )
+    row = {
+        "id": str(document_id),
+        "parser_version": "0.1.0",
+        "filing_type": "CREDITOR_MATRIX",
+        "parse_mode": "structured",
+        "ocr_used": False,
+        "page_count": 1,
+        "raw_extraction": raw,
+    }
+
+    def fake_get_document(_: object) -> dict:
+        return row
+
+    pipeline.get_document_status = fake_get_document  # type: ignore[method-assign]
+    status = pipeline.build_job_status(document_id)
+    assert status is not None
+    assert status.result is not None
+    assert len(status.result["creditors"]) == 1
+    assert status.result["creditors"][0]["claim_amount"] == 150.0

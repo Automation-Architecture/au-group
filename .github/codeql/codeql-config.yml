@@ -1,0 +1,11 @@
+# CodeQL scope: FastAPI document-parser (SYS-02A)
+name: "AU Group document-parser"
+
+paths:
+  - services/document-parser/app
+  - services/document-parser/scripts
+
+paths-ignore:
+  - "**/tests/**"
+  - "**/__pycache__/**"
+  - "**/.venv/**"

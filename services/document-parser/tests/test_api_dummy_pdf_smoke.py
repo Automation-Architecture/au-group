@@ -14,6 +14,7 @@ from tests.conftest import TEST_AUTH_PASSWORD, TEST_AUTH_USERNAME
 from tests.helpers.fake_supabase import FakeSupabaseClient
 from tests.helpers.smoke_fixtures import (
     SMOKE_FORM201_KEY,
+    SMOKE_MATRIX_DEDUP_KEY,
     SMOKE_MATRIX_KEY,
     dummy_pdf_paths,
     file_url_for,
@@ -114,7 +115,7 @@ class TestSmokeParseWithDummyPdfs:
     ) -> None:
         payload = {
             "bankruptcy_id": str(smoke_bankruptcy_id),
-            "s3_key": SMOKE_MATRIX_KEY,
+            "s3_key": SMOKE_MATRIX_DEDUP_KEY,
             "docket_hint": "CREDITOR_MATRIX",
         }
         first = client.post(
@@ -123,7 +124,9 @@ class TestSmokeParseWithDummyPdfs:
             headers=auth_headers,
         )
         assert first.status_code == 200, first.text
-        assert first.json()["status"] == "completed"
+        first_body = first.json()
+        assert first_body["status"] == "completed"
+        assert len(first_body["creditors"]) == 2
 
         FakeSupabaseClient.merge_creditors_call_count = 0
         second = client.post(
@@ -132,8 +135,18 @@ class TestSmokeParseWithDummyPdfs:
             headers=auth_headers,
         )
         assert second.status_code == 200, second.text
-        assert second.json()["status"] == "completed"
-        assert FakeSupabaseClient.merge_creditors_call_count >= 1
+        second_body = second.json()
+        assert second_body["status"] == "completed"
+        assert len(second_body["creditors"]) == 2
+        abc = next(
+            (c for c in second_body["creditors"] if "ABC" in c["creditor_name"]),
+            None,
+        )
+        assert abc is not None
+        assert abc["claim_amount"] == pytest.approx(150.0)
+        assert FakeSupabaseClient.merge_creditors_call_count == 0
+        doc = FakeSupabaseClient._documents[str(first_body["document_id"])]
+        assert doc["raw_extraction"].get("dedup_stats", {}).get("deduped_count") == 2
 
     def test_parse_document_creditor_matrix_s3(
         self,

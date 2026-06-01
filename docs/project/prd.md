@@ -425,9 +425,14 @@ The system shall identify and extract only creditor list pages from multi-docume
 **FR-3.5: Creditor Deduplication**  
 The system shall deduplicate creditor entries within a single filing.
 
-- Fuzzy matching on company name (handles slight variations)
-- Consolidates same company listed multiple times
+- Fuzzy matching on normalized company name and address (RapidFuzz `token_set_ratio`; default threshold 85%)
+- Consolidates same company listed multiple times (Union-Find clustering; transitive clusters allowed when A~B and B~C)
 - Total claim amounts summed for duplicates
+- Audit in parser: `documents.raw_extraction.dedup_stats` with shape `{ original_count, deduped_count, duplicates_removed }`; per-row `dedup_audit` and `source_line_numbers` on deduplicated groups only (`len(group) > 1`)
+- Persist canonical audit on `creditors.dedup_audit` via `au_group_merge_creditor_matrix` (before ZoomInfo / SYS-03)
+- On creditors upsert conflict (same normalized name+address): sum `claim_amount`; merge `dedup_audit.merged_names`, union `dedup_audit.source_line_numbers` (digits-only strings before cast), and `duplicate_count`
+- `dedup_audit` JSON: `{ dedup_group_id, merged_names, source_line_numbers, duplicate_count }`
+- Acceptance: SQL smoke `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` passes after migrations
 
 ---
 
@@ -926,7 +931,7 @@ AI agent that cross-references all signals and proactively recommends priority a
 | FR-3.2 | All creditor names and addresses extracted from simple creditor lists; missing data fields marked as null (not blank or guessed); non-standard formatting handled |
 | FR-3.3 | OCR attempts made on all scanned/handwritten documents; low-confidence results flagged for manual review (not auto-processed); handwritten filings from small cases flagged as low-priority |
 | FR-3.4 | Page classification correctly identifies creditor pages in 90%+ of cases; non-creditor pages excluded from parsing; handles 200+ page dockets |
-| FR-3.5 | Duplicate creditors consolidated using fuzzy matching on company name; same company listed multiple times with variations is consolidated; total claim amounts summed for duplicates |
+| FR-3.5 | Duplicate creditors consolidated using fuzzy matching on normalized company name and address (default threshold 85%); claim amounts summed; `dedup_stats` on `raw_extraction` and `dedup_audit` on `creditors` via merge RPC; ON CONFLICT merges audit fields; smoke `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` |
 
 ---
 

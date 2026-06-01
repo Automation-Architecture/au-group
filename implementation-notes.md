@@ -66,6 +66,15 @@
 - `continue-on-error: true` on SARIF upload avoids failing CI when GitHub Advanced Security is not licensed; vbsec JSON + scan step still gate merges.
 - Deploy concurrency uses `cancel-in-progress: false` so in-flight production deploys are not killed by a newer push.
 
+## CodeQL + Trivy security layers (2026-05-27)
+
+- **Added:** `.github/workflows/ci-codeql.yml`, `ci-trivy.yml`, `.github/codeql/codeql-config.yml`, `scripts/ci/install-trivy.sh`
+- **Gate:** `ci.yml` `all-green` requires `codeql` + `trivy` on every PR/push (same as vbsec)
+- **Trivy:** filesystem scan only (no Docker / no `trivy-action`); pins CLI v0.69.3
+- **Deploy:** `deploy-parser-railway.yml` and `deploy-parser-ec2.yml` run both before deploy
+- **Docs:** `docs/ci/security-layers.md`
+- **Deferred:** OWASP ZAP (needs stable staging + `PARSER_STAGING_URL`); Semgrep (overlaps vbsec/Bandit)
+
 ## Gitleaks CI credentials (2026-05-22)
 
 - **Symptom:** GitHub Advanced Security flagged `generic-api-key` in `.github/workflows/ci-parser.yml` for hardcoded `API_KEY` / `JWT_SECRET` test literals.
@@ -263,10 +272,12 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 
 **KD-14 target states**
 
-- Migrations: `20260528100000_au_group_target_states.sql` — table + `au_group_list_target_states`, `au_group_is_target_state`, `au_group_list_pacer_poll_candidates`, `au_group_config_audit`.
+- Migrations: `20260528100000_au_group_target_states.sql` — table + RPCs; `20260602150800_au_group_target_states_n8n_override.sql` — `p_states[]` from n8n overrides table when provided.
+- **Source of truth (ops):** n8n Set nodes — SYS-01 **Config supabase** `target_states`; SYS-01B **Config — Target States**. Doc: `docs/workflows/kd14-target-states-n8n.md`. Patch script: `scripts/n8n/patch-target-states-n8n-config.py`.
+- Supabase `au_group_target_states` remains fallback when `p_states` omitted (legacy/audit).
 - Seed: NY, NJ, PA, FL, MI. Applied to remote `umivttszdnsrosbqryia`.
-- **SYS-01B:** `Load Poll Candidates` RPC + `Expand Poll Candidates`; `Config supabase` uses `$env.SUPABASE_URL` only; poll limit from env or `au_group_runtime_config` (no `|| 20` in workflow).
-- **SYS-01 RSS:** Set/IF/HTTP/Merge chain (`Set Normalize Court Id` → court RPC → target-state RPC → `Merge Court Context`) → `Target State Active?`; no Code node for court routing.
+- **SYS-01B:** `Load Poll Candidates` POST `{ p_states }` from **Config — Target States**; `Config supabase` uses `$env.SUPABASE_URL` only; poll limit from env or `au_group_runtime_config` (no `|| 20` in workflow).
+- **SYS-01 RSS:** court RPC → **Set Target State Flags** (in-workflow array check; removed `RPC Is Target State`) → `Combine Court Gate` → `Target State Active?`.
 - **SYS-01B:** `Load Poll Candidates` → `Has Poll Cases` directly (`alwaysOutputData`); removed Expand Code node.
 - **SYS-04:** Territory via Set/IF/HTTP/Merge (same pattern as SYS-00); removed Resolve Territory Rep Code node.
 - **SYS-09:** `Set Slack Message` + Split Out/Set for sheet rows; `Config supabase` uses `$env.SUPABASE_URL` only.
@@ -314,6 +325,33 @@ supabase db push   # local; remote applied via MCP 2026-05-25
 - **Repo:** Moved `au-group-sys-04-salesforce-push-redesign.json` → `workflows/archive/` (not on cloud).
 - **SYS-07:** Hourly Poll now wires `List PACER Favorites Reports` (cloud); orphan `List Favorites Stub` connection entry remains — cleanup in F3.
 - **Next:** Fix F1 — `creditor_outreach_disposition` migration + SYS-04/05 gate/disposition wiring.
+
+## KD-40 — FR-3.5 Creditor fuzzy deduplication (2026-05-30)
+
+- **Parser:** `app/dedup/creditors.py` — RapidFuzz `token_set_ratio` on normalized name+address; Union-Find clustering; default threshold **85** (`CREDITOR_DEDUP_THRESHOLD`, `creditor_dedup_enabled`).
+- **Pipeline:** `DocumentPipeline._dedup_creditors_if_enabled` runs after extract / manual-review apply / merge backfill, **before** `validate_creditor_matrix` and `merge_creditors`.
+- **Audit:** `CreditorRow.source_line_numbers`, `dedup_audit` json; `documents.raw_extraction.dedup_stats`; staging column `creditor_matrix_rows.source_line_numbers`; canonical `creditors.dedup_audit`.
+- **Migration:** `20260530120000_kd40_creditor_dedup_audit.sql` — merge RPC sums `claim_amount` on conflict and merges dedup audit.
+- **Tests:** `tests/test_deduplicate_creditors.py` (AC-3.5).
+- **Audit fixes (2026-05-27):** Removed extractor name-only pre-filter (`creditor_matrix.py`); cache hit returns `_with_deduped_creditors` after backfill; `creditor_dedup_threshold` validated 50–100; `dedup_audit` only when `len(group) > 1`.
+- **Audit follow-up (2026-05-27):** Intentional deviation from PRD “name-only” wording — match key is **name+address** (documented in PRD § FR-3.5 + AC-3.5). Cache hit upserts `raw_extraction.creditors` + `dedup_stats` via `_sync_cached_matrix_raw_extraction`. Job status uses `_raw_with_deduped_creditors`. Smoke/API tests assert deduped creditors, `dedup_stats`, and `last_merge_creditors` carries `dedup_audit` / `source_line_numbers`.
+- **Code review fix (2026-05-27):** `raw_extraction.creditors_merged` set after successful `merge_creditors`; `_backfill_creditor_merge` skips when flag is true (prevents cache-hit claim_amount double-sum). RPC `dedup_audit` merge includes `duplicate_count`. Remote DBs that already applied `20260530120000` need `CREATE OR REPLACE` on `au_group_merge_creditor_matrix` if `duplicate_count` merge fix is required (re-run migration body or MCP patch).
+- **Copilot PR fixes (2026-05-27):** `_dedup_creditors_if_enabled(..., log=True)` only on write paths (parse/apply/cache sync); read paths (`_with_deduped_creditors`, `_raw_with_deduped_creditors`) stay silent. Migration: `source_line_numbers` merge filters `^\d+$` before cast; `duplicate_count` = `jsonb_array_length(merged_names)`. Removed committed `coverage.json`; added to `.gitignore`.
+- **SQL fix (2026-05-29):** ON CONFLICT `dedup_audit` merge used `WHERE ln ~ '^\d+$'` on a SELECT-list alias from `jsonb_array_elements_text` (invalid in PostgreSQL). Fixed to `FROM ... AS elem WHERE elem ~ '^\d+$'`. Forward migration `20260602150500_kd40_merge_creditor_matrix_srf_where_fix.sql` for remote DBs that already have `20260530120000`. Fallback path `v_merged_lines` (lines ~174–191) was already correct.
+- **Vibe-test + security (2026-05-29):** PRD FR-3.5 expanded (persistence targets, `dedup_audit` schema, ON CONFLICT merge, smoke). `scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql` + `ci-supabase.yml`. RPC ACL: `20260602150600_security_rpc_acl_service_role_only.sql`, `scripts/supabase/verify-rpc-acl.sql`, `scripts/ci/verify-supabase-rpc-acl.sh`; removed `anon`/`authenticated` grant from `20260523140000_au_group_upsert_document_parse_result_rpc.sql`. **Deploy:** apply `20260602150500` + `20260602150600` on remote; confirm n8n uses service_role for Supabase RPC nodes.
+- **Overload fix (2026-05-29):** `20260602150700_drop_merge_creditor_matrix_legacy_overload.sql` drops `(uuid, jsonb)` so two-arg calls resolve to KD-40 `(uuid, jsonb, numeric)`; smoke passes explicit `null::numeric` third arg.
+- **RPC ACL CI (2026-05-29):** `20260602150800` KD-14 target-state RPCs must revoke `anon`/`authenticated` (not only `public`). `20260602150900_security_rpc_acl_reapply.sql` re-runs ACL lockdown last in chain.
+- **n8n:** No workflow change — SYS-02 still calls parser; dedup is server-side.
+- **Deploy:** Apply Supabase migration on remote; redeploy Railway document-parser; KD-36 Schedule E/F extractor can add line numbers using same `source_line_numbers` pattern later.
+- **Remote migration history (2026-05-27):** Schema already live (`source_line_numbers`, `dedup_audit`, merge RPC). MCP applied as `20260527082541_kd40_creditor_dedup_audit`; repo file is `20260530120000_kd40_creditor_dedup_audit.sql`. Repaired remote `schema_migrations` with version `20260530120000` so `supabase db push` does not re-apply DDL. Prefer **Supabase MCP `apply_migration`** when CLI `db push` hangs (no `.supabase` link / interactive password).
+- **Phase 0 ship checklist (architect plan, 2026-05-27):**
+  1. Commit: `app/dedup/`, migration `20260530120000_kd40_creditor_dedup_audit.sql`, dedup tests (exclude `.coverage`).
+  2. Remote: confirm columns + `au_group_merge_creditor_matrix`; patch RPC if `duplicate_count` merge missing.
+  3. Railway: redeploy document-parser.
+  4. Smoke: matrix PDF + `force=true` → `dedup_stats`, merged ABC row, `creditors_merged` in raw.
+  5. Jira: mark AU_GROUP-3.4 Done (CloudWatch metric stays deferred).
+- **Phase 3 prep (2026-05-27):** `app/pipeline/filing_types.py` — `is_creditor_list_filing()` for CREDITOR_MATRIX + SCHEDULE; router dedup/cache paths use it. Extraction still matrix-only until AU_GROUP-3.1 `parse_schedule_ef`.
+- **Phase 2 (2026-05-27):** `parse_schedule_ef` in `schedules.py` (table headers + text/numbered fallbacks); `router.py` SCHEDULE branch + dedup; manual review apply uses `is_creditor_list_filing`. FR-3.1 extra fields (claim date, nature, flags) still deferred — CreditorRow has name/address/amount only.
 
 ## KD-38 — OCR manual review (Sheet + n8n + API) (2026-05-26)
 

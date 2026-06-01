@@ -5,6 +5,9 @@ JOB_STATUS_PROCESSING = "processing"
 JOB_STATUS_COMPLETED = "completed"
 JOB_STATUS_FAILED = "failed"
 
+# Set in raw_extraction after au_group_merge_creditor_matrix succeeds (KD-40).
+RAW_CREDITORS_MERGED = "creditors_merged"
+
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()

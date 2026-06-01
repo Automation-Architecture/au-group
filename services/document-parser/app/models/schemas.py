@@ -47,6 +47,8 @@ class CreditorRow(BaseModel):
     entity_type: str | None = None
     original_name: str | None = None
     confidence_score: float | None = None
+    source_line_numbers: list[int] = Field(default_factory=list)
+    dedup_audit: dict[str, Any] | None = None
 
 
 class ValidationResult(BaseModel):
