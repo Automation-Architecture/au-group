@@ -40,14 +40,16 @@ Or run from CI: re-dispatch **Deploy document-parser (EC2)** after checking out 
 
 ## Supabase migrations
 
-**Forward-only in production.** Rollback = new migration that reverses the change, then:
+**Forward-only in production.** Rollback = a new migration that reverses the change.
 
-```bash
-supabase link --project-ref "$SUPABASE_PROJECT_REF"
-supabase db push --linked
-```
+**Apply mechanism: Supabase MCP `apply_migration`** (NOT `supabase db push`). The repo migrations dir has
+drifted from live and the `deploy-supabase.yml` `db push` job is disabled (`if: false`) — running `db push`
+would regress live. See KD-74 and [`../architecture/supabase-live-schema-state.md`](../architecture/supabase-live-schema-state.md).
 
-Do **not** delete migration files already applied to production.
+To reverse a change: write the corrective migration file in `supabase/migrations/`, apply it to the live
+project (`umivttszdnsrosbqryia`) via MCP `apply_migration`, then verify with `execute_sql`. Do **not**
+delete migration files already applied to production. Once KD-74 reconciles repo↔live, the `db push`
+workflow path can be re-evaluated.
 
 ## Smoke verification after rollback
 

@@ -28,6 +28,14 @@ jobs:
       scope: diff
 
   deploy:
+    # DISABLED 2026-06-01 (KD-74) — see docs/ci/deploy-workflow-investigation-2026-06-01.md.
+    # The live DB is maintained via Supabase MCP apply_migration; the repo migrations dir has
+    # diverged from prod (45 live-only, 10 stale repo-only — incl. a KD-71 migration that would
+    # REGRESS au_group_list_company_creditors). Running `db push` here would regress live, so the
+    # deploy job is fail-closed off until repo<->live is reconciled in KD-74. The ci + security
+    # jobs above still run (on pushes to main and manual dispatch). Do NOT add SUPABASE_* secrets
+    # to re-arm this until KD-74 lands.
+    if: false
     needs: [ci, security]
     runs-on: ubuntu-latest
     environment: production
