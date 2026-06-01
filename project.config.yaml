@@ -8,8 +8,18 @@ project:
   stage: "build"
   closed_stages: ["discovery"]
   started: "2026-05-13"
-  target_launch: "2026-09-20"
+  target_launch: "2026-07-01"
   # Live board: https://automationarchitecture.atlassian.net/jira/software/projects/KD/boards/451
   jira_project_key: "KD"
   description: "AU Group — AI-powered lead generation platform that monitors federal bankruptcy filings via PACER, extracts creditors from Schedule F documents, enriches them via ZoomInfo, and pushes qualified leads into Salesforce."
   engagement_type: "Project · AI Agent"
+  # Operator-curated public Document Library (dashboard /client/au-group/docs).
+  # URLs must be access-appropriate for a public route; these resolve against the
+  # public au-group repo. Keep in sync with the data repo's documents.json.
+  documents:
+    - name: "Product Requirements (PRD)"
+      description: "Full product requirements for the Bankruptcy Creditor Intelligence platform — scope, functional and non-functional requirements, and the MVP definition."
+      url: "https://github.com/Automation-Architecture/au-group/blob/main/docs/project/prd.md"
+    - name: "Project Brief"
+      description: "One-page overview of the engagement — goals, scope, approach, and current dependencies."
+      url: "https://github.com/Automation-Architecture/au-group/blob/main/docs/project/project-brief.md"
