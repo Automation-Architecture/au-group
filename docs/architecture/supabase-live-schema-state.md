@@ -133,3 +133,19 @@ Priority order for bringing local files in sync with live DB:
 2. **Add `worker_name` + `job_payload` columns** to a local migration so `db reset` produces a matching schema.
 3. **Document `processing_job_status` type origin** — trace which ad-hoc call created it and add the `CREATE TYPE` to a migration so CI can replay it.
 4. After (1)–(3): validate with `supabase db reset --local` against the full migration history.
+
+---
+
+## 7. Foreign-key `ON DELETE` drift on `bankruptcies` references (2026-06-01)
+
+Three FKs referencing `public.bankruptcies` were created in the live DB **without** the `ON DELETE` clause their declaring migrations specify — they sit at `NO ACTION` instead. Any attempt to `DELETE` a `bankruptcies` row is blocked with `23503` until every referencing child row is removed by hand. This is what silently leaked `ITEST-*` integration rows (teardown's `DELETE bankruptcies` failed) and would break any pipeline path that deletes a bankruptcy.
+
+| Constraint | Child table.column | Live (drifted) | Declaring migration intends |
+|---|---|---|---|
+| `creditors_source_bankruptcy_id_fkey` | `creditors.source_bankruptcy_id` | `NO ACTION` | `SET NULL` (`20260529145000`) |
+| `bankruptcy_case_status_bankruptcy_id_fkey` | `bankruptcy_case_status.bankruptcy_id` | `NO ACTION` | `CASCADE` (`20260524110000`) |
+| `docket_entries_bankruptcy_id_fkey` | `docket_entries.bankruptcy_id` | `NO ACTION` | `CASCADE` (`20260524110000`) |
+
+All other `bankruptcies` FKs match intent (verified via `pg_constraint.confdeltype` 2026-06-01): `bankruptcy_creditors`, `creditor_matrix_extractions`, `document_parse_results`, `form201_extractions`, `schedule_f_queue` are `CASCADE`; `documents`, `manual_review_queue`, `pipeline_executions` are `SET NULL`; `bankruptcy_rss_events`, `processing_jobs` are `NO ACTION` (as their files declare).
+
+**Fix:** migration `20260603130003_fix_bankruptcy_fk_on_delete_drift.sql` drops and re-adds the three drifted constraints with the intended `ON DELETE`. Idempotent (drop-if-exists + add). Applied to live via MCP `apply_migration` on 2026-06-01 (the `Deploy Supabase migrations` GH workflow's deploy job is intentionally disabled — `if: false`, KD-74 / #57 — so migrations are applied via MCP/CLI by design, not CI; the job was also never wired with the `SUPABASE_DB_PASSWORD`/`SUPABASE_PROJECT_REF` secrets it would need).
