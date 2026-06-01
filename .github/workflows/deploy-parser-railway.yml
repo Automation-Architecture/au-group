@@ -3,8 +3,9 @@
 # auto-deploys on every push to main, independent of this workflow. The previous `railway up`
 # deploy-staging / deploy-production jobs were redundant and failed on an empty RAILWAY_TOKEN
 # that was never configured. They (and the dependent smoke-staging / smoke-production gates)
-# have been removed; this workflow is now CI-only — the pre-merge validation gates for the
-# parser. Post-deploy smoke is covered by the scheduled smoke-e2e.yml.
+# have been removed; this workflow is now CI-only — the parser's validation gates, run on
+# pushes to main (path-filtered) and manual dispatch. Post-deploy smoke is covered by the
+# scheduled smoke-e2e.yml.
 # See docs/ci/deploy-workflow-investigation-2026-06-01.md.
 name: document-parser CI
 
