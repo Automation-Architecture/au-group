@@ -220,6 +220,15 @@ def test_poll_job_timeout_is_fatal(monkeypatch):
         parse._poll_job("doc-1", _settings(parse_poll_timeout_sec=10.0))
 
 
+def test_poll_job_manual_review_is_terminal_even_when_pending(monkeypatch):
+    # build_job_status can emit status="pending" paired with manual_review_required;
+    # the poll must treat that as terminal rather than polling to timeout.
+    _patch_client(monkeypatch, [_FakeResp(200, {"status": "pending", "manual_review_required": True})])
+    monkeypatch.setattr(parse.time, "sleep", lambda *_: None)
+    body = parse._poll_job("doc-1", _settings())
+    assert body["manual_review_required"] is True
+
+
 # ---------------------------------------------------------------------------
 # process_job
 # ---------------------------------------------------------------------------
@@ -265,6 +274,24 @@ def test_process_job_manual_review_fails_and_raises_stagehandled(monkeypatch):
     assert fail_calls["job_id"] == "job-1"
     assert fail_calls["msg"].startswith("manual_review_required:")
     assert "enrich" not in fail_calls  # enrich must NOT be enqueued on manual review
+
+
+def test_process_job_pending_with_manual_review_routes_to_review(monkeypatch):
+    # status="pending" + manual_review_required → manual-review path (checked before status)
+    monkeypatch.setattr(parse, "get_pipeline_settings", lambda: _settings())
+    monkeypatch.setattr(parse, "_get_case_number", lambda *a, **k: "1:26bk12345")
+    monkeypatch.setattr(parse, "_start_parse", lambda *a, **k: "doc-1")
+    monkeypatch.setattr(
+        parse, "_poll_job", lambda *a, **k: {"status": "pending", "manual_review_required": True}
+    )
+    fail_calls = {}
+    monkeypatch.setattr(parse, "_fail_job", lambda jid, msg, *a, **k: fail_calls.update(job_id=jid, msg=msg))
+    monkeypatch.setattr(parse, "_enqueue_enrich", lambda *a, **k: fail_calls.setdefault("enrich", True))
+
+    with pytest.raises(_StageHandled):
+        parse.process_job(_job())
+    assert fail_calls["msg"].startswith("manual_review_required:")
+    assert "enrich" not in fail_calls
 
 
 def test_process_job_parse_failed_raises_runtimeerror(monkeypatch):

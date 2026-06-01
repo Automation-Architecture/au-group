@@ -6,16 +6,18 @@ The worker dispatches ``document_parse`` jobs here.  For each job this stage:
   2. POSTs ``/api/v1/parse/document`` (``async_mode``) to the document-parser
      web service, which OCRs/parses the Form 204 in the background.
   3. Polls ``GET /api/v1/jobs/{document_id}`` until the parse reaches a terminal
-     state.
-  4. Acts on the outcome:
-       - ``completed`` and not ``manual_review_required`` → enqueue the next
-         stage (``zoom_info_enrich``) and return normally; the worker then marks
-         the ``document_parse`` job completed.
-       - ``completed`` but ``manual_review_required`` → the document-parser has
-         routed the doc to its own review queue (review.py apply/resolve).  Mark
-         this job ``failed`` with an ``manual_review_required:`` error_message and
-         raise :class:`pipeline.worker._StageHandled` so the drain loop neither
+     state (``completed``/``failed``, or ``manual_review_required`` set — the
+     latter is treated as terminal so a "pending" status that pairs with it does
+     not poll to timeout; see ``build_job_status`` in app.pipeline.router).
+  4. Acts on the outcome (manual review is checked first, before status):
+       - ``manual_review_required`` → the document-parser has routed the doc to
+         its own review queue (review.py apply/resolve).  Mark this job ``failed``
+         with a ``manual_review_required:`` error_message and raise
+         :class:`pipeline.worker._StageHandled` so the drain loop neither
          completes, requeues, nor fires a generic Slack alert.
+       - ``completed`` (no manual review) → enqueue the next stage
+         (``zoom_info_enrich``) and return normally; the worker then marks the
+         ``document_parse`` job completed.
        - ``failed`` → raise ``RuntimeError`` so the worker marks the job failed
          and alerts.
 
@@ -46,8 +48,10 @@ from pipeline.worker import _StageHandled
 
 logger = logging.getLogger(__name__)
 
-# HTTP JobStatusResponse.status values (app/pipeline/job_status.py).
-_JOB_PROCESSING = "processing"
+# Terminal HTTP JobStatusResponse.status values (app/pipeline/job_status.py).
+# Non-terminal values ("processing", "queued", and the "pending" that
+# build_job_status emits) simply continue the poll loop; manual_review_required
+# is handled as a terminal signal independently of status.
 _JOB_COMPLETED = "completed"
 _JOB_FAILED = "failed"
 
@@ -154,8 +158,11 @@ def _start_parse(
 ) -> str:
     """POST /api/v1/parse/document (async) and return the document_id to poll.
 
-    Raises _FatalParseError on auth/4xx/missing-document_id (no point retrying);
-    transient errors (429/5xx/network) propagate for the caller's retry loop.
+    Raises _FatalParseError directly on 401/403 auth, 409 already-processing, and
+    missing document_id. Other non-2xx responses propagate from raise_for_status()
+    as httpx.HTTPStatusError; the caller's retry loop then classifies them via
+    _is_transient (429/5xx → retry, other 4xx → fatal). Network errors likewise
+    propagate as httpx.RequestError for the caller to retry.
     """
     url = f"{settings.document_parser_url.rstrip('/')}/api/v1/parse/document"
     with httpx.Client(timeout=settings.supabase_http_timeout_sec) as client:
@@ -183,36 +190,38 @@ def _poll_job(document_id: str, settings: PipelineSettings) -> dict[str, Any]:
     """Poll GET /api/v1/jobs/{document_id} until terminal or timeout.
 
     Returns the terminal JobStatusResponse body. Reads the TOP-LEVEL ``status``
-    and ``manual_review_required`` fields (not nested under ``result``).
-    Transient GET failures are tolerated within the poll timeout window.
-    Raises _FatalParseError on timeout.
+    and ``manual_review_required`` fields (not nested under ``result``). Terminal
+    when status is ``completed``/``failed`` OR ``manual_review_required`` is set
+    (the parser has already decided, and a "pending" status can pair with it).
+    A single Client is reused across iterations. Transient GET failures are
+    tolerated within the poll timeout window. Raises _FatalParseError on timeout.
     """
     url = f"{settings.document_parser_url.rstrip('/')}/api/v1/jobs/{document_id}"
     headers = _parser_headers(settings.document_parser_api_key)
     deadline = time.monotonic() + settings.parse_poll_timeout_sec
 
-    while time.monotonic() < deadline:
-        try:
-            with httpx.Client(timeout=settings.supabase_http_timeout_sec) as client:
+    with httpx.Client(timeout=settings.supabase_http_timeout_sec) as client:
+        while time.monotonic() < deadline:
+            try:
                 resp = client.get(url, headers=headers)
-            if resp.status_code in (401, 403):
-                raise _FatalParseError(f"document-parser auth failed ({resp.status_code})")
-            resp.raise_for_status()
-            body = resp.json()
-        except _FatalParseError:
-            raise
-        except Exception as exc:  # noqa: BLE001 — transient network/5xx; retry until deadline
-            if not _is_transient(exc):
-                raise _FatalParseError(f"job-status poll failed: {exc}") from exc
-            logger.warning("Transient poll error for %s (%s) — retrying", document_id, exc)
-            time.sleep(settings.parse_poll_interval_sec)
-            continue
+                if resp.status_code in (401, 403):
+                    raise _FatalParseError(f"document-parser auth failed ({resp.status_code})")
+                resp.raise_for_status()
+                body = resp.json()
+            except _FatalParseError:
+                raise
+            except Exception as exc:  # noqa: BLE001 — transient network/5xx; retry until deadline
+                if not _is_transient(exc):
+                    raise _FatalParseError(f"job-status poll failed: {exc}") from exc
+                logger.warning("Transient poll error for %s (%s) — retrying", document_id, exc)
+                time.sleep(settings.parse_poll_interval_sec)
+                continue
 
-        status = body.get("status")
-        if status in (_JOB_COMPLETED, _JOB_FAILED):
-            return body
-        # processing (or any non-terminal value) → keep polling
-        time.sleep(settings.parse_poll_interval_sec)
+            status = body.get("status")
+            if status in (_JOB_COMPLETED, _JOB_FAILED) or body.get("manual_review_required"):
+                return body
+            # processing / queued / pending (non-terminal) → keep polling
+            time.sleep(settings.parse_poll_interval_sec)
 
     raise _FatalParseError(
         f"parse timed out after {settings.parse_poll_timeout_sec:.0f}s (document_id={document_id})"
@@ -269,17 +278,19 @@ def process_job(job: dict[str, Any]) -> None:
     status = body.get("status")
     manual_review = bool(body.get("manual_review_required"))
 
-    if status == _JOB_COMPLETED and not manual_review:
-        _enqueue_enrich(str(bankruptcy_id), sb_url, sb_key, sb_t)
-        logger.info("parse completed for %s (document_id=%s) — enqueued enrich",
-                    bankruptcy_id, document_id)
-        return  # worker marks job completed
-
-    if status == _JOB_COMPLETED and manual_review:
+    # Manual review is checked first: the parser has flagged the doc for a human,
+    # which can pair with either a "completed" or a "pending" status.
+    if manual_review:
         msg = f"manual_review_required: parse flagged document_id={document_id} for human review"
         _fail_job(job_id, msg, sb_url, sb_key, sb_t)
         logger.info("parse → manual review for %s (document_id=%s)", bankruptcy_id, document_id)
         raise _StageHandled(msg)
+
+    if status == _JOB_COMPLETED:
+        _enqueue_enrich(str(bankruptcy_id), sb_url, sb_key, sb_t)
+        logger.info("parse completed for %s (document_id=%s) — enqueued enrich",
+                    bankruptcy_id, document_id)
+        return  # worker marks job completed
 
     # status == failed (or unexpected terminal value)
     err = body.get("error") or f"parse failed (status={status!r})"
