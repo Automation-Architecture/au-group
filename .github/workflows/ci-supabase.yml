@@ -76,6 +76,17 @@ jobs:
           export PGPASSWORD=""
           psql "${DB_URL}" -v ON_ERROR_STOP=1 -f scripts/supabase/smoke_merge_creditor_matrix_dedup_audit.sql
 
+      - name: KD-71 list_company_creditors normalized_name smoke (local)
+        run: |
+          set -euo pipefail
+          DB_URL="$(supabase status -o json | python3 -c "import json,sys; print(json.load(sys.stdin).get('DB_URL',''))")"
+          if [ -z "${DB_URL}" ]; then
+            echo "::error::Could not resolve local DB_URL for KD-71 smoke"
+            exit 1
+          fi
+          export PGPASSWORD=""
+          psql "${DB_URL}" -v ON_ERROR_STOP=1 -f scripts/supabase/smoke_kd71_list_creditors_normalized_name.sql
+
       - name: Stop Supabase local
         if: always()
         run: supabase stop --no-backup 2>/dev/null || true
