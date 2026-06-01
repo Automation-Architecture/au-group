@@ -2,35 +2,47 @@
 
 GitHub **Environments** gate deployments and hold secrets. Configure in repo **Settings → Environments**.
 
+> **Actual deploy mechanisms (reality as of 2026-06-01, KD-74)** — these differ from what older
+> revisions of this doc described:
+> - **document-parser** deploys via **Railway's native GitHub source connection** (project `au-group-be`,
+>   service `au-group`, root `services/document-parser`) — it auto-deploys on every push to `main`.
+>   `deploy-parser-railway.yml` is now **CI-only** (renamed *document-parser CI*) and no longer runs
+>   `railway up`; **`RAILWAY_TOKEN` is not required.**
+> - **Supabase migrations** are applied via **Supabase MCP `apply_migration`** directly to live. The
+>   `deploy-supabase.yml` `deploy` job is **disabled (`if: false`)** — the repo migrations dir has drifted
+>   from prod and `db push` would regress live (KD-74). **`SUPABASE_*` deploy secrets are not set and must
+>   not be added** until KD-74 reconciles the drift.
+> - See [`deploy-workflow-investigation-2026-06-01.md`](./deploy-workflow-investigation-2026-06-01.md).
+
 ## Environments
 
-| Environment | Purpose | Protection | Deploy workflows |
+| Environment | Purpose | Protection | Workflows |
 |-------------|---------|------------|------------------|
 | **pr** | Pull request CI only | None | `ci.yml`, path-filtered jobs |
-| **staging** | Pre-production parser + **PR integration tests (strict)** | Optional reviewers | `deploy-parser-railway.yml` (dispatch `staging`), `integration-tests.yml`, `ci.yml` integration job |
-| **production** | Live parser, n8n, Supabase | **Required reviewers** (manual approval) | `deploy-parser-railway.yml`, `deploy-n8n.yml`, `deploy-supabase.yml`, `smoke-e2e.yml` (cron) |
+| **staging** | **PR integration tests (strict)** | Optional reviewers | `integration-tests.yml`, `ci.yml` integration job |
+| **production** | Cron post-deploy smoke; manual-approval gate for `deploy-n8n.yml` | **Required reviewers** (manual approval) | `deploy-n8n.yml`, `smoke-e2e.yml` (cron) |
 
 ## Branch → environment
 
 | Branch | CI | CD |
 |--------|----|----|
 | PR → `main` / `develop` | All path-filtered jobs | None |
-| `main` push | Same | Parser Railway (production env), n8n + Supabase when paths change |
-| `workflow_dispatch` | — | Staging or production per workflow inputs |
+| `main` push | Same | **Parser → Railway native source connection** (auto, not a GH Action); **Supabase → MCP apply (manual, not `db push`)**; n8n when paths change |
+| `workflow_dispatch` | Re-run CI; n8n deploy per inputs | n8n only |
 
 ## Secrets (repository or environment)
 
 | Secret | Used by | Description |
 |--------|---------|-------------|
-| `RAILWAY_TOKEN` | `deploy-parser-railway.yml` | Railway project deploy token |
+| ~~`RAILWAY_TOKEN`~~ | — (was `deploy-parser-railway.yml`) | **No longer used.** Parser deploys via Railway's native source connection; the GH Action is CI-only. |
 | `PARSER_STAGING_URL` | Staging smoke | e.g. `https://au-group-staging.up.railway.app` |
 | `PARSER_PRODUCTION_URL` | Prod smoke / cron | Matches `project.config.yaml` `api_base_url` when live |
 | `DOCUMENT_PARSER_API_KEY` | Smoke, integration | Same as parser `API_KEY` in Railway |
 | `N8N_BASE_URL` | n8n deploy, smoke, local export | `https://automationarchitecture.app.n8n.cloud` |
 | `N8N_API_KEY` | n8n deploy, smoke, local export | n8n API key (not required for n8n CI — CI tests committed JSON only) |
-| `SUPABASE_ACCESS_TOKEN` | Supabase deploy | Supabase CLI personal access token |
-| `SUPABASE_PROJECT_REF` | Supabase deploy | Project ref (subdomain) |
-| `SUPABASE_DB_PASSWORD` | Supabase deploy | Database password for `supabase link` |
+| ~~`SUPABASE_ACCESS_TOKEN`~~ | — (was Supabase deploy) | **Not set / do not add (KD-74).** Migrations apply via MCP; `db push` deploy job is disabled. |
+| ~~`SUPABASE_PROJECT_REF`~~ | — (was Supabase deploy) | **Not set / do not add (KD-74).** |
+| ~~`SUPABASE_DB_PASSWORD`~~ | — (was Supabase deploy) | **Not set / do not add (KD-74).** |
 | `SUPABASE_URL` | Integration tests | Project URL — **staging** environment |
 | `SUPABASE_SERVICE_ROLE_KEY` | Integration tests | Service role (CI only) — **staging** |
 | `S3_BUCKET`, `AWS_*` | Integration tests | S3 smoke fixtures |

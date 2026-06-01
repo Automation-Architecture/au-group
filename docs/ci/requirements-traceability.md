@@ -77,9 +77,9 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | vbsec security | `.github/workflows/ci-security.yml` | **Every** PR/push; all deploy workflows |
 | CodeQL (parser) | `.github/workflows/ci-codeql.yml` | **Every** PR/push; parser deploy workflows |
 | Trivy fs (parser deps) | `.github/workflows/ci-trivy.yml` | **Every** PR/push; parser deploy workflows |
-| Deploy parser (Railway) | `.github/workflows/deploy-parser-railway.yml` | push main, dispatch → smoke strict |
+| document-parser CI | `.github/workflows/deploy-parser-railway.yml` | push main / dispatch → **CI-only** (ci/security/codeql/trivy). Deploy is via Railway's native source connection, not this workflow (KD-74). |
 | Deploy n8n | — | No standalone workflow file currently present; remove stale `deploy-n8n.yml` reference |
-| Deploy Supabase | `.github/workflows/deploy-supabase.yml` | push main → security |
+| Deploy Supabase | `.github/workflows/deploy-supabase.yml` | push main → ci + security. **`deploy` job disabled (`if: false`)** — migrations apply via MCP, not `db push` (KD-74). |
 | Smoke E2E | `.github/workflows/smoke-e2e.yml` | deploy jobs, cron (strict), dispatch |
 | Deploy EC2 | `.github/workflows/deploy-parser-ec2.yml` | dispatch only (Phase 4) |
 

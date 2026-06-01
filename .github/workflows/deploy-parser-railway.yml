@@ -1,20 +1,19 @@
-name: Deploy document-parser (Railway)
+# NOTE (2026-06-01, KD-74): document-parser deploys via Railway's NATIVE GitHub source
+# connection (project au-group-be, service "au-group", root services/document-parser) — it
+# auto-deploys on every push to main, independent of this workflow. The previous `railway up`
+# deploy-staging / deploy-production jobs were redundant and failed on an empty RAILWAY_TOKEN
+# that was never configured. They (and the dependent smoke-staging / smoke-production gates)
+# have been removed; this workflow is now CI-only — the pre-merge validation gates for the
+# parser. Post-deploy smoke is covered by the scheduled smoke-e2e.yml.
+# See docs/ci/deploy-workflow-investigation-2026-06-01.md.
+name: document-parser CI
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: Target environment
-        required: true
-        type: choice
-        options:
-          - staging
-          - production
   push:
     branches: [main]
     paths:
       - "services/document-parser/**"
-      - "services/document-parser/railway.toml"
       - ".github/workflows/deploy-parser-railway.yml"
 
 permissions:
@@ -36,65 +35,3 @@ jobs:
 
   trivy:
     uses: ./.github/workflows/ci-trivy.yml
-
-  deploy-staging:
-    needs: [ci, security, codeql, trivy]
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-parser-staging-${{ github.repository }}
-      cancel-in-progress: false
-    environment: staging
-    defaults:
-      run:
-        working-directory: services/document-parser
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway (staging)
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --detach
-
-  smoke-staging:
-    needs: deploy-staging
-    if: success()
-    uses: ./.github/workflows/smoke-e2e.yml
-    with:
-      strict: true
-      environment: staging
-
-  deploy-production:
-    needs: [ci, security, codeql, trivy]
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
-    runs-on: ubuntu-latest
-    concurrency:
-      group: deploy-parser-production-${{ github.repository }}
-      cancel-in-progress: false
-    environment: production
-    defaults:
-      run:
-        working-directory: services/document-parser
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway (production)
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: railway up --detach
-
-  smoke-production:
-    needs: deploy-production
-    if: success()
-    uses: ./.github/workflows/smoke-e2e.yml
-    with:
-      strict: true
-      environment: production
