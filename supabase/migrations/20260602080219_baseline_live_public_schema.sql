@@ -3981,7 +3981,7 @@ CREATE POLICY "au_group_court_mappings_deny_public" ON "public"."au_group_court_
 ALTER TABLE "public"."au_group_enrich_loop_staging" ENABLE ROW LEVEL SECURITY;
 
 
-CREATE POLICY "au_group_enrich_loop_staging_deny_public" ON "public"."au_group_enrich_loop_staging" USING (false);
+CREATE POLICY "au_group_enrich_loop_staging_deny_public" ON "public"."au_group_enrich_loop_staging" AS RESTRICTIVE TO "authenticated", "anon" USING (false) WITH CHECK (false);
 
 
 
@@ -4139,8 +4139,8 @@ GRANT ALL ON TABLE "public"."processing_jobs" TO "service_role";
 
 
 REVOKE ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") TO "anon";
-GRANT ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") FROM "anon";
+REVOKE ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") FROM "authenticated";
 GRANT ALL ON FUNCTION "public"."au_group_claim_job"("p_job_type" "public"."au_group_job_type") TO "service_role";
 
 
@@ -4186,8 +4186,8 @@ GRANT ALL ON FUNCTION "public"."au_group_creditor_pipeline_status"("p_creditor_i
 
 
 REVOKE ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) TO "anon";
-GRANT ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) FROM "anon";
+REVOKE ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) FROM "authenticated";
 GRANT ALL ON FUNCTION "public"."au_group_daily_creditor_report_grouped"("p_since" timestamp with time zone) TO "service_role";
 
 
@@ -4208,8 +4208,8 @@ GRANT ALL ON FUNCTION "public"."au_group_diff_pacer_favorites"("p_favorites" "js
 
 
 REVOKE ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") FROM PUBLIC;
-GRANT ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") TO "anon";
-GRANT ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") TO "authenticated";
+REVOKE ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") FROM "anon";
+REVOKE ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") FROM "authenticated";
 GRANT ALL ON FUNCTION "public"."au_group_enqueue_job"("p_bankruptcy_id" "uuid", "p_job_type" "public"."au_group_job_type") TO "service_role";
 
 
@@ -4683,8 +4683,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQ
 
 
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "postgres";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "anon";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "authenticated";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON FUNCTIONS TO "service_role";
 
 
