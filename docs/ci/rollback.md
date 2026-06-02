@@ -30,13 +30,10 @@ Or run from CI: re-dispatch **Deploy document-parser (EC2)** after checking out 
 
 ## n8n workflows
 
-1. Revert the workflow JSON commit in git (`workflows/*.json`).
-2. Merge to `main` (triggers `deploy-n8n.yml`) **or** run locally:
-   ```bash
-   export N8N_BASE_URL=... N8N_API_KEY=...
-   ./scripts/n8n/deploy-workflows.sh
-   ```
-3. Confirm workflow `qwVPSlI3L1RMsw9V` (SYS-02) is active in n8n UI.
+> n8n is in **parallel-run pending decommission** (the build target is the code-native pipeline — see CLAUDE.md "Current direction"). There is **no repo-based n8n deploy** — no `deploy-n8n.yml` workflow and no deploy script; workflows are managed directly in **n8n Cloud** (via the UI / n8n-MCP).
+
+1. Restore the known-good workflow directly in **n8n Cloud** — use the workflow's **version history** in the n8n UI (or re-import a known-good export) via the UI / n8n-MCP. The workflow definitions are not deployed from this repo.
+2. Confirm workflow `qwVPSlI3L1RMsw9V` (SYS-02) is active in the n8n UI.
 
 ## Supabase migrations
 

@@ -13,7 +13,7 @@ vbsec’s disclaimer applies: CI scan is a first line of defense, not a professi
 
 ## CI behavior
 
-- **Trigger:** **Every** PR/push via `ci.yml`; also `deploy-n8n`, `deploy-supabase`, `deploy-parser-railway` before deploy
+- **Trigger:** **Every** PR/push via `ci.yml`; also the `security` job in `deploy-supabase` and `deploy-parser-railway`
 - **Scope:** `diff` on PR (vs base branch); `workflow_dispatch` with `scope=all` for full repo
 - **Pin:** [`.vbsec-ref`](../../.vbsec-ref) or repo variable `VBSEC_REF` (vbsec git ref for rule sync)
 - **Fail:** `verdict: FAIL` (any CRITICAL finding) fails the job
