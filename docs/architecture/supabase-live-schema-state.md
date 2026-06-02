@@ -1,8 +1,21 @@
 # Supabase Live Schema State — Divergence Reference
 
+> ## ✅ RESOLVED 2026-06-02 (KD-74) — repo is now the source of truth
+> The drift documented below was reconciled via a **baseline squash**: the live `public` schema
+> was captured as a single baseline migration (`supabase/migrations/20260602080219_baseline_live_public_schema.sql`)
+> using `supabase db dump`, the 63 drifted migration files were squashed away, and the remote
+> migration history was repaired (baseline `applied`, the 98 superseded versions `reverted`).
+> Validated: `supabase db reset --local` replays cleanly on PG17, `db diff` shows zero real drift
+> (only a cosmetic migra restrictive-policy artifact), and `db push --dry-run` reports "Remote
+> database is up to date". **A fresh `db reset` now reproduces live exactly.** See
+> [`kd-74-migration-reconciliation-runbook.md`](./kd-74-migration-reconciliation-runbook.md).
+>
+> The sections below are retained as **historical forensics** of the pre-baseline divergence
+> (and as a guide for *why* the squash was necessary) — they no longer describe the current repo↔live state.
+
 **Project:** `umivttszdnsrosbqryia` (AU Group)  
-**Last audited:** 2026-05-30  
-**Why this exists:** The live Supabase DB has drifted from the local migration files through ad-hoc MCP `apply_migration` + `execute_sql` calls made during early development. Any engineer writing new migrations or debugging schema errors must treat this doc as ground truth alongside querying the live DB directly.
+**Last audited:** 2026-05-30 · **Reconciled:** 2026-06-02 (baseline squash, KD-74)  
+**Why this existed:** The live Supabase DB had drifted from the local migration files through ad-hoc MCP `apply_migration` + `execute_sql` calls made during early development. (Now resolved — see banner above.)
 
 ---
 

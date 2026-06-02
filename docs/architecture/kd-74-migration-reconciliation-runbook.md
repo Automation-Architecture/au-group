@@ -1,6 +1,6 @@
 # KD-74 — Supabase Migration Reconciliation Runbook (baseline squash)
 
-**Status:** PLAN — not yet executed (approved 2026-06-02, execution deferred to a focused session).
+**Status:** ✅ EXECUTED 2026-06-02. Baseline `20260602080219_baseline_live_public_schema.sql` captured + replay-validated (zero real drift; `db push --dry-run` = no-op). DB password was reset via Management API (stored in 1Password, AU Group vault). Remaining open item: **Step 5 deploy-mechanism decision** (see below) — the `deploy-supabase.yml` deploy job is still `if: false` pending that call. The steps below are retained as the executed procedure / re-run reference.
 **Project:** `umivttszdnsrosbqryia` (AU Group)
 **Approach:** Baseline squash (chosen over incremental reconcile).
 **Companion:** [`supabase-live-schema-state.md`](./supabase-live-schema-state.md) (the divergence map), [`../ci/deploy-workflow-investigation-2026-06-01.md`](../ci/deploy-workflow-investigation-2026-06-01.md) (why `db push` is disabled).
