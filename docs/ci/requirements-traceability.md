@@ -78,7 +78,7 @@ Maps [PRD](../project/prd.md) acceptance criteria (AC), non-functional requireme
 | CodeQL (parser) | `.github/workflows/ci-codeql.yml` | **Every** PR/push; parser deploy workflows |
 | Trivy fs (parser deps) | `.github/workflows/ci-trivy.yml` | **Every** PR/push; parser deploy workflows |
 | document-parser CI | `.github/workflows/deploy-parser-railway.yml` | push main (path-filtered: `services/document-parser/**`) / dispatch → **CI-only** (ci/security/codeql/trivy). Deploy is via Railway's native source connection, not this workflow (KD-74). |
-| Deploy n8n | — | No standalone workflow file currently present; remove stale `deploy-n8n.yml` reference |
+| Deploy n8n | — | No repo-based n8n deploy (no `deploy-n8n.yml`, no deploy script). n8n workflows are managed directly in n8n Cloud (UI / n8n-MCP); parallel-run pending decommission. |
 | Deploy Supabase | `.github/workflows/deploy-supabase.yml` | push main (path-filtered: `supabase/migrations/**`) → ci + security. **`deploy` job disabled (`if: false`)** — migrations apply via MCP, not `db push` (KD-74). |
 | Smoke E2E | `.github/workflows/smoke-e2e.yml` | deploy jobs, cron (strict), dispatch |
 | Deploy EC2 | `.github/workflows/deploy-parser-ec2.yml` | dispatch only (Phase 4) |
