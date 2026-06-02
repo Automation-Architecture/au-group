@@ -25,3 +25,7 @@ __pycache__/
 *.pyc
 .n8n-skills-ref
 /test/n8nDashboard/
+
+# Local-only reference docs (e.g. scraped vendor API docs). Not committed —
+# this repo is public, so vendor docs stay local. Still read by dashboard U1 scan.
+Resources/
