@@ -96,7 +96,7 @@ jobs:
           echo "$COUNT finding(s) on HEAD — attempt $((FIX_COMMITS + 1))/3."
 
       # ── Checkout the PR branch ─────────────────────────────────────────────
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: steps.gate.outputs.run == 'true'
         with:
           ref: ${{ github.event.pull_request.head.ref }}
