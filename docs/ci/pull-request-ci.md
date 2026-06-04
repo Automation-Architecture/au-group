@@ -32,3 +32,7 @@ After `ci.yml` is on `main`, every new PR gets the full suite automatically.
 - **CI** — `ci.yml` orchestrator + reusable workflows
 
 Both can appear on the same PR once CI is on `main`.
+
+## Jira dev-panel linkage
+
+PRs are linked to Jira issues when the issue key appears in the branch name or PR title (e.g. `feat/kd-74-foo`). Linkage is driven by live GitHub→Jira webhook events — the "Backfill" button in the GitHub for Jira config page restores historical commits/branches but does **not** replay PR webhook events. If the dev panel stops showing new PRs, disconnect and reconnect the org in the GitHub for Jira config page (`Jira sidebar → Apps → GitHub for Atlassian → Get Started`).
