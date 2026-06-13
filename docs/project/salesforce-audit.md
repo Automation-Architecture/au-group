@@ -114,8 +114,11 @@ Access restored; full `describe` run against the production org. **This section 
 | `Scrubbed__c` | Checkbox | manual — do not write |
 | `Master_List__c` | Checkbox | manual — do not write |
 | `Comments__c` | LongTextArea(32768) | manual — do not overwrite |
+| `Case_Number__c` | Text(50), **unique, external ID** | ✅ **created 2026-06-12** (client-approved) — **the pipeline upsert key (resolves OD-6)** |
+| `Court_District__c` | Text(100) | ✅ created 2026-06-12 |
+| `PACER_URL__c` | URL | ✅ created 2026-06-12 |
 
-**No external-ID field, no case number / court district / PACER URL.** `Name` (80-char debtor name) is the only natural key → the §2 proposal to add `Case_Number__c` (external ID) + `Court_District__c` + `PACER_URL__c` stands, now targeted at this object.
+~~No external-ID field, no case number / court district / PACER URL.~~ **Resolved 2026-06-12:** the client approved and the three fields above were created via the Metadata API (+ field-level security on the Admin profile). ⚠️ Not yet on **page layouts** — add via Setup → Object Manager (2-minute step) so they're visible on record pages; API reads/writes work regardless.
 
 ### `Bankruptcy__c` (label "Bankruptcy") — the "Creditors" related list — 562 rows
 
@@ -138,7 +141,7 @@ No external-ID field here either → creditor-row upsert key must be composite (
 | Designed/proposed field | Live org reality |
 |---|---|
 | `ZoomInfo_URL__c` (proposed §2) | ✅ **already exists as `ZoomInfo__c` (URL)** — use it; §3.3 decision resolved, no new field |
-| `Company_Tier__c` (proposed §2) | ❌ still missing — create (KD-10) |
+| `Company_Tier__c` (proposed §2) | ✅ **created 2026-06-12** (client-approved) — restricted picklist `Enterprise` / `Mid-Market` / `SMB`; not yet on the Account page layout |
 | `Email_Template_Recommendation__c`, `Outreach_Status__c`, `Has_Recent_SF_Activity__c`, `Activity_Summary__c` | ❌ none exist — create the MVP subset (KD-10) or persist pipeline-side only (decision) |
 | `Do_Not_Contact__c` | ❌ doesn't exist — confirm with client how they mark do-not-contact today |
 | Phase-2 exposure fields | ✅ partially exist already: `Number_of_Bankruptcies__c` (Number), `Sum_of_Bankruptcies__c` (Currency), plus a string field confusingly named `Bankruptcy__c` **on Account** (same API name as the creditor-row object — beware in code) |
@@ -147,8 +150,8 @@ No external-ID field here either → creditor-row upsert key must be composite (
 
 ### Build consequences (KD-68)
 
-1. Push flow confirmed: upsert `Bankrupt_Companies__c` → upsert Account (creditor) → upsert `Bankruptcy__c` row (`Account__c` + `Bankrupt_Company__c` + `Amount__c`).
-2. **No external IDs exist anywhere** → either add `Case_Number__c` (external ID) to `Bankrupt_Companies__c` (preferred, resolves OD-6) or implement query-then-insert/update in code.
+1. Push flow confirmed: upsert `Bankrupt_Companies__c` on `Case_Number__c` → upsert Account (creditor) → upsert `Bankruptcy__c` row (`Account__c` + `Bankrupt_Company__c` + `Amount__c`).
+2. ✅ **OD-6 resolved 2026-06-12:** `Case_Number__c` (unique external ID) created on `Bankrupt_Companies__c` — debtor upserts key on it. `Bankruptcy__c` rows still have no external ID → composite query-then-write (Account + Bankrupt Company) in code, and note the 82 pre-existing debtor rows have blank case numbers (match by name once, backfill on first touch).
 3. **Professional Edition constraints:** API access works (verified), but PE has no custom profiles/permission-set granularity to create a least-privilege integration user, and record types/automation options are limited. Field creation is fine.
 4. The recency flag (FR-5.5) can be computed from standard objects (Opportunity/Task/Event) as designed — and note `EmailMessage`/`Task`/`Event` child relationships exist on both custom objects.
 5. Picklists are restricted sets — pipeline writes must map to exact existing values (`Chapter 11`, not `11`).
@@ -183,8 +186,8 @@ Once an integration user + OAuth creds exist (`/prod/salesforce/oauth`), introsp
 
 - [ ] Connected App + integration user has **API Enabled** + object CRUD *(API verified working 2026-06-12 via the client user + security token; Connected App/integration user still outstanding as hardening)*
 - [x] **Introspect the existing objects** — ✅ done 2026-06-12, results in §1c (`Bankrupt_Companies__c`, `Bankruptcy__c`, `Claim__c`; lookup relationship, no external IDs, relationship name `Bankrutpcies__r`)
-- [ ] MVP Account fields **created**: `Company_Tier__c` + the KD-29/FR-5.5 status fields (decide in-org vs pipeline-only); add `Case_Number__c` (external ID) / `Court_District__c` / `PACER_URL__c` to `Bankrupt_Companies__c` (§1c consequence 2)
-- [x] ZoomInfo-URL handling decided — ✅ existing `ZoomInfo__c` field (§1c); `Company_Tier__c` still to create
+- [x] Schema fields created — ✅ 2026-06-12, client-approved, via Metadata API: `Company_Tier__c` (Account) + `Case_Number__c` (ext-ID) / `Court_District__c` / `PACER_URL__c` (`Bankrupt_Companies__c`), FLS granted on Admin profile. Still open: KD-29/FR-5.5 status fields (decide in-org vs pipeline-only) + adding the new fields to **page layouts**
+- [x] ZoomInfo-URL handling decided — ✅ existing `ZoomInfo__c` field (§1c); `Company_Tier__c` created 2026-06-12
 - [ ] Email-template merge variables confirmed with the client — candidate set found: the `Engage_*` family (§1c)
 - [ ] Recent-activity object/stage rules confirmed (§3.2)
 - [ ] Account **page layout** shows the MVP fields (status flag, tier, bankruptcy section)
@@ -199,6 +202,6 @@ Once an integration user + OAuth creds exist (`/prod/salesforce/oauth`), introsp
 
 1. ✅ ~~Restore Salesforce access~~ — **done 2026-06-12** (security token route; token in 1Password alongside the login).
 2. ✅ ~~Introspect the org~~ — **done 2026-06-12** (§1c).
-3. **Client confirmations needed (one short conversation):** (a) do the `Engage_*` fields drive his email templates? (§3.1); (b) recent-activity stage/object rules (§3.2); (c) OK to add `Case_Number__c` / `Court_District__c` / `PACER_URL__c` to `Bankrupt_Companies__c` and `Company_Tier__c` to Account? (d) does a sandbox exist, or do we test in production with marked records? (e) how is do-not-contact tracked today (no `Do_Not_Contact__c` field exists)?
-4. **Create the agreed fields** (KD-10) — small, reversible metadata changes.
+3. **Client confirmations needed (one short conversation):** (a) do the `Engage_*` fields drive his email templates? (§3.1); (b) recent-activity stage/object rules (§3.2); ~~(c) field-add approval~~ ✅ **approved + created 2026-06-12**; (d) does a sandbox exist, or do we test in production with marked records? (e) how is do-not-contact tracked today (no `Do_Not_Contact__c` field exists)?
+4. ✅ ~~Create the agreed fields~~ — **done 2026-06-12** (KD-10 core; KD-29 status fields still undecided). Add the four new fields to **page layouts** (Setup → Object Manager — quick manual step).
 5. **Update KD-68** (summary/description/acceptance criteria) to the §1c schema and unblock the `salesforce.py` build.
