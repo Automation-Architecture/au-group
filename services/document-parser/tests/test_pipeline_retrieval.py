@@ -319,3 +319,83 @@ def test_composite_isolates_a_raising_retriever():
 
 def test_composite_all_miss_returns_none():
     assert CompositeRetriever([_Stub(result=None), _Stub(result=None)]).retrieve(_ref()) is None
+
+
+# ---------------------------------------------------------------------------
+# Identification: reject the matrix and docs that merely reference the list
+# ---------------------------------------------------------------------------
+
+def test_pick_rejects_full_creditor_matrix():
+    # The bare creditor matrix / mailing list has no "largest" → not a Form 204.
+    docs = [
+        {"description": "List of Creditors", "document_number": "2", "page_count": 200,
+         "is_available": True, "filepath_local": "matrix.pdf"},
+        {"description": "Creditor Matrix", "document_number": "3", "page_count": 150,
+         "is_available": True, "filepath_local": "m2.pdf"},
+    ]
+    assert _pick_form_204(docs) is None
+
+
+def test_pick_rejects_order_referencing_the_list():
+    # An order/motion that cites "30 Largest" is not the list itself.
+    docs = [{"description": "Interim Order Authorizing the Debtors to File a "
+                            "Consolidated List of the 30 Largest Unsecured Creditors",
+             "document_number": "1", "page_count": 5, "is_available": True,
+             "filepath_local": "order.pdf"}]
+    assert _pick_form_204(docs) is None
+
+
+# ---------------------------------------------------------------------------
+# RecapRetriever: docket-id reuse, name disambiguation, robust I/O
+# ---------------------------------------------------------------------------
+
+def test_recap_reuses_docket_id_from_search(monkeypatch):
+    # Search returns the docket_id but no matching doc in the slice → the walk
+    # must reuse the id and NOT re-query /dockets/. Queue: search, entries, pdf.
+    search = _FakeResp(json_data={"results": [{"docket_id": 555, "recap_documents": [
+        {"description": "Voluntary Petition", "document_number": "1", "is_available": True,
+         "filepath_local": "p.pdf"}]}]})
+    entries = _FakeResp(json_data={"results": [
+        {"recap_documents": [{"description": "20 Largest Unsecured", "document_number": "2",
+                              "page_count": 3, "is_available": True, "filepath_local": "f.pdf"}]}],
+        "next": None})
+    _patch(monkeypatch, [search, entries, _pdf()])
+    res = RecapRetriever("tok").retrieve(_case())
+    assert res is not None and res.document_number == "2"
+
+
+def test_find_docket_id_disambiguates_by_name(monkeypatch):
+    dockets = _FakeResp(json_data={"results": [
+        {"id": 1, "case_name": "Other Debtor LLC"},
+        {"id": 2, "case_name": "ACME Corp"}]})
+    _patch(monkeypatch, [dockets])
+    assert RecapRetriever("tok")._find_docket_id(_case()) == 2
+
+
+def test_find_docket_id_falls_back_to_first_when_no_name_match(monkeypatch):
+    dockets = _FakeResp(json_data={"results": [{"id": 7, "case_name": "Zzz Inc"}, {"id": 8}]})
+    _patch(monkeypatch, [dockets])
+    assert RecapRetriever("tok")._find_docket_id(_case()) == 7
+
+
+def test_recap_rejects_empty_pdf_body(monkeypatch):
+    empty = _FakeResp(content=b"", headers={"content-type": "application/pdf"})
+    _patch(monkeypatch, [_search_hit(), empty])
+    assert RecapRetriever("tok").retrieve(_case()) is None
+
+
+def test_recap_non_json_search_falls_through_to_walk(monkeypatch):
+    # A 200 with a non-JSON body must not abort the strategy or escalate to a
+    # paid fetch — it returns None and the free docket-entries walk still runs.
+    class _BadJson(_FakeResp):
+        def json(self):
+            raise ValueError("not json")
+
+    dockets = _FakeResp(json_data={"results": [{"id": 3}]})
+    entries = _FakeResp(json_data={"results": [
+        {"recap_documents": [{"description": "20 Largest Unsecured", "document_number": "2",
+                              "page_count": 3, "is_available": True, "filepath_local": "f.pdf"}]}],
+        "next": None})
+    _patch(monkeypatch, [_BadJson(), dockets, entries, _pdf()])
+    res = RecapRetriever("tok").retrieve(_case())
+    assert res is not None and res.source == "recap"
