@@ -39,6 +39,12 @@ import httpx
 from botocore.exceptions import ClientError
 
 from pipeline.alerts import send_error_alert
+from pipeline.retrieval import (
+    CaseRef,
+    CompositeRetriever,
+    PacerCmecfRetriever,
+    RecapRetriever,
+)
 from pipeline.settings import get_pipeline_settings
 
 logger = logging.getLogger(__name__)
@@ -661,6 +667,16 @@ def run(dry_run: bool = False) -> IntakeResult:
     # 4. Per-case: download Form 204 → S3 → upsert bankruptcy → enqueue → poll row
     s3 = _PipelineS3()
 
+    # Cheapest-first Form 204 retrieval: free RECAP archive (when a CourtListener
+    # token is configured) → paid PACER CM/ECF fetch. See pipeline/retrieval.py.
+    retrievers: list = []
+    if settings.courtlistener_api_token:
+        retrievers.append(RecapRetriever(
+            settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
+        ))
+    retrievers.append(PacerCmecfRetriever(pacer, token))
+    retriever = CompositeRetriever(retrievers)
+
     for case in cases:
         s3_key = _form_204_s3_key(case.case_number_full)
 
@@ -679,14 +695,25 @@ def run(dry_run: bool = False) -> IntakeResult:
             result.cases_skipped += 1
             continue
 
-        # 4a. Download Form 204 (CM/ECF — UNVERIFIED)
-        pdf_bytes = pacer.download_form_204(case.case_link, token)
+        # 4a. Retrieve Form 204 — RECAP archive (free) → PACER CM/ECF (paid).
+        # case.court_id carries the PCL 'k' suffix (e.g. 'nysbk'); RECAP/PACER
+        # court ids drop it, so normalise the same way _upsert_bankruptcy does.
+        db_court_id = _correct_court_id(
+            case.court_id[:-1] if case.court_id.endswith("k") else case.court_id
+        )
+        retrieved = retriever.retrieve(CaseRef(
+            court_id=db_court_id,
+            case_number_full=case.case_number_full,
+            debtor_name=case.case_title,
+            case_link=case.case_link,
+        ))
+        pdf_bytes = retrieved.pdf if retrieved else None
         if pdf_bytes is None:
             logger.warning("Form 204 not found for %s (%s)", case.case_number_full, case.case_title)
             result.errors.append(f"{case.case_number_full}: Form 204 not found")
             send_error_alert(
-                stage="intake.py — Form 204 download",
-                error=f"Form 204 not found in CM/ECF docket for {case.case_number_full}",
+                stage="intake.py — Form 204 retrieval",
+                error=f"Form 204 not found via RECAP or CM/ECF for {case.case_number_full}",
                 bot_token=settings.slack_bot_token,
                 channel_id=settings.slack_channel_id,
             )
@@ -753,7 +780,8 @@ def run(dry_run: bool = False) -> IntakeResult:
             logger.warning("pacer_poll row insert failed for %s: %s", bankruptcy_id, exc)
 
         result.cases_uploaded += 1
-        logger.info("Processed %s → bankruptcy_id=%s", case.case_number_full, bankruptcy_id)
+        logger.info("Processed %s → bankruptcy_id=%s (Form 204 via %s, %s)",
+                    case.case_number_full, bankruptcy_id, retrieved.source, retrieved.cost_note)
 
     # 5. Update last run timestamp
     if result.cases_uploaded > 0 or result.cases_found == 0:

@@ -35,6 +35,12 @@ class PipelineSettings(BaseSettings):
     pacer_username: str = ""
     pacer_password: str = ""
 
+    # CourtListener / RECAP (Free Law Project) — free Form 204 retrieval source.
+    # When set, intake tries the RECAP archive (free for archived docs) before
+    # falling back to the paid PACER CM/ECF fetch. Empty = RECAP source disabled.
+    courtlistener_api_token: str = ""
+    courtlistener_timeout_sec: float = 30.0
+
     # S3 (shared with document-parser web service)
     s3_bucket: str = "bankruptcy-creditor-docs"
     aws_region: str = "us-east-1"
