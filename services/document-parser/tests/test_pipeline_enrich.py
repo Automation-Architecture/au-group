@@ -56,6 +56,7 @@ class _FakeResp:
 class _FakeClient:
     def __init__(self, queue):
         self._q = queue
+        self.bodies = []
 
     def __enter__(self):
         return self
@@ -64,6 +65,7 @@ class _FakeClient:
         return False
 
     def post(self, *a, **k):
+        self.bodies.append(k.get("json"))
         item = self._q.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -109,6 +111,23 @@ def test_enrich_company_retries_on_429(monkeypatch):
                                         "meta": {"matchStatus": "FULL_MATCH"}}]})
     _patch_httpx(monkeypatch, [err, ok])  # first 429, then success
     assert _zi().enrich_company("Y", None).company_id == "9"
+
+
+def test_enrich_company_sends_companyState(monkeypatch):
+    fake = _FakeClient([_FakeResp(json_data={"data": []})])
+    monkeypatch.setattr(enrich.httpx, "Client", lambda *a, **k: fake)
+    monkeypatch.setattr(enrich, "_RETRY_BASE_SEC", 0.0)
+    _zi().enrich_company("Cf Logistics", "NJ")
+    sent = fake.bodies[0]["data"]["attributes"]["matchCompanyInput"][0]
+    assert sent == {"companyName": "Cf Logistics", "companyState": "NJ"}  # not "state"
+
+
+def test_enrich_company_error_status_raises(monkeypatch):
+    resp = _FakeResp(json_data={"data": [{"id": "1", "attributes": {},
+                                          "meta": {"matchStatus": "LIMIT_EXCEEDED"}}]})
+    _patch_httpx(monkeypatch, [resp])
+    with pytest.raises(RuntimeError):  # credit ceiling → surfaced, not a benign no-match
+        _zi().enrich_company("X", None)
 
 
 # ---------------------------------------------------------------------------
@@ -231,15 +250,34 @@ def test_process_job_full_enqueues_salesforce(monkeypatch):
 
 
 def test_process_job_partial_failure_alerts(monkeypatch):
+    # One creditor succeeds (no_match), one fails → partial: completes + alerts.
+    monkeypatch.setattr(enrich, "get_pipeline_settings", lambda: _settings())
+    monkeypatch.setattr(enrich, "_list_company_creditors",
+                        lambda *a: [_creditor(), _creditor(creditor_id="c2", normalized_name="OTHER CO")])
+    monkeypatch.setattr(enrich, "build_zoominfo_client", lambda s: _FakeZI({
+        "CF LOGISTICS": EnrichResult(matched=False),       # successful no-match
+        "OTHER CO": httpx.ConnectError("down")}))          # transient failure
+    enq = []
+    monkeypatch.setattr(enrich, "_enqueue_salesforce_push", lambda *a: enq.append(1))
+    alerts = []
+    monkeypatch.setattr(enrich, "send_error_alert", lambda **kw: alerts.append(kw))
+    enrich.process_job({"id": "j1", "bankruptcy_id": "b1"})
+    assert enq == [1]  # SF still enqueued (ZoomInfo is up)
+    assert len(alerts) == 1 and "c2" in alerts[0]["error"]
+
+
+def test_process_job_total_failure_raises_and_skips_sf(monkeypatch):
+    # Every creditor errors → fail the job loudly; do NOT enqueue salesforce_push.
     monkeypatch.setattr(enrich, "get_pipeline_settings", lambda: _settings())
     monkeypatch.setattr(enrich, "_list_company_creditors", lambda *a: [_creditor()])
     monkeypatch.setattr(enrich, "build_zoominfo_client",
                         lambda s: _FakeZI({"CF LOGISTICS": httpx.ConnectError("down")}))
-    monkeypatch.setattr(enrich, "_enqueue_salesforce_push", lambda *a: None)
-    alerts = []
-    monkeypatch.setattr(enrich, "send_error_alert", lambda **kw: alerts.append(kw))
-    enrich.process_job({"id": "j1", "bankruptcy_id": "b1"})
-    assert len(alerts) == 1 and "c1" in alerts[0]["error"]
+    enq = []
+    monkeypatch.setattr(enrich, "_enqueue_salesforce_push", lambda *a: enq.append(1))
+    monkeypatch.setattr(enrich, "send_error_alert", lambda **kw: None)
+    with pytest.raises(RuntimeError):
+        enrich.process_job({"id": "j1", "bankruptcy_id": "b1"})
+    assert enq == []  # SF not enqueued on total enrichment failure
 
 
 # ---------------------------------------------------------------------------

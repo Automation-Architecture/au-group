@@ -60,6 +60,11 @@ _EMP_MIDMARKET = 500
 
 _OUTPUT_FIELDS = ["id", "name", "revenue", "employeeCount"]
 
+# matchStatus values that mean "the call did not succeed" (credit ceiling, bad
+# input, service error) — distinct from NO_MATCH, which is a legitimate "ZoomInfo
+# has no record". These must surface as failures, not silent no-matches.
+_ERROR_MATCH_STATUSES = {"LIMIT_EXCEEDED", "INVALID_INPUT", "SERVICE_ERROR"}
+
 # Transient-retry policy (module-level so tests can zero the delay).
 _RETRY_MAX_ATTEMPTS = 3
 _RETRY_BASE_SEC = 1.0
@@ -140,7 +145,8 @@ class ZoomInfoClient:
     def enrich_company(self, name: str, state: str | None) -> EnrichResult:
         match_input: dict[str, Any] = {"companyName": name}
         if state:
-            match_input["state"] = state
+            # GTM input field is companyState; it accepts the 2-letter abbrev.
+            match_input["companyState"] = state
         body = {"data": {"type": "CompanyEnrich", "attributes": {
             "matchCompanyInput": [match_input], "outputFields": _OUTPUT_FIELDS}}}
 
@@ -162,6 +168,9 @@ class ZoomInfoClient:
         record = data[0]
         attrs = record.get("attributes") or {}
         status = (record.get("meta") or {}).get("matchStatus", "")
+        if status in _ERROR_MATCH_STATUSES:
+            # e.g. credit ceiling hit — surface as a failure, never a no-match.
+            raise RuntimeError(f"ZoomInfo enrich error status {status!r} for {name!r}")
         if status != self._match_floor:
             logger.info("ZoomInfo match below floor (%s) for %r", status, name)
             return EnrichResult(matched=False)
@@ -180,7 +189,7 @@ def build_zoominfo_client(settings: PipelineSettings) -> ZoomInfoClient:
     basic = base64.b64encode(
         f"{settings.zoominfo_client_id}:{settings.zoominfo_client_secret}".encode()
     ).decode()
-    try:
+    def _fetch_token() -> dict:
         with httpx.Client(timeout=settings.zoominfo_timeout_sec) as client:
             resp = client.post(
                 f"{base}/oauth/v1/token",
@@ -190,7 +199,10 @@ def build_zoominfo_client(settings: PipelineSettings) -> ZoomInfoClient:
                 data={"grant_type": "client_credentials"},
             )
             resp.raise_for_status()
-            token = resp.json().get("access_token")
+            return resp.json()
+
+    try:
+        token = _retry(_fetch_token).get("access_token")  # retries 429/5xx/network
     except httpx.HTTPError as exc:
         raise _FatalEnrichError(f"ZoomInfo token request failed: {exc}") from exc
     if not token:
@@ -252,24 +264,31 @@ def _upsert_contact(creditor_id: str, full_name: str, revenue: Any, employees: A
     contact fields (title/email/phone) stay NULL (Phase 2). Pipeline status keys
     "ZoomInfo Enriched" on row existence, not on full_name content.
     """
-    with httpx.Client(timeout=t) as client:
-        delete = client.delete(
-            f"{url.rstrip('/')}/rest/v1/zoom_info_contacts",
-            headers={**_supabase_headers(key), "Prefer": "return=minimal"},
-            params={"creditor_id": f"eq.{creditor_id}"},
-        )
-        delete.raise_for_status()
-        row: dict[str, Any] = {"creditor_id": creditor_id, "full_name": full_name[:255]}
-        if isinstance(revenue, (int, float)) and not isinstance(revenue, bool):
-            row["company_revenue"] = revenue
-        if isinstance(employees, int) and not isinstance(employees, bool):
-            row["company_employee_count"] = employees
-        insert = client.post(
-            f"{url.rstrip('/')}/rest/v1/zoom_info_contacts",
-            headers={**_supabase_headers(key), "Prefer": "return=minimal"},
-            json=row,
-        )
-        insert.raise_for_status()
+    row: dict[str, Any] = {"creditor_id": creditor_id, "full_name": full_name[:255]}
+    if isinstance(revenue, (int, float)) and not isinstance(revenue, bool):
+        row["company_revenue"] = revenue
+    if isinstance(employees, int) and not isinstance(employees, bool):
+        row["company_employee_count"] = employees
+
+    def _do() -> None:
+        # Retried as a unit: the DELETE is idempotent, so a retry after a failed
+        # INSERT safely re-deletes (no-op) then re-inserts — closing the window
+        # where a transient INSERT failure would leave the creditor with no row.
+        with httpx.Client(timeout=t) as client:
+            delete = client.delete(
+                f"{url.rstrip('/')}/rest/v1/zoom_info_contacts",
+                headers={**_supabase_headers(key), "Prefer": "return=minimal"},
+                params={"creditor_id": f"eq.{creditor_id}"},
+            )
+            delete.raise_for_status()
+            insert = client.post(
+                f"{url.rstrip('/')}/rest/v1/zoom_info_contacts",
+                headers={**_supabase_headers(key), "Prefer": "return=minimal"},
+                json=row,
+            )
+            insert.raise_for_status()
+
+    _retry(_do)
 
 
 def _enqueue_salesforce_push(bankruptcy_id: str, url: str, key: str, t: float) -> None:
@@ -318,7 +337,12 @@ class Enricher:
         if tier is not None:
             patch["company_tier"] = tier
         if result.canonical_name:
-            patch["normalized_name"] = result.canonical_name  # ZoomInfo canonical (FR-4.2)
+            # ZoomInfo canonical name (FR-4.2). NOTE: salesforce.py keys Account
+            # match on normalized_name; if the canonical drifts between re-runs of
+            # the same case, that stage can create a duplicate Account. The robust
+            # fix is salesforce-side (short-circuit on the existing
+            # salesforce_accounts mapping before name-matching) — tracked separately.
+            patch["normalized_name"] = result.canonical_name
         _patch_creditor(cid, patch, self._url, self._key, self._t)
 
         if result.company_id:
@@ -375,6 +399,18 @@ def process_job(job: dict[str, Any]) -> None:
 
     zi = build_zoominfo_client(settings)  # raises _FatalEnrichError on auth failure
     summary = Enricher(zi, sb_url, sb_key, sb_t).enrich_bankruptcy(creditors)
+
+    # Total failure (every call errored — no enrich AND no no-match) → fail the
+    # job loudly rather than silently completing and pushing the whole filing
+    # unenriched. A ZoomInfo outage thus surfaces (worker alert) and the operator
+    # can re-enqueue, instead of permanently downgrading every lead. Any
+    # successful call (an enrich OR a legitimate NO_MATCH) means ZoomInfo is up,
+    # so a mix of no-match + transient failures completes (with a partial alert).
+    if summary.enriched == 0 and summary.no_match == 0 and summary.failed:
+        raise RuntimeError(
+            f"zoom_info_enrich enriched 0/{len(creditors)} for {bankruptcy_id} "
+            f"(failed={len(summary.failed)}, no_match={summary.no_match})"
+        )
 
     # Leads flow to Salesforce whether or not ZoomInfo matched (tier is optional
     # downstream) — enqueue once, after the loop.
