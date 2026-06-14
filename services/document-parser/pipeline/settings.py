@@ -41,6 +41,14 @@ class PipelineSettings(BaseSettings):
     courtlistener_api_token: str = ""
     courtlistener_timeout_sec: float = 30.0
 
+    # Salesforce (salesforce_push stage — KD-68). Username/password + security
+    # token (no Connected App / OAuth yet — MVP). Empty username/password ⇒ the
+    # stage skips (guarded). domain='login' for production, 'test' for a sandbox.
+    salesforce_username: str = ""
+    salesforce_password: str = ""
+    salesforce_security_token: str = ""
+    salesforce_domain: str = "login"
+
     # S3 (shared with document-parser web service)
     s3_bucket: str = "bankruptcy-creditor-docs"
     aws_region: str = "us-east-1"
