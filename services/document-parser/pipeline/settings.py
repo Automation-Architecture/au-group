@@ -49,6 +49,16 @@ class PipelineSettings(BaseSettings):
     salesforce_security_token: str = ""
     salesforce_domain: str = "login"
 
+    # ZoomInfo GTM API (zoom_info_enrich stage — KD-67). OAuth 2.0 client
+    # credentials. Empty client id/secret ⇒ the stage is a no-op behind
+    # SKIP_ENRICH (which is the real operational gate). match_status is the
+    # minimum acceptable ZoomInfo matchStatus to trust an enrichment.
+    zoominfo_client_id: str = ""
+    zoominfo_client_secret: str = ""
+    zoominfo_base_url: str = "https://api.zoominfo.com/gtm"
+    zoominfo_timeout_sec: float = 30.0
+    zoominfo_match_status: str = "FULL_MATCH"
+
     # S3 (shared with document-parser web service)
     s3_bucket: str = "bankruptcy-creditor-docs"
     aws_region: str = "us-east-1"
