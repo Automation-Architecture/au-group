@@ -156,6 +156,15 @@ No external-ID field here either → creditor-row upsert key must be composite (
 4. The recency flag (FR-5.5) can be computed from standard objects (Opportunity/Task/Event) as designed — and note `EmailMessage`/`Task`/`Event` child relationships exist on both custom objects.
 5. Picklists are restricted sets — pipeline writes must map to exact existing values (`Chapter 11`, not `11`).
 
+### Account-match probe (read-only, 2026-06-14)
+
+A read-only probe of the live org (no writes) to validate the `salesforce.py` FR-5.1 match strategy:
+
+- **BillingState is populated on only 37%** of the 13,562 Accounts (5,011). → **Confirms the name-first match design** (`_find_account`): requiring Name **AND** BillingState would miss ~63% of accounts and create mass duplicates. State is correctly used **only as a tiebreaker**.
+- **BillingState format is mixed** — predominantly **full names** ("New York" 1,245, "New Jersey" 690, "Pennsylvania" 695) with a minority of abbreviations ("NY" 299, "NJ" 175). → **Confirms the `_state_key` full-name↔abbreviation normalization** (added in code review); without it the tiebreak would fail on the majority full-name entries.
+- **Duplicate-name Accounts exist** (e.g. "McCain Foods", "Konica Minolta Business Solutions USA", "Haddad Apparel Group" — 10+ groups of 2). → The manual-review-on-ambiguity path fires for real cases; the state tiebreak resolves some.
+- **Account names retain full punctuation/suffixes** ("A. M. Castle & Co.", "Vantage Specialty Chemicals", "Bell Flavors & Fragrances") — exactly the supplier/manufacturer companies that appear as creditors on Form 204s, so creditor↔account overlap (and thus dedup) is real. ⚠️ **Exact Name match on a suffix/punctuation-stripped `normalized_name` will MISS these.** The code also tries the raw `creditor_name`, but **the strong recommendation is to measure exact vs SOSL fuzzy (`FIND {…} IN NAME FIELDS RETURNING Account(...)`) hit-rate once real creditor data flows; SOSL is likely needed for a good match rate.** The match logic is isolated in `_find_account` precisely for this swap.
+
 ---
 
 ## 2. ⚠️ Schema gaps introduced by the MVP re-scope
