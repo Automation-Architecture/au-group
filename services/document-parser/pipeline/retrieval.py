@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -55,6 +56,15 @@ logger = logging.getLogger(__name__)
 
 _CL_BASE = "https://www.courtlistener.com/api/rest/v4"
 _CL_STORAGE = "https://storage.courtlistener.com"
+
+# CourtListener's authenticated REST tier is 5/min, 50/hr. A daily intake batch
+# fires several lookups back-to-back, so 429s are expected — back off and retry
+# rather than treat a rate-limit as "not archived" (which would spuriously fall
+# through to a PAID PACER fetch, defeating the free-first design). Module-level
+# so tests can zero the delay. Base 2s × exp over 4 attempts ≈ 14s, enough to
+# clear the rolling 5/min window.
+_RECAP_MAX_ATTEMPTS = 4
+_RECAP_RETRY_BASE_SEC = 2.0
 
 # A Form 204 / top-20 (or the consolidated top-30 large multi-debtor cases file
 # instead) is *defined* by the phrase "N largest [unsecured]".  Require it — the
@@ -198,19 +208,42 @@ class RecapRetriever:
         return {"Authorization": f"Token {self._token}", "Accept": "application/json"}
 
     def _get_json(self, client: httpx.Client, url: str, **kwargs) -> dict | None:
-        """GET → JSON, returning None on any HTTP or decode failure.
+        """GET → JSON, backing off on 429/5xx, returning None on a real miss.
 
-        A transient non-JSON 200 (maintenance/interstitial) must not abort the
-        whole strategy — returning None lets the caller fall through to the next
-        (free) step rather than escalating to a paid PACER fetch.
+        429 (rate limit) and 5xx/network errors are retried with exponential
+        backoff — a rate-limit must NOT be read as "not archived" (that would
+        escalate to a paid PACER fetch). A 4xx other than 429, a non-JSON body,
+        or exhausted retries return None so the caller falls through to the next
+        (free) step or the paid fallback.
         """
-        try:
-            resp = client.get(url, headers=self._headers(), **kwargs)
-            resp.raise_for_status()
-            return resp.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            logger.warning("RECAP GET %s failed: %s", url, exc)
-            return None
+        for attempt in range(1, _RECAP_MAX_ATTEMPTS + 1):
+            try:
+                resp = client.get(url, headers=self._headers(), **kwargs)
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.HTTPStatusError as exc:
+                code = exc.response.status_code
+                if (code == 429 or 500 <= code < 600) and attempt < _RECAP_MAX_ATTEMPTS:
+                    delay = _RECAP_RETRY_BASE_SEC * (2 ** (attempt - 1))
+                    logger.warning("RECAP %d on %s — backing off %.0fs (attempt %d/%d)",
+                                   code, url, delay, attempt, _RECAP_MAX_ATTEMPTS)
+                    time.sleep(delay)
+                    continue
+                logger.warning("RECAP GET %s failed: %s", url, exc)
+                return None
+            except httpx.RequestError as exc:
+                if attempt < _RECAP_MAX_ATTEMPTS:
+                    delay = _RECAP_RETRY_BASE_SEC * (2 ** (attempt - 1))
+                    logger.warning("RECAP network error on %s — backing off %.0fs (attempt %d/%d): %s",
+                                   url, delay, attempt, _RECAP_MAX_ATTEMPTS, exc)
+                    time.sleep(delay)
+                    continue
+                logger.warning("RECAP GET %s failed: %s", url, exc)
+                return None
+            except ValueError as exc:  # non-JSON 200 (maintenance/interstitial) — not transient
+                logger.warning("RECAP non-JSON from %s: %s", url, exc)
+                return None
+        return None
 
     def retrieve(self, case: CaseRef) -> RetrievalResult | None:
         doc, docket_id = self._search(case)

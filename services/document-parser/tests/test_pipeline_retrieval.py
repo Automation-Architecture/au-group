@@ -62,6 +62,7 @@ class _FakeClient:
 
 def _patch(monkeypatch, queue):
     monkeypatch.setattr(retrieval.httpx, "Client", lambda *a, **k: _FakeClient(queue))
+    monkeypatch.setattr(retrieval, "_RECAP_RETRY_BASE_SEC", 0.0)
 
 
 def _pdf(headers=None):
@@ -209,15 +210,31 @@ def test_recap_rejects_non_pdf_download(monkeypatch):
     assert RecapRetriever("tok").retrieve(_case()) is None
 
 
+def test_recap_retries_on_429_then_succeeds(monkeypatch):
+    # A rate-limit (429) must NOT be read as a miss — back off and retry, so the
+    # case is still served from the free archive (not escalated to paid PACER).
+    rate_limited = _FakeResp(status_code=429)
+    _patch(monkeypatch, [rate_limited, _search_hit(), _pdf()])
+    res = RecapRetriever("tok").retrieve(_case())
+    assert res is not None and res.source == "recap"
+
+
+def test_recap_persistent_429_returns_none(monkeypatch):
+    # Exhausted retries → None (miss) so the strategy can fall through, rather
+    # than hang. 4 attempts on search, then the walk also 429s out.
+    _patch(monkeypatch, [_FakeResp(status_code=429)] * 12)
+    assert RecapRetriever("tok", max_entry_pages=1).retrieve(_case()) is None
+
+
 def test_recap_search_http_error_falls_through_to_walk(monkeypatch):
-    # search raises → walk: dockets + entries succeed
+    # search network errors exhaust their retries (4) → fall through to the walk.
     err = httpx.ConnectError("boom")
     dockets = _FakeResp(json_data={"results": [{"id": 7}]})
     entries = _FakeResp(json_data={"results": [
         {"recap_documents": [{"description": "20 Largest Unsecured", "document_number": "2",
                               "page_count": 3, "is_available": True, "filepath_local": "f.pdf"}]}],
         "next": None})
-    _patch(monkeypatch, [err, dockets, entries, _pdf()])
+    _patch(monkeypatch, [err, err, err, err, dockets, entries, _pdf()])
     res = RecapRetriever("tok").retrieve(_case())
     assert res is not None and res.source == "recap"
 
