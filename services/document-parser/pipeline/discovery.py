@@ -62,10 +62,10 @@ class DiscoveredCase:
 class CourtListenerDiscoverer:
     """Discover new Chapter 11 dockets via the CourtListener Search API."""
 
-    def __init__(self, api_token: str, timeout: float = 30.0, max_pages: int = 10) -> None:
+    def __init__(self, api_token: str, timeout: float = 30.0, max_pages: int = 25) -> None:
         self._token = api_token
         self._timeout = timeout
-        self._max_pages = max_pages  # 20 results/page → cap total per run
+        self._max_pages = max_pages  # 20 results/page → ~500 cases/run cap
 
     def _get(self, client: httpx.Client, url: str, params: dict | None) -> dict | None:
         """GET → JSON with 429/5xx/network backoff; None on non-retryable failure."""
@@ -97,14 +97,21 @@ class CourtListenerDiscoverer:
         return None
 
     def discover(self, court_ids: list[str], date_from: date, date_to: date,
-                 chapter: int = 11) -> list[DiscoveredCase]:
-        """Return new Chapter-`chapter` dockets across `court_ids` in the window.
+                 chapter: int = 11) -> tuple[list[DiscoveredCase], bool]:
+        """Return (cases, complete) for new Chapter-`chapter` dockets in the window.
 
-        Server-side chapter filter via q=chapter:N. Future-dated sentinel rows
-        (CourtListener has bogus entries like dateFiled=2029) are dropped.
+        ``complete`` is False when discovery could NOT fully enumerate the window
+        — a fetch failure mid-pagination, or the page cap hit with more results
+        pending. The caller MUST NOT advance its last-run watermark when
+        incomplete, or the un-fetched cases are skipped forever.
+
+        Server-side chapter filter via q=chapter:N. Rows without a docket number
+        or a filing date are skipped (a blank date would break the downstream
+        upsert and strand an S3 object); future-dated sentinel rows (CourtListener
+        has bogus entries like dateFiled=2029) are dropped.
         """
         if not court_ids:
-            return []
+            return [], True
         until_iso = date_to.isoformat()
         params: dict | None = {
             "type": "r",
@@ -115,19 +122,21 @@ class CourtListenerDiscoverer:
             "order_by": "dateFiled desc",
         }
         cases: list[DiscoveredCase] = []
+        complete = True
         url: str | None = f"{_CL_BASE}/search/"
         pages = 0
         with httpx.Client(timeout=self._timeout) as client:
             while url and pages < self._max_pages:
                 data = self._get(client, url, params)
                 if not data:
+                    complete = False  # fetch failed mid-pagination — window not fully covered
                     break
                 for r in (data.get("results") or []):
                     df = r.get("dateFiled") or ""
                     docket_number = r.get("docketNumber")
-                    if not docket_number:
-                        continue
-                    if df and df > until_iso:
+                    if not docket_number or not df:
+                        continue  # need both a case number and a filing date
+                    if df > until_iso:
                         continue  # future-dated sentinel row — skip
                     cases.append(DiscoveredCase(
                         court_id=r.get("court_id", ""),
@@ -140,6 +149,11 @@ class CourtListenerDiscoverer:
                 url = data.get("next")   # absolute cursor URL; params already encoded in it
                 params = None
                 pages += 1
-        logger.info("CourtListener discovery: %d Chapter %s cases across %d courts (%s→%s)",
-                    len(cases), chapter, len(court_ids), date_from, date_to)
-        return cases
+        if url and complete:
+            # Loop stopped on the page cap with a cursor still pending.
+            complete = False
+            logger.warning("CourtListener discovery hit the %d-page cap with more results pending "
+                           "— marking incomplete (watermark will not advance)", self._max_pages)
+        logger.info("CourtListener discovery: %d Chapter %s cases across %d courts (%s→%s) complete=%s",
+                    len(cases), chapter, len(court_ids), date_from, date_to, complete)
+        return cases, complete

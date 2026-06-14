@@ -32,7 +32,7 @@ import logging
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import boto3
 import httpx
@@ -57,6 +57,11 @@ logger = logging.getLogger(__name__)
 _AUTH_URL   = "https://pacer.login.uscourts.gov/services/cso-auth"
 _SEARCH_URL = "https://pcl.uscourts.gov/pcl-public-api/rest/cases/find"
 _PAGE_SIZE  = 54  # PCL returns max 54 per immediate search page
+
+# CourtListener discovery: re-query a few days behind the last-run watermark so
+# boundary-exclusive date filters and CourtListener's same-day ingestion lag
+# don't drop filings. Re-processing the overlap is free (idempotency gate).
+_CL_LOOKBACK_DAYS = 3
 
 # court_id values as stored in au_group_court_mappings (without 'bk' suffix).
 # PCL requires the 'bk' suffix — we append it at call time.
@@ -634,6 +639,7 @@ def run(dry_run: bool = False) -> IntakeResult:
     # 2. Discover new Chapter 11 cases (PACER PCL if creds, else CourtListener).
     pacer: PacerClient | None = None
     token: str | None = None
+    discovery_complete = True  # PACER raises on failure; CourtListener reports it
     try:
         if has_pacer:
             pacer = PacerClient(settings.pacer_username, settings.pacer_password)
@@ -645,7 +651,9 @@ def run(dry_run: bool = False) -> IntakeResult:
             discoverer = CourtListenerDiscoverer(
                 settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
             )
-            cases = discoverer.discover(court_ids, since, until, chapter=11)
+            # Re-query a few days behind the watermark; re-processing is idempotent.
+            cl_since = since - timedelta(days=_CL_LOOKBACK_DAYS)
+            cases, discovery_complete = discoverer.discover(court_ids, cl_since, until, chapter=11)
     except Exception as exc:
         logger.error("Case discovery failed: %s", exc)
         send_error_alert(
@@ -786,8 +794,20 @@ def run(dry_run: bool = False) -> IntakeResult:
         logger.info("Processed %s → bankruptcy_id=%s (Form 204 via %s, %s)",
                     case.case_number_full, bankruptcy_id, retrieved.source, retrieved.cost_note)
 
-    # 5. Update last run timestamp
-    if result.cases_uploaded > 0 or result.cases_found == 0:
+    # 5. Update last run timestamp — ONLY if discovery fully covered the window.
+    # Advancing the watermark after an incomplete discovery (outage / page cap)
+    # would skip the un-fetched cases forever; leave it so the next run re-covers
+    # (re-processing already-done cases is idempotent via the S3 + row gate).
+    if not discovery_complete:
+        logger.warning("Discovery incomplete — not advancing intake_last_run_at (window will be re-covered)")
+        send_error_alert(
+            stage="intake.py — incomplete discovery",
+            error=f"CourtListener discovery did not fully cover the window since={since}; "
+                  f"watermark held, {result.cases_uploaded} cases processed this run",
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+    elif result.cases_uploaded > 0 or result.cases_found == 0:
         try:
             _set_last_run_date(sb_url, sb_key, sb_t, until)
         except Exception as exc:
