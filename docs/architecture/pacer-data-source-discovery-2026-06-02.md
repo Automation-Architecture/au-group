@@ -1,5 +1,7 @@
 # AU Group — PACER Data Source Re-Scope Discovery
 
+> **✅ OD-8 RESOLVED (2026-06-14):** discovery now runs via the **CourtListener Search API** (`pipeline/discovery.py`, built + verified live — 60 real Chapter 11 cases discovered across njb+nysb in a 14-day window), using the same Free Law Project token as RECAP retrieval and **needing no standard PACER account**. This is the "automated discovery, no PACER" path (an upgrade of this doc's Option C discovery leg with CourtListener as the source). Form 204 retrieval is **RECAP-first** (`pipeline/retrieval.py`, PR #81). A standard-PACER **PCL** path is a deferred *authoritative* add — `intake.py` auto-selects PCL when PACER creds are configured, else CourtListener; the paid PACER CM/ECF Form-204 fallback also activates only with PACER creds. **Caveats:** CourtListener's `q=chapter:11` misses ~13% of brand-new filings that arrive chapter-blank (mitigation deferred); CourtListener is RSS-fed and same-day-ish but is not the authoritative PACER index. The analysis below stands as the rationale; the live REST rate limit is **5,000/hr** (an earlier "5/min" note was wrong), though bursts can 429 (handled by backoff).
+
 **Prepared:** 2026-06-02
 **Author:** Technical Business Analyst (discovery)
 **Engagement stage:** Mid-build re-scope — OD-8 decision is dead, options analysis before any further intake build

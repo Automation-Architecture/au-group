@@ -39,6 +39,7 @@ import httpx
 from botocore.exceptions import ClientError
 
 from pipeline.alerts import send_error_alert
+from pipeline.discovery import CourtListenerDiscoverer
 from pipeline.retrieval import (
     CaseRef,
     CompositeRetriever,
@@ -593,9 +594,13 @@ def run(dry_run: bool = False) -> IntakeResult:
     settings = get_pipeline_settings()
     result   = IntakeResult()
 
-    if not settings.pacer_username or not settings.pacer_password:
-        logger.error("PACER_USERNAME / PACER_PASSWORD not set — cannot run intake")
-        result.errors.append("fatal: missing PACER credentials")
+    # Discovery source: PACER PCL (authoritative) when creds exist, else the free
+    # CourtListener Search API (no standard PACER account needed — OD-8 resolution).
+    has_pacer = bool(settings.pacer_username and settings.pacer_password)
+    has_courtlistener = bool(settings.courtlistener_api_token)
+    if not (has_pacer or has_courtlistener):
+        logger.error("No discovery source — set PACER creds or COURTLISTENER_API_TOKEN")
+        result.errors.append("fatal: no discovery source (PACER or CourtListener)")
         return result
 
     sb_url = settings.supabase_url
@@ -623,37 +628,33 @@ def run(dry_run: bool = False) -> IntakeResult:
         return result
 
     until = date.today()
-    logger.info("Intake: %d courts | since=%s until=%s | dry_run=%s", len(court_ids), since, until, dry_run)
+    logger.info("Intake: %d courts | since=%s until=%s | source=%s | dry_run=%s",
+                len(court_ids), since, until, "PACER" if has_pacer else "CourtListener", dry_run)
 
-    # 2. Authenticate to PACER
+    # 2. Discover new Chapter 11 cases (PACER PCL if creds, else CourtListener).
+    pacer: PacerClient | None = None
+    token: str | None = None
     try:
-        pacer = PacerClient(settings.pacer_username, settings.pacer_password)
-        token = pacer.authenticate()
+        if has_pacer:
+            pacer = PacerClient(settings.pacer_username, settings.pacer_password)
+            token = pacer.authenticate()
+            cases, token = pacer.search_new_cases(
+                court_ids=court_ids, date_from=since, date_to=until, chapter=11, token=token,
+            )
+        else:
+            discoverer = CourtListenerDiscoverer(
+                settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
+            )
+            cases = discoverer.discover(court_ids, since, until, chapter=11)
     except Exception as exc:
-        logger.error("PACER authentication failed: %s", exc)
+        logger.error("Case discovery failed: %s", exc)
         send_error_alert(
-            stage="intake.py — PACER auth",
+            stage="intake.py — discovery",
             error=str(exc),
             bot_token=settings.slack_bot_token,
             channel_id=settings.slack_channel_id,
         )
-        result.errors.append(f"fatal: PACER auth failed: {exc}")
-        return result
-
-    # 3. Search for new cases
-    try:
-        cases, token = pacer.search_new_cases(
-            court_ids=court_ids, date_from=since, date_to=until, chapter=11, token=token,
-        )
-    except Exception as exc:
-        logger.error("PCL case search failed: %s", exc)
-        send_error_alert(
-            stage="intake.py — PCL search",
-            error=str(exc),
-            bot_token=settings.slack_bot_token,
-            channel_id=settings.slack_channel_id,
-        )
-        result.errors.append(f"fatal: PCL search failed: {exc}")
+        result.errors.append(f"fatal: discovery failed: {exc}")
         return result
 
     result.cases_found = len(cases)
@@ -668,13 +669,15 @@ def run(dry_run: bool = False) -> IntakeResult:
     s3 = _PipelineS3()
 
     # Cheapest-first Form 204 retrieval: free RECAP archive (when a CourtListener
-    # token is configured) → paid PACER CM/ECF fetch. See pipeline/retrieval.py.
+    # token is configured) → paid PACER CM/ECF fetch (only when PACER creds +
+    # session exist). See pipeline/retrieval.py.
     retrievers: list = []
     if settings.courtlistener_api_token:
         retrievers.append(RecapRetriever(
             settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
         ))
-    retrievers.append(PacerCmecfRetriever(pacer, token))
+    if has_pacer and pacer is not None and token is not None:
+        retrievers.append(PacerCmecfRetriever(pacer, token))
     retriever = CompositeRetriever(retrievers)
 
     for case in cases:
