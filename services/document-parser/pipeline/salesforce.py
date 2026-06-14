@@ -6,23 +6,30 @@ this stage pushes every enriched **company** creditor into the client's live
 Salesforce org, against the org's CONFIRMED existing schema (see
 ``docs/project/salesforce-audit.md`` §1c — do NOT create ``Bankruptcy_Event__c``):
 
-  1. Upsert the debtor as ``Bankrupt_Companies__c`` on the ``Case_Number__c``
-     external id (Name / Chapter__c / File_Date__c / Court_District__c).
+  1. Upsert the debtor as ``Bankrupt_Companies__c`` keyed on ``Case_Number__c``,
+     with a name-match-and-backfill fallback for the pre-existing debtor rows the
+     client maintains without case numbers (audit §1c) so we don't duplicate them.
   2. Match-or-create the creditor ``Account`` (FR-5.1 dedup against the client's
-     existing ~13.5k accounts), set ``Company_Tier__c`` + ``ZoomInfo__c``.
+     ~13.5k existing accounts), set ``Company_Tier__c`` + ``ZoomInfo__c``.
   3. Create the creditor row as ``Bankruptcy__c`` (the "Creditors" related list:
      Account__c + Bankrupt_Company__c + Amount__c) — dedup query-then-write.
   4. Compute the FR-5.5 recency flag and persist it (RPC then PATCH).
 
 Auth is username + password + security token (no Connected App yet — MVP).
 
-Account match (the FR-5.1 crux) is intentionally isolated in ``_find_account``
-so the strategy can be swapped once measured against the live org with real
-creditor data.  Current strategy: exact Name match (SF Name match is
-case-insensitive), disambiguated by BillingState only when Name is ambiguous —
-so it does not depend on BillingState being populated (it is sparse on many
-orgs).  0 matches → create (a new lead); 1 → reuse; >1 unresolved → flag manual
-review and skip (never guess which account, EC-3.1).
+Account match (the FR-5.1 crux) is isolated in ``_find_account`` so the strategy
+can be swapped once measured against the live org with real creditor data.
+Current strategy: exact Name match (SF Name match is case-insensitive),
+disambiguated by BillingState only when Name is ambiguous (state-name/abbrev
+tolerant) — so it does not depend on BillingState being populated.  0 matches →
+create (a new lead); 1 → reuse; >1 unresolved across all candidate names → flag
+manual review and skip (never guess which account, EC-3.1).
+
+Two distinct creditors in one filing that resolve to the SAME Salesforce Account
+are collapsed (the second is skipped as a duplicate) — both because the
+``salesforce_accounts.salesforce_account_id`` column is UNIQUE (one account maps
+to one creditor) and to avoid one creditor's ``Amount__c`` overwriting another's
+on a shared ``Bankruptcy__c`` row.
 
 NOTE (verification status): exercised by unit tests with an injected fake
 Salesforce client; the live-org integration test (AC) is gated on real creditor
@@ -36,10 +43,10 @@ import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
-from urllib.parse import quote
 
 import httpx
 
+from pipeline.alerts import send_error_alert
 from pipeline.settings import PipelineSettings, get_pipeline_settings
 
 logger = logging.getLogger(__name__)
@@ -54,9 +61,28 @@ RECENCY_EXISTING = "Existing activity in Salesforce"
 RECENCY_NEW = "New Salesforce account"
 
 # Transient-retry policy for Salesforce 503/5xx (per-call; module-level so tests
-# can zero the delay).
+# can zero the delay). Applied ONLY to idempotent calls (query/update/upsert) —
+# never to create(), where a post-commit retry would duplicate a record.
 _SF_MAX_ATTEMPTS = 3
 _SF_RETRY_BASE_SEC = 1.0
+
+# Full US state/territory name → USPS abbreviation, for the BillingState tiebreak
+# (SF orgs store either form). Keyed lowercase.
+_US_STATES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "district of columbia": "DC", "florida": "FL", "georgia": "GA", "hawaii": "HI",
+    "idaho": "ID", "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI", "south carolina": "SC",
+    "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+    "vermont": "VT", "virginia": "VA", "washington": "WA", "west virginia": "WV",
+    "wisconsin": "WI", "wyoming": "WY", "puerto rico": "PR",
+}
 
 
 class _FatalSalesforceError(RuntimeError):
@@ -87,10 +113,23 @@ def _chapter_label(chapter_type: str | None) -> str | None:
 
 
 def _tier_label(company_tier: Any) -> str | None:
-    try:
-        return _TIER_MAP.get(int(company_tier))
-    except (TypeError, ValueError):
-        return None
+    # company_tier is a smallint; reject non-integers (a float would truncate wrongly).
+    if isinstance(company_tier, bool) or not isinstance(company_tier, int):
+        if isinstance(company_tier, str) and company_tier.strip().isdigit():
+            company_tier = int(company_tier)
+        else:
+            return None
+    return _TIER_MAP.get(company_tier)
+
+
+def _state_key(value: str | None) -> str:
+    """Normalise a state to its USPS abbreviation for comparison ('' if unknown/blank)."""
+    s = (value or "").strip()
+    if not s:
+        return ""
+    if len(s) == 2:
+        return s.upper()
+    return _US_STATES.get(s.lower(), s.upper())
 
 
 def _is_sf_transient(exc: Exception) -> bool:
@@ -102,7 +141,11 @@ def _is_sf_transient(exc: Exception) -> bool:
 
 
 def _sf_retry(fn, *args, **kwargs):
-    """Call fn with exponential backoff on transient Salesforce errors."""
+    """Call an IDEMPOTENT fn with exponential backoff on transient Salesforce errors.
+
+    Never wrap create(): a transient error after Salesforce has committed the
+    write would duplicate the record on retry.
+    """
     last: Exception | None = None
     for attempt in range(1, _SF_MAX_ATTEMPTS + 1):
         try:
@@ -199,6 +242,7 @@ class PushResult:
     pushed: int = 0
     manual_review: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    duplicates: list[str] = field(default_factory=list)  # collapsed onto another creditor's Account
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +254,7 @@ class SalesforcePusher:
 
     ``sf`` must quack like simple_salesforce.Salesforce: ``sf.query(soql)`` and
     per-object accessors (``sf.Account``, ``getattr(sf, 'Bankruptcy__c')`` …)
-    with ``.create(dict)`` / ``.update(id, dict)`` / ``.upsert(ext_path, dict)``.
+    with ``.create(dict)`` / ``.update(id, dict)``.
     """
 
     def __init__(self, sf: Any, supabase_url: str, supabase_key: str, timeout: float) -> None:
@@ -235,43 +279,68 @@ class SalesforcePusher:
         # Address__c / PACER_URL__c are not captured in the pipeline DB yet — omitted.
 
         obj = getattr(self._sf, "Bankrupt_Companies__c")
-        _sf_retry(obj.upsert, f"Case_Number__c/{quote(str(case_number), safe='')}", fields)
-        # upsert returns no id; resolve it by the external id we just keyed on.
-        soql = f"SELECT Id FROM Bankrupt_Companies__c WHERE Case_Number__c = '{_soql_escape(str(case_number))}'"
-        res = _sf_retry(self._sf.query, soql)
-        records = res.get("records") or []
-        if not records:
-            raise _FatalSalesforceError(f"Bankrupt_Companies__c upsert succeeded but Id lookup failed for {case_number}")
-        return records[0]["Id"]
+        esc_case = _soql_escape(str(case_number))
+
+        # 1. A row already keyed on this case number → update it.
+        existing = (_sf_retry(self._sf.query,
+                    f"SELECT Id FROM Bankrupt_Companies__c WHERE Case_Number__c = '{esc_case}'"
+                    ).get("records") or [])
+        if existing:
+            _sf_retry(obj.update, existing[0]["Id"], fields)
+            return existing[0]["Id"]
+
+        # 2. A pre-existing debtor the client maintains WITHOUT a case number
+        #    (audit §1c: 82 such rows) — match by name and backfill, don't dup.
+        name = (b.get("debtor_name") or "").strip()
+        if name:
+            by_name = (_sf_retry(self._sf.query,
+                       f"SELECT Id FROM Bankrupt_Companies__c "
+                       f"WHERE Name = '{_soql_escape(name)}' AND Case_Number__c = null"
+                       ).get("records") or [])
+            if len(by_name) == 1:
+                _sf_retry(obj.update, by_name[0]["Id"], {**fields, "Case_Number__c": str(case_number)})
+                return by_name[0]["Id"]
+
+        # 3. Genuinely new debtor. create() is not retried (idempotency).
+        created = obj.create({**fields, "Case_Number__c": str(case_number)})
+        return created["id"]
 
     # -- account match (FR-5.1 — the swappable seam) --------------------------
+    def _disambiguate_by_state(self, records: list[dict[str, Any]], state: str) -> str | None:
+        key = _state_key(state)
+        if not key:
+            return None
+        matches = [r for r in records if _state_key(r.get("BillingState")) == key]
+        return matches[0]["Id"] if len(matches) == 1 else None
+
     def _find_account(self, creditor: dict[str, Any]) -> str | None:
         """Return an existing Account Id, or None to create. Raises _ManualReview if ambiguous.
 
-        Name-first (case-insensitive in SF), state only as a tiebreaker — so a
-        sparse BillingState never causes a miss/duplicate.
+        Tries each candidate name (normalized then raw); only escalates to manual
+        review if NO name yields a clean single match — an ambiguous normalized
+        name still falls through to the raw name.
         """
-        names = [creditor.get("normalized_name"), creditor.get("creditor_name")]
         state = (creditor.get("creditor_state") or "").strip()
-        for name in names:
-            if not name or not name.strip():
+        ambiguous = False
+        tried: set[str] = set()
+        for raw in (creditor.get("normalized_name"), creditor.get("creditor_name")):
+            name = (raw or "").strip()
+            if not name or name.upper() in tried:
                 continue
-            soql = (f"SELECT Id, BillingState FROM Account "
-                    f"WHERE Name = '{_soql_escape(name.strip())}'")
-            records = (_sf_retry(self._sf.query, soql).get("records") or [])
+            tried.add(name.upper())
+            records = (_sf_retry(self._sf.query,
+                       f"SELECT Id, BillingState FROM Account WHERE Name = '{_soql_escape(name)}'"
+                       ).get("records") or [])
             if not records:
                 continue
             if len(records) == 1:
                 return records[0]["Id"]
-            # Ambiguous on name → disambiguate by state when we have one.
-            if state:
-                by_state = [r for r in records if (r.get("BillingState") or "").strip().upper() == state.upper()]
-                if len(by_state) == 1:
-                    return by_state[0]["Id"]
-            raise _ManualReview(
-                f"{len(records)} Accounts named {name.strip()!r}"
-                + (f" (state {state})" if state else "") + " — manual review"
-            )
+            resolved = self._disambiguate_by_state(records, state)
+            if resolved:
+                return resolved
+            ambiguous = True  # remember, but keep trying the next candidate name
+        if ambiguous:
+            raise _ManualReview(f"creditor {creditor.get('creditor_id')} matches multiple Accounts")
         return None  # no match on any name → caller creates
 
     def _account_fields(self, creditor: dict[str, Any], enrichment: dict[str, Any]) -> dict[str, Any]:
@@ -297,7 +366,7 @@ class SalesforcePusher:
         name = (creditor.get("normalized_name") or creditor.get("creditor_name") or "").strip()
         if not name:
             raise _ManualReview("creditor has no usable name")
-        created = _sf_retry(self._sf.Account.create, {"Name": name[:255], **fields})
+        created = self._sf.Account.create({"Name": name[:255], **fields})  # not retried (idempotency)
         return created["id"]
 
     # -- creditor row (Bankruptcy__c, the "Creditors" related list) -----------
@@ -323,7 +392,7 @@ class SalesforcePusher:
         if existing:
             _sf_retry(obj.update, existing[0]["Id"], fields)
         else:
-            _sf_retry(obj.create, fields)
+            obj.create(fields)  # not retried (idempotency)
 
     # -- recency (FR-5.5; OD-5 rules pending client confirm — default here) ---
     def _compute_recency(self, account_id: str) -> str:
@@ -340,30 +409,35 @@ class SalesforcePusher:
                 return RECENCY_EXISTING
         return RECENCY_NEW
 
-    # -- per-creditor orchestration ------------------------------------------
-    def _push_creditor(self, b: dict[str, Any], bc_id: str, creditor: dict[str, Any],
-                       enrichment: dict[str, Any]) -> None:
-        account_id = self._match_or_create_account(creditor, enrichment)
-        self._upsert_creditor_row(account_id, bc_id, b, creditor)
-        recency = self._compute_recency(account_id)
-        _persist_account_map(creditor["creditor_id"], account_id, recency,
-                             self._url, self._key, self._t)
-
+    # -- per-filing orchestration --------------------------------------------
     def push_bankruptcy(self, b: dict[str, Any], creditors: list[dict[str, Any]],
                         enrichment: dict[str, dict[str, Any]]) -> PushResult:
         bc_id = self._upsert_debtor(b)
         result = PushResult()
+        seen_accounts: dict[str, str] = {}  # account_id → first creditor_id that claimed it
         for creditor in creditors:
-            cid = creditor.get("creditor_id", "?")
+            cid = str(creditor.get("creditor_id", "?"))
             try:
-                self._push_creditor(b, bc_id, creditor, enrichment.get(cid, {}))
+                account_id = self._match_or_create_account(creditor, enrichment.get(cid, {}))
+                if account_id in seen_accounts:
+                    # Two creditors in one filing → one Account: collapse the
+                    # second (avoids the Amount__c clobber and the
+                    # salesforce_account_id UNIQUE violation on persist).
+                    logger.warning("Creditor %s resolves to the same Account %s as creditor %s — skipping duplicate",
+                                   cid, account_id, seen_accounts[account_id])
+                    result.duplicates.append(cid)
+                    continue
+                seen_accounts[account_id] = cid
+                self._upsert_creditor_row(account_id, bc_id, b, creditor)
+                recency = self._compute_recency(account_id)
+                _persist_account_map(cid, account_id, recency, self._url, self._key, self._t)
                 result.pushed += 1
             except _ManualReview as mr:
                 logger.warning("Creditor %s → manual review: %s", cid, mr)
-                result.manual_review.append(str(cid))
+                result.manual_review.append(cid)
             except Exception as exc:  # noqa: BLE001 — isolate one creditor's failure
                 logger.error("Creditor %s push failed: %s", cid, exc)
-                result.failed.append(str(cid))
+                result.failed.append(cid)
         return result
 
 
@@ -390,6 +464,8 @@ def process_job(job: dict[str, Any]) -> None:
 
     Normal return → worker marks the job completed.
     _FatalSalesforceError / RuntimeError → worker marks failed + alerts.
+    Partial failures (some creditors pushed, some not) complete the job but fire
+    a non-fatal Slack alert so the un-synced/manual-review creditors are surfaced.
     """
     settings = get_pipeline_settings()
     sb_url, sb_key, sb_t = settings.supabase_url, settings.supabase_service_role_key, settings.supabase_http_timeout_sec
@@ -419,13 +495,26 @@ def process_job(job: dict[str, Any]) -> None:
     pusher = SalesforcePusher(sf, sb_url, sb_key, sb_t)
     result = pusher.push_bankruptcy(bankruptcy, creditors, enrichment)
 
-    logger.info("salesforce_push for %s: pushed=%d manual_review=%d failed=%d",
-                bankruptcy_id, result.pushed, len(result.manual_review), len(result.failed))
+    logger.info("salesforce_push for %s: pushed=%d manual_review=%d failed=%d duplicates=%d",
+                bankruptcy_id, result.pushed, len(result.manual_review),
+                len(result.failed), len(result.duplicates))
 
-    # If nothing succeeded and something errored (vs all manual-review), surface it.
+    # Nothing succeeded but something errored → surface as a job failure.
     if result.pushed == 0 and result.failed:
         raise RuntimeError(
             f"salesforce_push pushed 0/{len(creditors)} creditors for {bankruptcy_id} "
             f"(failed={len(result.failed)}, manual_review={len(result.manual_review)})"
         )
-    return  # worker marks job completed; per-creditor failures are logged + reported
+
+    # Partial success: complete the job but surface the stragglers (no auto-retry
+    # exists per-creditor, so an alert is the durable signal — EC-3.1).
+    if result.failed or result.manual_review:
+        send_error_alert(
+            stage="salesforce.py — partial push",
+            error=(f"{bankruptcy_id}: pushed {result.pushed}/{len(creditors)}; "
+                   f"failed={result.failed} manual_review={result.manual_review}"),
+            bankruptcy_id=str(bankruptcy_id),
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+    return  # worker marks job completed

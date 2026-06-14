@@ -154,13 +154,13 @@ def test_find_account_ambiguous_unresolved_raises_manual_review():
 
 
 def test_find_account_falls_back_to_raw_name():
-    # normalized_name misses, raw creditor_name hits.
+    # normalized_name misses, raw creditor_name (a distinct string) hits.
     def qh(q):
         if "CF LOGISTICS" in q:
             return {"totalSize": 0, "records": []}
         return {"totalSize": 1, "records": [{"Id": "001RAW", "BillingState": "NJ"}]}
     sf = _FakeSF(qh)
-    assert _pusher(sf)._find_account(_creditor()) == "001RAW"
+    assert _pusher(sf)._find_account(_creditor(creditor_name="Cf Logistics LLC")) == "001RAW"
 
 
 # ---------------------------------------------------------------------------
@@ -193,17 +193,38 @@ def test_match_or_create_updates_when_matched():
 # Debtor upsert
 # ---------------------------------------------------------------------------
 
-def test_upsert_debtor_upserts_and_resolves_id():
+def test_upsert_debtor_updates_existing_by_case_number():
+    # First query (by Case_Number__c) returns a hit → update that row.
     sf = _FakeSF(lambda q: {"totalSize": 1, "records": [{"Id": "a0B999"}]})
+    assert _pusher(sf)._upsert_debtor(_BANKRUPTCY) == "a0B999"
+    updates = [c for c in sf.calls if c[0] == "Bankrupt_Companies__c" and c[1] == "update"]
+    assert updates and updates[0][2] == "a0B999"
+    assert updates[0][3]["Chapter__c"] == "Chapter 11" and updates[0][3]["Name"] == "AeroFarms, Inc"
+
+
+def test_upsert_debtor_creates_when_no_match():
+    sf = _FakeSF(lambda q: {"totalSize": 0, "records": []})  # no case-num, no name match
     bc_id = _pusher(sf)._upsert_debtor(_BANKRUPTCY)
-    assert bc_id == "a0B999"
-    ups = [c for c in sf.calls if c[0] == "Bankrupt_Companies__c" and c[1] == "upsert"]
-    assert ups, "debtor should be upserted"
-    ext_path, data = ups[0][2], ups[0][3]
-    assert ext_path.startswith("Case_Number__c/")
-    assert data["Chapter__c"] == "Chapter 11"
-    assert data["Name"] == "AeroFarms, Inc"
+    creates = [c for c in sf.calls if c[0] == "Bankrupt_Companies__c" and c[1] == "create"]
+    assert len(creates) == 1
+    data = creates[0][2]
+    assert data["Case_Number__c"] == "2:23-bk-13359"
     assert "PACER_URL__c" not in data and "Address__c" not in data  # not in DB
+    assert bc_id.startswith("BAN")
+
+
+def test_upsert_debtor_backfills_blank_case_number_row():
+    # No case-number match, but a name match with a blank case number (audit §1c)
+    # → update that row + backfill the case number, do NOT create a duplicate.
+    def qh(q):
+        if "Case_Number__c = null" in q:
+            return {"totalSize": 1, "records": [{"Id": "a0BexistB"}]}
+        return {"totalSize": 0, "records": []}
+    sf = _FakeSF(qh)
+    assert _pusher(sf)._upsert_debtor(_BANKRUPTCY) == "a0BexistB"
+    updates = [c for c in sf.calls if c[0] == "Bankrupt_Companies__c" and c[1] == "update"]
+    assert updates and updates[0][3]["Case_Number__c"] == "2:23-bk-13359"
+    assert not [c for c in sf.calls if c[0] == "Bankrupt_Companies__c" and c[1] == "create"]
 
 
 def test_upsert_debtor_raises_without_case_number():
@@ -311,7 +332,7 @@ def _settings(**over):
     base = dict(supabase_url="https://sb.example.co", supabase_service_role_key="k",
                 supabase_http_timeout_sec=5.0, salesforce_username="u",
                 salesforce_password="p", salesforce_security_token="t",
-                salesforce_domain="login")
+                salesforce_domain="login", slack_bot_token="xoxb", slack_channel_id="C1")
     base.update(over)
     return SimpleNamespace(**base)
 
@@ -368,3 +389,90 @@ def test_process_job_all_failed_raises(monkeypatch):
     monkeypatch.setattr(salesforce, "_build_sf_client", lambda s: _FakeSF(qh))
     with pytest.raises(RuntimeError):
         salesforce.process_job({"id": "j1", "bankruptcy_id": "b1"})
+
+
+def test_process_job_partial_failure_alerts_but_completes(monkeypatch):
+    monkeypatch.setattr(salesforce, "get_pipeline_settings", lambda: _settings())
+    monkeypatch.setattr(salesforce, "_get_bankruptcy", lambda *a: dict(_BANKRUPTCY))
+    monkeypatch.setattr(salesforce, "_list_company_creditors", lambda *a: [
+        _creditor(creditor_id="ok"), _creditor(creditor_id="bad", normalized_name="FAILCO", creditor_name="FailCo")])
+    monkeypatch.setattr(salesforce, "_get_enrichment", lambda *a: {})
+    monkeypatch.setattr(salesforce, "_persist_account_map", lambda *a: None)
+    monkeypatch.setattr(salesforce, "_SF_RETRY_BASE_SEC", 0.0)
+    alerts = []
+    monkeypatch.setattr(salesforce, "send_error_alert", lambda **kw: alerts.append(kw))
+
+    def qh(q):
+        if "Bankrupt_Companies__c" in q:
+            return {"totalSize": 1, "records": [{"Id": "a0BC"}]}
+        if "FAILCO" in q:
+            raise httpx.ConnectError("boom")
+        return {"totalSize": 0, "records": []}
+    monkeypatch.setattr(salesforce, "_build_sf_client", lambda s: _FakeSF(qh))
+    salesforce.process_job({"id": "j1", "bankruptcy_id": "b1"})  # completes (no raise)
+    assert len(alerts) == 1 and "bad" in alerts[0]["error"]
+
+
+# ---------------------------------------------------------------------------
+# Review-hardening: dup-account collapse, ambiguous fallback, state, no-retry-create
+# ---------------------------------------------------------------------------
+
+def test_two_creditors_same_account_collapsed(_no_persist):
+    # Both creditors match the same existing Account → second is a duplicate,
+    # not a failure or a clobber.
+    def qh(q):
+        if "Bankrupt_Companies__c" in q:
+            return {"totalSize": 1, "records": [{"Id": "a0BC"}]}
+        if "FROM Account" in q:
+            return {"totalSize": 1, "records": [{"Id": "001SHARED", "BillingState": "NJ"}]}
+        return {"totalSize": 0, "records": []}
+    sf = _FakeSF(qh)
+    res = _pusher(sf).push_bankruptcy(
+        _BANKRUPTCY,
+        [_creditor(creditor_id="c1"), _creditor(creditor_id="c2", normalized_name="OTHER CO")],
+        {})
+    assert res.pushed == 1 and res.duplicates == ["c2"] and not res.failed
+    # only ONE Bankruptcy__c row written (no clobber of c1's amount)
+    assert len([c for c in sf.calls if c[0] == "Bankruptcy__c"]) == 1
+
+
+def test_find_account_ambiguous_first_name_falls_back_to_raw():
+    # normalized_name is ambiguous (2 hits, unresolved by state); raw name is clean.
+    def qh(q):
+        if "CF LOGISTICS" in q:
+            return {"totalSize": 2, "records": [{"Id": "a", "BillingState": "NJ"},
+                                                {"Id": "b", "BillingState": "NJ"}]}
+        return {"totalSize": 1, "records": [{"Id": "001RAW", "BillingState": "NJ"}]}
+    sf = _FakeSF(qh)
+    assert _pusher(sf)._find_account(_creditor(creditor_name="Cf Logistics LLC")) == "001RAW"
+
+
+def test_disambiguate_by_full_state_name():
+    # SF stores the full state name; the char(2) creditor_state still resolves it.
+    records = [{"Id": "x", "BillingState": "New Jersey"}, {"Id": "y", "BillingState": "New York"}]
+    assert _pusher(_FakeSF())._disambiguate_by_state(records, "NJ") == "x"
+
+
+def test_account_create_is_not_retried_on_transient(_no_persist):
+    # A transient error on create must NOT retry (would duplicate the Account).
+    class _CreateBoom(_FakeSF):
+        def __getattr__(self, name):
+            if name == "Account":
+                parent = self
+
+                class _A:
+                    def create(self, data):
+                        parent.calls.append(("Account", "create", data))
+                        raise httpx.ConnectError("post-commit drop")
+
+                    def update(self, i, d):
+                        parent.calls.append(("Account", "update", i, d))
+                        return 204
+                return _A()
+            return super().__getattr__(name)
+    sf = _CreateBoom(lambda q: {"totalSize": 1, "records": [{"Id": "a0BC"}]} if "Bankrupt_Companies__c" in q
+                     else {"totalSize": 0, "records": []})
+    res = _pusher(sf).push_bankruptcy(_BANKRUPTCY, [_creditor()], {})
+    assert res.failed == ["cred-1"]
+    creates = [c for c in sf.calls if c[0] == "Account" and c[1] == "create"]
+    assert len(creates) == 1  # called exactly once — NOT retried
