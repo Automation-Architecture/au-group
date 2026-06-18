@@ -16,5 +16,5 @@ python-multipart==0.0.29
 slowapi==0.1.9
 rapidfuzz==3.6.1
 simple-salesforce==1.12.9
-pytest==9.0.3
+pytest==9.1.0
 pytest-asyncio==1.4.0
