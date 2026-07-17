@@ -1,48 +1,51 @@
-name: Auto-Merge when Checks Green
+name: Auto-Merge Trusted Bot PRs
 
-# Merges a PR automatically when the branch is ready:
+# Merges a PR automatically ONLY when BOTH are true:
+#   - The PR author is on the TRUSTED_AUTHORS allowlist below (bots, never humans)
 #   - All check-runs on HEAD SHA completed with no failures
 #
-# CodeRabbit is the sole required reviewer; the merge step respects the org
-# ruleset, so it can never merge before the required CodeRabbit check is green.
-# (The Copilot inline-comment gate was removed 2026-06-11 with the Copilot reviewer.)
+# The author allowlist below is the ONLY safety gate — this workflow does not
+# rely on any required-reviewer ruleset or on PR Autopilot's own review job as
+# an implicit gate. Two prior versions of "auto-merge on green" broke exactly
+# this way and were disabled org-wide 2026-07-17:
+#   1. check_suite-triggered, gated on a required CodeRabbit reviewer check.
+#      CodeRabbit was removed 2026-06-11 — the gate silently vanished, and the
+#      workflow started merging ANY green-CI PR with zero review. Found live
+#      (armed) in 9 repos a month later.
+#   2. workflow_run-triggered off "PR Autopilot" completing, with no author
+#      check — merges any PR (human included) the instant autopilot's own
+#      checks pass, which conflicts with the org's stated post-2026-06-11
+#      policy of deliberate human-triggered merges via `aaa-merge`.
 #
-# Triggers:
-#   check_suite:completed — fires when a suite of checks finishes (CI, CodeRabbit, etc.)
-#   pull_request_review:submitted — fires when CodeRabbit posts its review;
-#     often the last event before all conditions are met
+# Do not weaken or remove the author check below, and do not widen
+# TRUSTED_AUTHORS without deliberately deciding to — every login added here
+# merges without human review once CI is green.
 #
-# Merge strategy:
-#   1. gh pr merge --squash --delete-branch (normal merge, respects ruleset)
-#   2. gh pr merge --auto  --squash --delete-branch (queue native auto-merge if still BLOCKED)
-#   Deliberately NOT --admin. Admin bypass lives in aaa-merge / operator-explicit flows only.
-#
-# Rollout: copy this file to .github/workflows/ in every active repo.
+# Rollout: opt-in per repo. Only add this to repos with real trusted-bot PR
+# volume worth auto-merging (e.g. dependabot dependency bumps). Do not copy
+# this blindly org-wide — that's what caused both incidents above.
 
 on:
   check_suite:
     types: [completed]
-  pull_request_review:
-    types: [submitted]
 
 permissions:
   contents: write
   pull-requests: write
   checks: read
 
-# One merge attempt per SHA at a time. Concurrent triggers for the same SHA
-# queue; once the first merges the PR, the rest find no open PR and exit clean.
 concurrency:
-  group: auto-merge-${{ github.repository }}-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha }}
+  group: auto-merge-bots-${{ github.repository }}-${{ github.event.check_suite.head_sha }}
   cancel-in-progress: false
+
+env:
+  # Trusted bot logins allowed to auto-merge, space-separated. Add carefully.
+  TRUSTED_AUTHORS: "dependabot[bot]"
 
 jobs:
   auto-merge:
-    # Skip check_suite events that are not associated with any PR (e.g. direct
-    # pushes to the default branch) — avoids unnecessary API work.
-    if: |
-      github.event_name == 'pull_request_review' ||
-      github.event.check_suite.pull_requests[0] != null
+    # Skip check_suite events with no associated PR (e.g. direct pushes to default branch).
+    if: github.event.check_suite.pull_requests[0] != null
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate and merge
@@ -52,22 +55,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ── Resolve SHA and PR number ────────────────────────────────────
-          if [ "${{ github.event_name }}" = "check_suite" ]; then
-            SHA="${{ github.event.check_suite.head_sha }}"
-            # Use the payload's pull_requests array: it contains only same-repo PRs
-            # (GitHub excludes fork PRs from check_suite.pull_requests), so no fork
-            # guard is needed here and no extra API call is required.
-            PR_NUMBER="${{ github.event.check_suite.pull_requests[0].number }}"
-          else
-            # pull_request_review: skip PRs from forks — GITHUB_TOKEN is read-only there.
-            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "$REPO" ]; then
-              echo "Fork PR — skipping."
-              exit 0
-            fi
-            SHA="${{ github.event.pull_request.head.sha }}"
-            PR_NUMBER="${{ github.event.pull_request.number }}"
-          fi
+          SHA="${{ github.event.check_suite.head_sha }}"
+          # check_suite.pull_requests excludes fork PRs already — no fork guard needed.
+          PR_NUMBER="${{ github.event.check_suite.pull_requests[0].number }}"
 
           if [ -z "$PR_NUMBER" ]; then
             echo "No open PR found for SHA $SHA — nothing to merge."
@@ -75,9 +65,22 @@ jobs:
           fi
           echo "PR #$PR_NUMBER  HEAD $SHA"
 
-          # ── Gate: at least one check-run, all completed, none failed ──────
-          # Paginate: repos with many workflows can exceed 100 check-runs per SHA.
-          # --jq emits a bare stream of objects; jq -s slurps into a single array.
+          # ── Gate 1: author must be a trusted bot ───────────────────────────
+          AUTHOR=$(gh api "/repos/$REPO/pulls/$PR_NUMBER" --jq '.user.login')
+          IS_TRUSTED=false
+          for trusted in $TRUSTED_AUTHORS; do
+            if [ "$AUTHOR" = "$trusted" ]; then
+              IS_TRUSTED=true
+              break
+            fi
+          done
+          if [ "$IS_TRUSTED" != "true" ]; then
+            echo "Author '$AUTHOR' is not on the trusted-bot allowlist — not auto-merging. Human review required."
+            exit 0
+          fi
+          echo "Author '$AUTHOR' is trusted."
+
+          # ── Gate 2: at least one check-run, all completed, none failed ────
           CHECK_RUNS=$(gh api "/repos/$REPO/commits/$SHA/check-runs" --paginate \
             --jq '.check_runs[]' | jq -s '.')
 
@@ -103,16 +106,11 @@ jobs:
             exit 0
           fi
 
-          # ── All checks green — attempt merge ──────────────────────────────
-          echo "All checks green. Merging PR #$PR_NUMBER..."
-
-          # Try normal merge first; fall back to --auto if ruleset is still
-          # BLOCKED (e.g. the CodeRabbit check hasn't flipped green yet).
+          echo "All checks green and author trusted. Merging PR #$PR_NUMBER..."
           if gh pr merge "$PR_NUMBER" --squash --delete-branch --repo "$REPO" 2>&1; then
             echo "Merged via squash."
             exit 0
           fi
-
           if gh pr merge "$PR_NUMBER" --auto --squash --delete-branch --repo "$REPO" 2>&1; then
             echo "Queued for auto-merge."
             exit 0
