@@ -30,8 +30,18 @@ SYS-02 is an **orchestrator only** (FR-1.2, FR-1.3 via parser, FR-3.3 HITL). It 
 | Consumer | Method | Notes |
 |----------|--------|-------|
 | n8n SYS-02 | `X-API-Key` header | Production; no token expiry |
-| Operators / Swagger | `POST /api/v1/auth/login` → `Authorization: Bearer` | Set `JWT_SECRET`, `AUTH_USERNAME`, `AUTH_PASSWORD` on Railway |
+| Operators / Swagger | ~~`POST /api/v1/auth/login` → `Authorization: Bearer`~~ | **Not available in production** — see note below. Use `X-API-Key`. |
 | Parser enforcement | `REQUIRE_BANKRUPTCY_ID=true` | `POST /parse/document` returns 400 without `bankruptcy_id` |
+
+> **Note (2026-08-13):** JWT auth is no longer configured in production. `JWT_SECRET`, `AUTH_USERNAME`
+> and `AUTH_PASSWORD` were deleted from the Railway `au-group` service, so `POST /api/v1/auth/login`
+> returns **503**. `X-API-Key` is the only working auth path today. The parser code still supports JWT
+> if those vars are set — this is a deployment decision, not a code change. The parser `API_KEY` was
+> rotated on 2026-08-13.
+>
+> Also as of 2026-08-13, n8n is in parallel-run pending decommission: 10 workflows reference the
+> parser and only one of them is active (a sub-workflow with no active callers, which calls the
+> now-503 login endpoint). No n8n workflow hardcodes an API key.
 
 See [document-parse.md](../workflows/document-parse.md) and [services/document-parser/README.md](../../services/document-parser/README.md).
 
