@@ -105,7 +105,16 @@ supabase db push
 
 ## Deploy on Railway
 
-Railway runs the app with **Nixpacks** (no Dockerfile). OCR needs system packages — `nixpacks.toml` installs Tesseract and Poppler.
+Railway builds from **`Dockerfile`**, not Nixpacks (verified 2026-08-13 from Railway
+build logs; deployment manifests report `builder=DOCKERFILE`, which overrides
+`railway.toml`'s `builder = "nixpacks"`). **`nixpacks.toml` is dead config.** OCR's
+system packages — Tesseract, Poppler, libgl1 — come from the Dockerfile's `apt-get`
+layer.
+
+> ⚠️ All four services build from this one Dockerfile, so **anything the cron services
+> import must be `COPY`'d into the image**. Copying only `app` shipped an image with no
+> `pipeline` package, and every scheduled cron run died on
+> `ModuleNotFoundError: No module named 'pipeline'` (PR #123).
 
 ### 1. Create the service
 
@@ -171,7 +180,8 @@ Railway sets `PORT` automatically — do not override it.
 
 ### 4. Build and start
 
-[`railway.toml`](railway.toml) supplies only the **builder** (Nixpacks). Deploy
+[`railway.toml`](railway.toml) declares `builder = "nixpacks"`, but that is **overridden**
+— the services build from [`Dockerfile`](Dockerfile). Deploy
 settings are configured **per service in Railway**, not in this file — four
 services share this directory as their root, and a `[deploy]` block here is
 forced onto all of them (see the comment in `railway.toml` for the incident).
@@ -223,8 +233,9 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 
 | Issue | Fix |
 |-------|-----|
-| Build fails on `opencv` / `pdf2image` | Confirm `nixpacks.toml` is present; redeploy. |
-| `tesseract not found` | Same — apt packages must install on build. |
+| Build fails on `opencv` / `pdf2image` | Check the `apt-get` layer in [`Dockerfile`](Dockerfile) — **not** `nixpacks.toml`, which is unused. |
+| `tesseract not found` | Same — the Dockerfile's apt layer must install `tesseract-ocr` / `poppler-utils`. |
+| Cron service dies on `ModuleNotFoundError` | The module isn't `COPY`'d into the image. Add it to [`Dockerfile`](Dockerfile). |
 | 403 on API | Check `X-API-Key` matches `API_KEY` in Railway. |
 | 400 on pasted URL | Set `ALLOW_DOCUMENT_URL=true` and add host to `ALLOWED_DOWNLOAD_HOST_SUFFIXES`. |
 | 400 on `s3_key` | Key must be `raw-documents/{case_number}/{file}.pdf`. |

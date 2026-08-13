@@ -1,4 +1,11 @@
 [build]
+# ⚠️ THIS LINE IS NOT IN EFFECT. Every Railway deployment manifest reports
+# builder=DOCKERFILE (dockerfilePath=/services/document-parser/Dockerfile) — the
+# per-service builder setting overrides this file, so the services build from
+# `Dockerfile` and `nixpacks.toml` is dead config (verified 2026-08-13 from build
+# logs). Left as-is rather than "corrected" to dockerfile: changing it is a
+# build-affecting change that deserves its own PR, not a ride-along. Tracked in
+# KD-78 alongside the rest of the deploy-config-in-version-control work.
 builder = "nixpacks"
 
 # NO [deploy] SECTION HERE — ON PURPOSE.
