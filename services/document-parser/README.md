@@ -144,10 +144,23 @@ Railway sets `PORT` automatically — do not override it.
 
 ### 4. Build and start
 
-Railway reads [`railway.toml`](railway.toml):
+[`railway.toml`](railway.toml) supplies only the **builder** (Nixpacks). Deploy
+settings are configured **per service in Railway**, not in this file — four
+services share this directory as their root, and a `[deploy]` block here is
+forced onto all of them (see the comment in `railway.toml` for the incident).
 
-- **Start:** `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- **Health check:** `GET /health`
+Configure the web service in Railway → **Settings**:
+
+- **Start:** `/bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"`
+- **Health check:** `/health`, timeout `120`
+- **Restart policy:** `ON_FAILURE`
+
+Keep the `/bin/sh -c` wrapper — Railway does not bash-parse the start command,
+so a bare `$PORT` reaches uvicorn literally and the service dies on startup.
+
+The three cron services (`pipeline-worker`, `daily-report`, `intake-cron`) set
+their own start commands (`python -m pipeline.<module>`) and need no health
+check — they serve no HTTP.
 
 After deploy, verify:
 

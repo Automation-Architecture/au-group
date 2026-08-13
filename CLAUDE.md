@@ -31,7 +31,7 @@ pytest tests/integration/ -m integration -v              # live tests (needs .en
 ruff check .                                             # lint
 ```
 
-**Deploy:** Railway builds with **Nixpacks** (`nixpacks.toml` installs Tesseract + Poppler for OCR and sets `PORT` automatically); production start command is `uvicorn app.main:app --host 0.0.0.0 --port $PORT` (`$PORT` only works where it's set — locally use `./scripts/dev.sh`). A `Dockerfile` also exists for the alternate EC2 path (`scripts/deploy.sh`, `deploy-parser-ec2.yml`).
+**Deploy:** Railway builds with **Nixpacks** (`nixpacks.toml` installs Tesseract + Poppler for OCR and sets `PORT` automatically). The production start command is `/bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"` — but it is **not** in `railway.toml`; it lives on the `au-group` service instance in Railway, alongside `healthcheckPath=/health`, `healthcheckTimeout=120`, `restartPolicyType=ON_FAILURE`. See the shared-config gotcha below for why. (`$PORT` only works where it's set — locally use `./scripts/dev.sh`.) A `Dockerfile` also exists for the alternate EC2 path (`scripts/deploy.sh`, `deploy-parser-ec2.yml`).
 
 ## Repo conventions
 
@@ -43,6 +43,8 @@ ruff check .                                             # lint
 ## Runtime gotchas
 
 - **Railway `startCommand` is NOT bash-parsed.** Use `$PORT`, never `${PORT:-8001}` — the literal string is passed to uvicorn and the service crashes on startup. (Fixed in PR #16.)
+- **`services/document-parser/railway.toml` is SHARED BY FOUR SERVICES** — `au-group`, `pipeline-worker`, `daily-report`, `intake-cron` all use that directory as their Railway root. Railway's config-as-code **overrides per-service dashboard settings**, so anything in `[deploy]` there is forced onto all four. A `startCommand` in that file made every cron service boot `uvicorn app.main:app`, which requires `API_KEY` (the crons deliberately don't set one — see `pipeline/settings.py`), so they crash-looped on `RuntimeError: API_KEY environment variable is required` — `pipeline-worker` every 30 min, `daily-report` every run, undetected for weeks. Keep `[deploy]` out of that file; set deploy config per service instead. (PR #121.)
+- **Railway `variable set` triggers a redeploy; `variable delete` does NOT.** A deleted variable stays live in the running container until something else forces a deploy — so a credential you "removed" can keep working. After deleting, force a deploy and verify against the running service, not the variable list. (`--skip-deploys` is valid on `set` only.)
 - **Copilot review is required before merge, wired via `.github/workflows/copilot-review.yml`** (requests `Copilot` as a reviewer on each PR; restored in `b0802e7` to fix a hanging status check). If it's ever absent the copilot check hangs and PRs sit BLOCKED — see the stale-review note below.
 - **Supabase live schema has drifted from local migration files** — see `docs/architecture/supabase-live-schema-state.md` for the full divergence map before writing any migration. Key facts: (1) `processing_jobs.status` type is `processing_job_status` (not `au_group_job_status`); use `'queued'::processing_job_status` — the value `pending` does not exist. (2) `processing_jobs` has extra columns `worker_name` and `job_payload` not in any local file. (3) Five migration versions are registered in `schema_migrations` but have no local file counterpart. (4) Migration `20260530120000` is a phantom (version registered, SQL never ran) — start new migrations at `20260530120001` or later.
 
