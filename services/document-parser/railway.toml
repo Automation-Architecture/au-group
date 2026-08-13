@@ -1,8 +1,26 @@
 [build]
 builder = "nixpacks"
 
-[deploy]
-startCommand = "/bin/sh -c \"exec uvicorn app.main:app --host 0.0.0.0 --port $PORT\""
-healthcheckPath = "/health"
-healthcheckTimeout = 120
-restartPolicyType = "on_failure"
+# NO [deploy] SECTION HERE — ON PURPOSE.
+#
+# Four Railway services share this repo path as their root directory:
+# au-group (web), pipeline-worker, daily-report, intake-cron. Railway's
+# config-as-code takes precedence over per-service dashboard settings, so a
+# startCommand here is forced onto ALL FOUR. That is what broke the crons:
+# each one has a correct dashboard start command (python -m pipeline.worker /
+# .report / .intake), but this file overrode them with the web server, and
+# `uvicorn app.main:app` requires API_KEY — which the cron services do not set
+# by design (see pipeline/settings.py). Result: every cron run crash-looped on
+# `RuntimeError: API_KEY environment variable is required`.
+#
+# healthcheckPath had the same problem: cron jobs serve no HTTP, so a shared
+# healthcheck fails them too.
+#
+# All deploy-time settings now live on each service instance instead.
+# au-group carries the web config it used to get from here:
+#   startCommand       /bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+#   healthcheckPath    /health
+#   healthcheckTimeout 120
+#   restartPolicyType  ON_FAILURE
+# Keep the /bin/sh -c wrapper: Railway does not bash-parse startCommand, so a
+# bare $PORT is passed to uvicorn literally and the service dies on startup.
