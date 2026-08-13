@@ -23,7 +23,7 @@ Enable **Settings → Code security →** Dependabot alerts and code scanning fo
 - CodeQL paths: [`codeql-config.yml`](../../.github/codeql/codeql-config.yml) — `app/` + `scripts/`, not tests
 - Trivy: [`install-trivy.sh`](../../scripts/ci/install-trivy.sh) pins CLI **v0.69.3**; scans `services/document-parser/` only
 - Ignores align with [`pip-audit.toml`](../../services/document-parser/pip-audit.toml) via [`.trivyignore`](../../services/document-parser/.trivyignore)
-- **No Docker** in CI — Railway uses nixpacks; optional [`Dockerfile`](../../services/document-parser/Dockerfile) is for EC2 only
+- **No Docker build** in CI — but note [`Dockerfile`](../../services/document-parser/Dockerfile) is **not** EC2-only: Railway builds every service from it (verified 2026-08-13; `nixpacks.toml` is unused). So Dockerfile changes ship to production without a CI image build to catch them.
 
 ## Not in CI (by design)
 
