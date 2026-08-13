@@ -14,6 +14,19 @@ GitHub **Environments** gate deployments and hold secrets. Configure in repo **S
 >   not be added** until KD-74 reconciles the drift.
 > - See [`deploy-workflow-investigation-2026-06-01.md`](./deploy-workflow-investigation-2026-06-01.md).
 
+> **Railway deploy settings (2026-08-13, PR #121 / `main` `a362fe3`)** — `services/document-parser/`
+> is the Railway **root directory for four services**: `au-group` (web) plus the cron services
+> `pipeline-worker`, `daily-report` and `intake-cron`. The `[deploy]` block in
+> `services/document-parser/railway.toml` applied to all four and overrode each cron service's own
+> start command, forcing them to boot `uvicorn app.main:app` — which requires `API_KEY`, which the
+> crons do not set — so they crash-looped on `RuntimeError: API_KEY environment variable is required`
+> (pipeline-worker every 30 min, daily-report on every run) for weeks before it was noticed.
+> The `[deploy]` block has been **removed**; deploy settings now live **per service instance in the
+> Railway dashboard**. `au-group` carries: `startCommand`
+> `/bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"`, `healthcheckPath` `/health`,
+> `healthcheckTimeout` 120, `restartPolicyType` `ON_FAILURE`. **Do not reintroduce a `[deploy]` block
+> in that `railway.toml`** — it silently reapplies to all four services.
+
 ## Environments
 
 | Environment | Purpose | Protection | Workflows |
@@ -36,7 +49,7 @@ GitHub **Environments** gate deployments and hold secrets. Configure in repo **S
 |--------|---------|-------------|
 | ~~`RAILWAY_TOKEN`~~ | — (was `deploy-parser-railway.yml`) | **No longer used.** Parser deploys via Railway's native source connection; the GH Action is CI-only. |
 | `PARSER_STAGING_URL` | Staging smoke | e.g. `https://au-group-staging.up.railway.app` |
-| `PARSER_PRODUCTION_URL` | Prod smoke / cron | Matches `project.config.yaml` `api_base_url` when live |
+| `PARSER_PRODUCTION_URL` | Prod smoke / cron | Live parser host is `https://au-group-production.up.railway.app`. **Do not use `https://au-group.railway.app`** — dead placeholder (still present in `project.config.yaml` `api_base_url`, which is stale). |
 | `DOCUMENT_PARSER_API_KEY` | Smoke, integration | Same as parser `API_KEY` in Railway |
 | `N8N_BASE_URL` | n8n deploy, smoke, local export | `https://automationarchitecture.app.n8n.cloud` |
 | `N8N_API_KEY` | n8n deploy, smoke, local export | n8n API key (not required for n8n CI — CI tests committed JSON only) |

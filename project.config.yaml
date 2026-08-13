@@ -4,7 +4,7 @@ project:
   slug: "au-group"
   slack_contact_channel: "#client-comms"   # hardcoded contact channel for the dashboard form (convention)
   slack_sprint_channel: "#au-group-sprint" # the project team channel (was wrongly "#bankruptcy-intelligence", which doesn't exist)
-  api_base_url: "https://au-group.railway.app" # placeholder until prod is up
+  api_base_url: "https://au-group-production.up.railway.app" # live host (verified 2026-08-13); was "https://au-group.railway.app", a placeholder that never resolved
   stage: "build"
   closed_stages: ["discovery"]
   started: "2026-05-13"

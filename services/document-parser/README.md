@@ -1,6 +1,10 @@
 # AU Group Document Parser (SYS-02A)
 
-FastAPI service for bankruptcy document OCR, classification, and structured extraction. Orchestrated by **n8n** over HTTP. No Docker.
+FastAPI service for bankruptcy document OCR, classification, and structured extraction. No Docker.
+
+Called over HTTP by the **code-native pipeline** (`pipeline/worker.py`, running as the
+`pipeline-worker` Railway cron service). The n8n orchestration this service was originally
+built for is in a parallel run pending decommission — see "6. Wire n8n" for that legacy path.
 
 ## System dependencies
 
@@ -28,17 +32,30 @@ chmod +x scripts/dev.sh
 
 - Health: `GET http://localhost:8001/health`
 - OpenAPI (local only): set `EXPOSE_OPENAPI=true` then open `http://localhost:8001/docs`
-- Parse routes accept **`X-API-Key`** (n8n) or **`Authorization: Bearer`** (after login)
+- Parse routes accept **`X-API-Key`**, or **`Authorization: Bearer`** if JWT login is configured (it is **not** configured in production — see below)
 
 ### Authentication
 
-**n8n / automation** — static API key:
+**`X-API-Key` is the only working authentication path in production.**
 
 ```http
 X-API-Key: <API_KEY>
 ```
 
-**Swagger / manual clients** — login for a short-lived JWT:
+**JWT login — not configured in production.** `JWT_SECRET`, `AUTH_USERNAME` and
+`AUTH_PASSWORD` have been removed from the `au-group` Railway service, so
+`POST /api/v1/auth/login` returns **503 "JWT authentication is not configured"**
+(verified live 2026-08-13). This is a deployment/config decision, not a code
+removal — the code still supports JWT wherever those variables are set.
+
+Consequences:
+
+- You cannot obtain a Bearer token from the deployed service.
+- Swagger UI's login cannot be used to explore the production API; authorise
+  with the `X-API-Key` header instead.
+
+To enable login **locally**, set `JWT_SECRET` (≥32 chars), `AUTH_USERNAME`, and
+`AUTH_PASSWORD` in `.env`, then:
 
 ```http
 POST /api/v1/auth/login
@@ -54,8 +71,6 @@ Then call APIs with:
 ```http
 Authorization: Bearer <access_token>
 ```
-
-Set `JWT_SECRET` (≥32 chars), `AUTH_USERNAME`, and `AUTH_PASSWORD` in `.env` to enable login.
 
 ## Production (systemd)
 
@@ -110,9 +125,9 @@ Set in **Variables** (or sync from a shared Railway environment):
 | Variable | Required | Example |
 |----------|----------|---------|
 | `API_KEY` | yes | long random secret (n8n sends as `X-API-Key`) |
-| `JWT_SECRET` | no | ≥32 chars; enables `/auth/login` |
-| `AUTH_USERNAME` | no | Login username (with `JWT_SECRET`) |
-| `AUTH_PASSWORD` | no | Login password (with `JWT_SECRET`) |
+| `JWT_SECRET` | no | ≥32 chars; enables `/auth/login`. **Not set in production** — login returns 503 |
+| `AUTH_USERNAME` | no | Login username (with `JWT_SECRET`). **Not set in production** |
+| `AUTH_PASSWORD` | no | Login password (with `JWT_SECRET`). **Not set in production** |
 | `SUPABASE_URL` | yes | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | service role key |
 | `S3_BUCKET` | yes | `bankruptcy-creditor-docs` |
@@ -134,11 +149,23 @@ Railway sets `PORT` automatically — do not override it.
 
 ### Security checklist (production)
 
-1. **`API_KEY`** — `openssl rand -hex 32`; store only in Railway + n8n credentials; rotate if leaked.
+1. **`API_KEY`** — `openssl rand -hex 32`; rotate if leaked (last rotated **2026-08-13**).
+   The canonical copy lives in **1Password**, vault **"AU Group"**, item
+   **"AU Group — Document Parser / Pipeline"** — update it there on every rotation.
+   No n8n workflow uses this key (verified across all 149 workflows on the
+   instance), so n8n credentials are not a place it needs to be kept.
+   On Railway, `pipeline-worker` holds `DOCUMENT_PARSER_API_KEY` as a
+   `${{au-group.API_KEY}}` reference so it tracks rotations automatically —
+   keep it a reference; a copy-pasted literal previously drifted and broke the
+   worker→parser call.
 2. **S3 IAM** — `GetObject` on `raw-documents/*` only; `PutObject` on `ocr-outputs/*` and `parsed-outputs/*`.
 3. **n8n uploads** — Supabase Storage keys must match `raw-documents/{case_number}/{id}.pdf`.
 4. **Pasted URLs** — set `ALLOW_DOCUMENT_URL=true` and `ALLOWED_DOWNLOAD_HOST_SUFFIXES` to court/PACER domains only.
 5. **No public OpenAPI** — `EXPOSE_OPENAPI=false` on Railway.
+   > ⚠️ **Production is currently non-compliant with this item.** The live
+   > service has `EXPOSE_OPENAPI=true`, so `/docs` is publicly reachable
+   > (verified 2026-08-13). The guidance above is still the target state; this
+   > needs resolving.
 6. **Apply migrations** — including [`20260518130000_document_parser_rls_policies.sql`](../../supabase/migrations/20260518130000_document_parser_rls_policies.sql).
 7. **Edge (recommended)** — Cloudflare or similar in front of Railway for WAF / optional IP allowlist on n8n egress.
 
@@ -173,6 +200,13 @@ Run [`supabase/migrations/20260518120000_sys02a_document_intelligence.sql`](../.
 
 ### 6. Wire n8n
 
+> **Legacy — n8n is in a parallel run pending decommission.** The pipeline is
+> now code-native (`services/document-parser/pipeline/`); new work should go
+> there, not into n8n. This section is kept for the workflows still running.
+> Note that several existing n8n workflows point at the dead placeholder host
+> `https://au-group.railway.app`; the live host is
+> `https://au-group-production.up.railway.app`.
+
 In n8n HTTP Request nodes:
 
 - **URL:** `https://<your-service>.up.railway.app/api/v1/parse/document`
@@ -201,7 +235,7 @@ Railway → **Settings → Networking → Generate Domain** or attach a custom d
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/api/v1/auth/login` | Issue JWT access token (username/password) |
+| POST | `/api/v1/auth/login` | Issue JWT access token (username/password). **503 in production** — JWT is not configured there |
 | POST | `/api/v1/parse/document` | Full pipeline; `async_mode: true` → **202** + poll jobs |
 | POST | `/api/v1/parse/ocr` | OCR only |
 | POST | `/api/v1/parse/structured` | Structured PDF text only |

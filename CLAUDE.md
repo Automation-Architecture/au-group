@@ -10,7 +10,10 @@ AI-powered lead-gen from federal bankruptcy filings. MVP flow: PACER (Form 204 t
 
 - **MVP was simplified (May 2026, PRD v3.0 / Brief v2.0).** Pipeline = PACER → ZoomInfo **company** match + tier-as-attribute → Salesforce (account + bankruptcy logging + email vars + recency flag) → **daily Slack creditor report** (grouped by debtor: Creditor·City·State·Claim·Tier·Status·ZoomInfo URL). Decision-maker **contacts are manual**; Schedule F / automated outreach / historical DB are **Phase 2+ deferred** (the MVP-scope banner in `docs/project/prd.md` governs).
 - **The pipeline is being re-platformed OFF n8n → code-native.** Don't build new n8n workflows; the 26 AU-Group n8n workflows are slated for decommission after a parallel-run. Build per **`docs/architecture/n8n-to-code-native-migration.md`** (FastAPI on Railway + the Supabase `processing_jobs` queue; enqueue/claim RPCs). Tracked in Jira **KD epics E9/E10/E11 (KD-54…KD-70)**.
-- **All four code-native pipeline stages are BUILT + merged to main** (`services/document-parser/pipeline/`): **intake** (`intake.py`) discovers via `discovery.py` (CourtListener Search API) and retrieves Form 204s via `retrieval.py` (free RECAP archive first → paid PACER CM/ECF fallback); **parse** (`parse.py`, KD-65); **enrich** (`enrich.py`, ZoomInfo GTM Data API, KD-67); **salesforce** (`salesforce.py`, KD-68). Plus `worker.py` (queue drain), `report.py` (daily Slack report), `alerts.py`, `settings.py`. Queue/report RPCs + the `company_tier`/`sf_recency_status` columns are merged. **Three Railway cron services live** in project `au-group-be`: `intake-cron` (`0 9 * * 1-5`), `pipeline-worker` (`*/30`, `SKIP_ENRICH=true`+`SKIP_SF=true` for the parallel-run), `daily-report` (`0 13 * * 1-5`). Whole pipeline is end-to-end runnable with **no client credential**, EXCEPT retrieval (see blocker below).
+- **All four code-native pipeline stages are BUILT + merged to main** (`services/document-parser/pipeline/`): **intake** (`intake.py`) discovers via `discovery.py` (CourtListener Search API) and retrieves Form 204s via `retrieval.py` (free RECAP archive first → paid PACER CM/ECF fallback); **parse** (`parse.py`, KD-65); **enrich** (`enrich.py`, ZoomInfo GTM Data API, KD-67); **salesforce** (`salesforce.py`, KD-68). Plus `worker.py` (queue drain), `report.py` (daily Slack report), `alerts.py`, `settings.py`. Queue/report RPCs + the `company_tier`/`sf_recency_status` columns are merged. **Three Railway cron services are DEFINED** in project `au-group-be`: `intake-cron` (`0 9 * * 1-5`), `pipeline-worker` (`*/30`, `SKIP_ENRICH=true`+`SKIP_SF=true` for the parallel-run), `daily-report` (`0 13 * * 1-5`) — but **none of them was actually running until 2026-08-13** (see the outage note below). Whole pipeline is end-to-end runnable with **no client credential**, EXCEPT retrieval (see blocker below).
+- **⚠️ CRON OUTAGE — cause fixed 2026-08-13 (PR #121, `a362fe3` on main); first scheduled run NOT yet observed.** All three cron services had been crash-looping for weeks: `services/document-parser/railway.toml` is the Railway root for **four** services, and its `[deploy]` block overrode each cron's correct dashboard start command (`python -m pipeline.worker` / `.report` / `.intake`) with `uvicorn app.main:app`, which demands `API_KEY` — which the crons deliberately don't set. Every run died on `RuntimeError: API_KEY environment variable is required` (`pipeline-worker` every 30 min; `daily-report` every run, last CRASHED 2026-08-12). Separately, `intake-cron` had `cronSchedule: null` and had not run since **2026-06-24**; restored to `0 9 * * 1-5`. The `[deploy]` block is removed, deploy settings now live per service instance, and all services are redeployed from merged main — **treat the crons as unverified until a post-fix scheduled execution is observed.** See the shared-`railway.toml` gotcha below.
+- **Auth surface changed 2026-08-13 — `X-API-Key` is now the ONLY auth path.** JWT auth was **removed**: `JWT_SECRET`, `AUTH_USERNAME`, `AUTH_PASSWORD` deleted from the `au-group` service, and `POST /api/v1/auth/login` now returns **503 "JWT authentication is not configured"** (verified live). Why: `AUTH_PASSWORD` was **five characters** and stored in cleartext in an n8n workflow Set node — `config.py` enforces a 32-char floor on `API_KEY`/`JWT_SECRET` but validated nothing on `auth_password`. `API_KEY` was also **rotated**; before rotation there were **three divergent 64-char values** (Railway `au-group` `API_KEY`, `pipeline-worker`'s literal `DOCUMENT_PARSER_API_KEY`, and the 1Password copy) and **none was accepted by the live service**. Now one value; `pipeline-worker` holds `DOCUMENT_PARSER_API_KEY` as a `${{au-group.API_KEY}}` reference so it tracks future rotations. Verified: 200 on `GET /api/v1/review-queue` with the new key, 403 with a bad one.
+- **The parser has effectively never served a real request.** Railway HTTP metrics for `au-group` over 30 days: **9 requests total, all from the 2026-08-13 debugging session — zero external traffic.** n8n audit (`automationarchitecture.app.n8n.cloud`, 149 workflows / 22 active / 76 archived across all clients): exactly **10** reference the document-parser, only **one** is active — "AU Group - generate access token API", an `executeWorkflowTrigger` sub-workflow with `triggerCount 0` whose only callers are inactive, and it calls `/auth/login`, which now 503s. **No workflow hardcodes an API key.** Several point at the DEAD placeholder host `https://au-group.railway.app` instead of the live `https://au-group-production.up.railway.app`.
 - **⚠️ CURRENT BLOCKER (2026-06-15): Form 204 retrieval is unproven and likely needs a standard PACER account.** A live kickoff run discovered 27 fresh Chapter 11 cases via CourtListener but retrieved **zero** Form 204 documents — and that result is **rate-limit-poisoned** (CourtListener's aggressive burst limit caused false misses), so it is NOT a clean coverage verdict. No successful RECAP Form 204 retrieval has been confirmed at all. Two stacked problems: CourtListener's burst rate limit makes batch retrieval infeasible without proactive pacing (deferred), and the RECAP archive almost certainly lacks Form 204s for brand-new filings. **CourtListener solved discovery, not retrieval** — the realistic fix is a free standard PACER "Case Search Only" account → the paid per-document CM/ECF fetch (set `PACER_USERNAME`/`PASSWORD` and `intake.py` auto-switches to PACER PCL discovery + the paid fallback). An operator decision on the retrieval path is **open**; full detail in the session-pickup memory.
 - **OD-8 RESOLVED (2026-06-14): discovery via CourtListener.** `intake.py` discovers new Chapter 11 filings through the **CourtListener Search API** (`pipeline/discovery.py`, `q=chapter:11`, free FLP token, no standard PACER account) when `COURTLISTENER_API_TOKEN` is set, and auto-selects **PACER PCL** (`PacerClient.search_new_cases`) when `PACER_USERNAME`/`PASSWORD` are set (authoritative, deferred). PACER Monitor API is dead. Form 204 retrieval is RECAP-first (`pipeline/retrieval.py`) → paid PACER CM/ECF only with PACER creds. Caveat: CourtListener `q=chapter:11` misses ~13% of fresh chapter-blank filings (mitigation deferred). Verified live 2026-06-14 (60 Ch.11 cases njb+nysb/14d). Detail: `docs/architecture/n8n-to-code-native-migration.md` OD-8 + `pacer-data-source-discovery-2026-06-02.md` banner.
 - **Access status (changed since 05-31):**
@@ -80,7 +83,7 @@ Provisioned at **`https://dashboard.automationarchitecture.ai/client/au-group`**
 === SYSTEM UNDERSTANDING ===
 
 Trust Boundaries:
-- Internet/client → FastAPI: X-API-Key OR Bearer JWT (no per-resource authZ)
+- Internet/client → FastAPI: X-API-Key ONLY (no per-resource authZ). JWT removed 2026-08-13
 - FastAPI → Supabase: service_role (RLS bypass; god-mode on tables + RPCs)
 - FastAPI → S3: AWS creds; reads only raw-documents/* pattern
 - FastAPI → HTTP(S) document_url: gated by flags + host suffix + SSRF checks
@@ -104,7 +107,7 @@ State Machines:
 
 Invariants (global):
 - API_KEY non-empty; ≥32 chars in production
-- JWT: HS256, type=access, sub required; login rate-limited
+- (JWT invariants moot — JWT_SECRET/AUTH_* deleted; /auth/login 503s)
 - au_group_* RPC: service_role EXECUTE only (reapply migration last)
 - s3_key read: ^raw-documents/[case]/[doc].pdf$
 - document_url: disabled unless allow_document_url + non-empty suffix allowlist
@@ -113,17 +116,18 @@ Invariants (global):
 
 Attack Surface (entry points):
 - Unauth: GET /health, GET /health/ready (dependency probe labels)
-- Auth: POST /api/v1/auth/login
-- Auth: all other /api/v1/* (parse, extract, review)
+- Unauth: GET /docs + /openapi.json — EXPOSE_OPENAPI=true in prod (see A3)
+- Dead: POST /api/v1/auth/login → 503 (JWT unconfigured; no longer an entry point)
+- Auth: all other /api/v1/* (parse, extract, review) — X-API-Key only
 - Egress: document_url fetch; S3 read/write
-- Secrets in env: API_KEY, JWT_SECRET, service_role, AWS keys
+- Secrets in env: API_KEY (rotated 2026-08-13), service_role, AWS keys
 
 Assumptions Registry:
 | ID | Assumption | Conf |
 |----|------------|------|
-| A1 | Only operators/n8n hold API_KEY | MED |
+| A1 | ~~Only operators/n8n hold API_KEY~~ **FALSE (2026-08-13)**: pre-rotation there were 3 divergent API_KEY values and none worked against the live service; no n8n workflow hardcodes a key; only 1 of 10 parser-referencing workflows is active (a sub-workflow with 0 triggers calling the now-503 /auth/login); 30d Railway metrics = 9 requests, all from the debug session. Nothing external holds or uses a working key. | RESOLVED |
 | A2 | service_role never in browser clients | MED |
-| A3 | expose_openapi=false in prod | HIGH |
-| A4 | JWT subject unused for authorization | HIGH |
+| A3 | ~~expose_openapi=false in prod~~ **VIOLATED**: EXPOSE_OPENAPI=true on the production service — /docs + /openapi.json are publicly reachable | VIOLATED |
+| A4 | ~~JWT subject unused for authorization~~ moot — JWT removed | N/A |
 | A5 | DNS at URL-check time ≈ DNS at connect time | LOW |
 | A6 | au_group_merge_creditor_matrix enforces integrity in SQL | MED (not line-audited) |

@@ -47,6 +47,22 @@ Secrets handling: all credentials live as Railway environment variables.  Names 
 
 Railway `railway.toml` gotcha (per CLAUDE.md): `startCommand` is not bash-parsed; use `$PORT` not `${PORT:-8001}`; `rootDirectory` + GitHub source connection must both be set or toml is silently ignored.
 
+> **Update 2026-08-13 (post-plan; supersedes the `railway.toml` guidance above for deploy settings).**
+> A second, sharper gotcha was found in production: `services/document-parser/railway.toml` is the
+> Railway root directory for **four** services (`au-group`, `pipeline-worker`, `daily-report`,
+> `intake-cron`), and its `[deploy]` block applied to **all** of them — overriding each cron service's
+> own start command and forcing it to boot `uvicorn app.main:app`. That requires `API_KEY`, which the
+> crons do not set, so `pipeline-worker` (every 30 min) and `daily-report` (every run) crash-looped on
+> `RuntimeError: API_KEY environment variable is required`, undetected for weeks. PR #121 (merged,
+> `main` `a362fe3`) removed the `[deploy]` block; deploy settings now live **per service instance in
+> Railway**. `au-group` carries `startCommand`
+> `/bin/sh -c "exec uvicorn app.main:app --host 0.0.0.0 --port $PORT"`, `healthcheckPath` `/health`,
+> `healthcheckTimeout` 120, `restartPolicyType` `ON_FAILURE`. Do not put a `[deploy]` block back in
+> that file. Separately, `intake-cron` **does** now exist as a Railway service (contrary to §3.3 below,
+> which deferred it) but had **no cron schedule set** and had not run since 2026-06-24; its schedule was
+> restored to `0 9 * * 1-5`. The cron services have been redeployed from merged `main`; their first
+> post-fix scheduled executions had not yet been observed at the time of writing.
+
 ---
 
 ## 3. Target architecture
