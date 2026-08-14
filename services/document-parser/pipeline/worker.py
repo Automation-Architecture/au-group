@@ -73,7 +73,15 @@ def _reset_stale_jobs(supabase_url: str, key: str, timeout: float) -> int:
 
 
 def _claim_job(job_type: str, supabase_url: str, key: str, timeout: float) -> dict[str, Any] | None:
-    """Call au_group_claim_job and return the claimed job row or None."""
+    """Call au_group_claim_job and return the claimed job row, or None if the queue is empty.
+
+    au_group_claim_job is declared ``returns public.processing_jobs`` — a composite type.
+    When it returns NULL (nothing claimable), PostgREST does NOT serialise that as JSON
+    ``null``: it emits a row of all-NULL columns, ``{"id": null, "job_type": null, ...}``,
+    which is a *truthy* dict in Python.  Callers must therefore never use plain dict
+    truthiness to detect an empty queue — a genuinely claimed row is identified by a
+    non-null ``id``.  Normalising here keeps that quirk in one place.
+    """
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(
             f"{supabase_url.rstrip('/')}/rest/v1/rpc/au_group_claim_job",
@@ -81,41 +89,65 @@ def _claim_job(job_type: str, supabase_url: str, key: str, timeout: float) -> di
             json={"p_job_type": job_type},
         )
         resp.raise_for_status()
-    return resp.json()  # returns the processing_jobs row dict or null
+
+    payload = resp.json()
+    if isinstance(payload, list):  # defensive: some PostgREST versions wrap the row
+        payload = payload[0] if payload else None
+    if not isinstance(payload, dict) or payload.get("id") is None:
+        return None
+    return payload
 
 
-def _complete_job(job_id: str, supabase_url: str, key: str, timeout: float) -> None:
+def _patch_job(
+    job_id: str | None,
+    changes: dict[str, Any],
+    supabase_url: str,
+    key: str,
+    timeout: float,
+) -> None:
+    """PATCH one processing_jobs row by id.
+
+    No-ops on a falsy job_id: without this guard a missing id builds the filter
+    ``?id=eq.None``, which PostgREST rejects with a 400 and turns a recoverable
+    stage error into a crashed worker run.
+    """
+    if not job_id:
+        logger.error("Refusing to PATCH processing_jobs with empty job_id (changes=%s)", changes)
+        return
+
     with httpx.Client(timeout=timeout) as client:
         resp = client.patch(
             f"{supabase_url.rstrip('/')}/rest/v1/processing_jobs",
             headers={**_supabase_headers(key), "Prefer": "return=minimal"},
             params={"id": f"eq.{job_id}"},
-            json={"status": "completed", "completed_at": datetime.now(tz=UTC).isoformat()},
+            json=changes,
         )
         resp.raise_for_status()
 
 
-def _fail_job(job_id: str, error_msg: str, supabase_url: str, key: str, timeout: float) -> None:
-    with httpx.Client(timeout=timeout) as client:
-        resp = client.patch(
-            f"{supabase_url.rstrip('/')}/rest/v1/processing_jobs",
-            headers={**_supabase_headers(key), "Prefer": "return=minimal"},
-            params={"id": f"eq.{job_id}"},
-            json={"status": "failed", "completed_at": datetime.now(tz=UTC).isoformat(), "error_message": error_msg[:500]},
-        )
-        resp.raise_for_status()
+def _complete_job(job_id: str | None, supabase_url: str, key: str, timeout: float) -> None:
+    _patch_job(
+        job_id,
+        {"status": "completed", "completed_at": datetime.now(tz=UTC).isoformat()},
+        supabase_url, key, timeout,
+    )
 
 
-def _requeue_job(job_id: str, supabase_url: str, key: str, timeout: float) -> None:
+def _fail_job(job_id: str | None, error_msg: str, supabase_url: str, key: str, timeout: float) -> None:
+    _patch_job(
+        job_id,
+        {
+            "status": "failed",
+            "completed_at": datetime.now(tz=UTC).isoformat(),
+            "error_message": error_msg[:500],
+        },
+        supabase_url, key, timeout,
+    )
+
+
+def _requeue_job(job_id: str | None, supabase_url: str, key: str, timeout: float) -> None:
     """Release a claimed job back to queued so it can be retried later."""
-    with httpx.Client(timeout=timeout) as client:
-        resp = client.patch(
-            f"{supabase_url.rstrip('/')}/rest/v1/processing_jobs",
-            headers={**_supabase_headers(key), "Prefer": "return=minimal"},
-            params={"id": f"eq.{job_id}"},
-            json={"status": "queued", "started_at": None},
-        )
-        resp.raise_for_status()
+    _patch_job(job_id, {"status": "queued", "started_at": None}, supabase_url, key, timeout)
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +258,8 @@ def run() -> int:
                 logger.debug("No queued %s jobs — moving on", job_type)
                 break
 
-            job_id        = job.get("id", "?")
+            # _claim_job guarantees a non-null id on a real claim.
+            job_id        = job["id"]
             bankruptcy_id = job.get("bankruptcy_id")
             logger.info("Processing %s job %s (bankruptcy=%s)", job_type, job_id, bankruptcy_id)
 
