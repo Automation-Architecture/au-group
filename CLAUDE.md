@@ -116,7 +116,7 @@ Invariants (global):
 
 Attack Surface (entry points):
 - Unauth: GET /health, GET /health/ready (dependency probe labels)
-- Unauth: GET /docs + /openapi.json — EXPOSE_OPENAPI=true in prod (see A3)
+- CLOSED: GET /docs + /openapi.json — EXPOSE_OPENAPI=false since 2026-08-16, both 404 (see A3)
 - Dead: POST /api/v1/auth/login → 503 (JWT unconfigured; no longer an entry point)
 - Auth: all other /api/v1/* (parse, extract, review) — X-API-Key only
 - Egress: document_url fetch; S3 read/write
@@ -127,7 +127,7 @@ Assumptions Registry:
 |----|------------|------|
 | A1 | ~~Only operators/n8n hold API_KEY~~ **FALSE (2026-08-13)**: pre-rotation there were 3 divergent API_KEY values and none worked against the live service; no n8n workflow hardcodes a key; only 1 of 10 parser-referencing workflows is active (a sub-workflow with 0 triggers calling the now-503 /auth/login); 30d Railway metrics = 9 requests, all from the debug session. Nothing external holds or uses a working key. | RESOLVED |
 | A2 | service_role never in browser clients | MED |
-| A3 | ~~expose_openapi=false in prod~~ **VIOLATED**: EXPOSE_OPENAPI=true on the production service — /docs + /openapi.json are publicly reachable | VIOLATED |
+| A3 | expose_openapi=false in prod — **HOLDS again as of 2026-08-16** (KD-77). Was VIOLATED: `EXPOSE_OPENAPI=true` left /docs + /openapi.json publicly reachable (200, 21,563 bytes, all 12 routes enumerable). Set to `false`; both now 404, verified against the running service (/health 200 + authenticated call 200 rule out a dead service). | HIGH |
 | A4 | ~~JWT subject unused for authorization~~ moot — JWT removed | N/A |
 | A5 | DNS at URL-check time ≈ DNS at connect time | LOW |
 | A6 | au_group_merge_creditor_matrix enforces integrity in SQL | MED (not line-audited) |
