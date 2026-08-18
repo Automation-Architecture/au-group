@@ -9,6 +9,7 @@ from datetime import date
 import httpx
 import pytest
 from pipeline.discovery import CourtListenerDiscoverer, DiscoveredCase
+from pipeline.ratelimit import BudgetExhausted, NullRateLimiter
 
 from pipeline import discovery
 
@@ -142,3 +143,52 @@ def test_discover_total_failure_incomplete(monkeypatch):
     _patch(monkeypatch, [httpx.ConnectError("down")] * 4)
     cases, complete = _disc().discover(["njb"], _FROM, _TO)
     assert cases == [] and complete is False  # outage must NOT look like an empty window
+
+
+# ---------------------------------------------------------------------------
+# Proactive rate limiting (KD-83)
+# ---------------------------------------------------------------------------
+
+class _CountingLimiter(NullRateLimiter):
+    def __init__(self, raise_after=None):
+        super().__init__()
+        self.acquires = 0
+        self.penalties: list[float] = []
+        self._raise_after = raise_after
+
+    def acquire(self):
+        if self._raise_after is not None and self.acquires >= self._raise_after:
+            raise BudgetExhausted("test budget spent")
+        self.acquires += 1
+
+    def penalize(self, seconds):
+        self.penalties.append(seconds)
+
+
+def test_each_discovery_page_is_paced(monkeypatch):
+    _patch(monkeypatch, [
+        _FakeResp(json_data={"results": [_result()], "next": "https://cl/next"}),
+        _FakeResp(json_data={"results": [_result(docket="26-16654")], "next": None}),
+    ])
+    lim = _CountingLimiter()
+    cases, complete = _disc(limiter=lim).discover(["njb"], _FROM, _TO)
+    assert len(cases) == 2 and complete
+    assert lim.acquires == 2
+
+
+def test_discovery_429_is_charged_to_the_shared_quota(monkeypatch):
+    _patch(monkeypatch, [_FakeResp(status_code=429),
+                         _FakeResp(json_data={"results": [_result()], "next": None})])
+    lim = _CountingLimiter()
+    cases, complete = _disc(limiter=lim).discover(["njb"], _FROM, _TO)
+    assert len(cases) == 1 and complete
+    assert lim.penalties
+
+
+def test_budget_exhaustion_mid_pagination_marks_the_window_incomplete(monkeypatch):
+    _patch(monkeypatch, [_FakeResp(json_data={"results": [_result()], "next": "https://cl/next"})])
+    lim = _CountingLimiter(raise_after=1)
+    cases, complete = _disc(limiter=lim).discover(["njb"], _FROM, _TO)
+    # The caller must hold its watermark so the un-fetched pages are re-covered.
+    assert len(cases) == 1
+    assert complete is False

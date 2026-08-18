@@ -28,6 +28,7 @@ NOTE on Form 204 download (UNVERIFIED):
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import sys
@@ -40,6 +41,11 @@ from botocore.exceptions import ClientError
 
 from pipeline.alerts import send_error_alert
 from pipeline.discovery import CourtListenerDiscoverer
+from pipeline.ratelimit import (
+    BudgetExhausted,
+    get_courtlistener_limiter,
+    reset_courtlistener_limiter,
+)
 from pipeline.retrieval import (
     CaseRef,
     CompositeRetriever,
@@ -100,6 +106,14 @@ class IntakeResult:
     cases_uploaded: int = 0
     cases_skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    # KD-83: cases whose Form 204 lookup was never attempted because the shared
+    # CourtListener budget ran out. UNKNOWN, not "not found" — they are left for
+    # the next run by holding the watermark, and must never be counted as misses.
+    cases_unattempted: int = 0
+    budget_exhausted: bool = False
+    # Cases skipped without spending quota because a previous run already looked
+    # them up and found nothing (see the known-miss ledger).
+    cases_known_missing: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -588,6 +602,110 @@ def _bankruptcy_row_exists(case_number: str, supabase_url: str, key: str, timeou
 
 
 # ---------------------------------------------------------------------------
+# Known-miss ledger (KD-83)
+# ---------------------------------------------------------------------------
+# Under a CourtListener call budget a run only reaches part of the window, so
+# the run needs to know which cases it has ALREADY looked up — otherwise every
+# run spends its whole budget re-checking the same oldest cases and never
+# reaches newer filings. A filing-date watermark cannot express this: the
+# _CL_LOOKBACK_DAYS overlap means the attempted prefix usually sits at or before
+# the watermark, so a date-based "partial advance" would rarely fire and the
+# backlog would grow without bound.
+#
+# So misses are recorded per case in au_group_runtime_config (a plain key/value
+# table — no schema change). SUCCESSES are deliberately NOT recorded: they are
+# already handled by the S3-object + bankruptcy-row idempotency gate, which
+# costs no CourtListener quota and preserves the re-enqueue recovery path.
+_MISSED_LEDGER_KEY = "intake_missed_cases"
+# RECAP is an upload-as-purchased archive, so a document absent today can appear
+# later — retry a miss once on a later day, then stop paying for it.
+_MISS_MAX_ATTEMPTS = 2
+# Size control only: once the watermark has moved past a filing date, discovery
+# never returns that case again, so an old entry can be dropped safely.
+_LEDGER_RETENTION_DAYS = 45
+_LEDGER_MAX_ENTRIES = 5000
+
+
+def _should_skip_missed(entry: dict, today: date) -> bool:
+    """True if this case was already looked up and must not spend quota again.
+
+    Skips when the retry allowance is used up, or when it was already attempted
+    today (a re-run on the same day must not re-check the same cases).
+    """
+    if not entry:
+        return False
+    if int(entry.get("attempts", 0)) >= _MISS_MAX_ATTEMPTS:
+        return True
+    return str(entry.get("last", "")) == today.isoformat()
+
+
+def _prune_missed_ledger(ledger: dict[str, dict], today: date) -> dict[str, dict]:
+    """Drop entries older than the retention window, then cap the total size."""
+    cutoff = (today - timedelta(days=_LEDGER_RETENTION_DAYS)).isoformat()
+    kept = {
+        case: e for case, e in ledger.items()
+        if str(e.get("filed") or e.get("last") or "") >= cutoff
+    }
+    if len(kept) > _LEDGER_MAX_ENTRIES:
+        # Keep the most recently attempted — the oldest are the least likely to
+        # be rediscovered at all.
+        newest = sorted(kept.items(), key=lambda kv: str(kv[1].get("last", "")), reverse=True)
+        kept = dict(newest[:_LEDGER_MAX_ENTRIES])
+    return kept
+
+
+def _record_miss(ledger: dict[str, dict], case_number: str, date_filed: str,
+                 today: date) -> None:
+    """Add or bump a case's miss entry in place."""
+    entry = ledger.get(case_number) or {"filed": date_filed, "attempts": 0}
+    entry["attempts"] = int(entry.get("attempts", 0)) + 1
+    entry["last"] = today.isoformat()
+    entry.setdefault("filed", date_filed)
+    ledger[case_number] = entry
+
+
+def _get_missed_ledger(supabase_url: str, key: str, timeout: float) -> dict[str, dict]:
+    """Read the ledger; an unreadable/corrupt value degrades to empty, never raises.
+
+    Losing the ledger costs quota (cases get re-checked), not correctness, so it
+    must never be able to fail a run.
+    """
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.get(
+                f"{supabase_url.rstrip('/')}/rest/v1/au_group_runtime_config",
+                headers=_supabase_headers(key),
+                params={"select": "config_value", "config_key": f"eq.{_MISSED_LEDGER_KEY}"},
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+        if not rows:
+            return {}
+        parsed = json.loads(rows[0]["config_value"] or "{}")
+        if not isinstance(parsed, dict):
+            return {}
+        return {k: v for k, v in parsed.items() if isinstance(v, dict)}
+    except Exception as exc:  # noqa: BLE001 — advisory cache, never fatal
+        logger.warning("Could not read the known-miss ledger (re-checking everything): %s", exc)
+        return {}
+
+
+def _set_missed_ledger(supabase_url: str, key: str, timeout: float,
+                       ledger: dict[str, dict]) -> None:
+    with httpx.Client(timeout=timeout) as client:
+        resp = client.post(
+            f"{supabase_url.rstrip('/')}/rest/v1/au_group_runtime_config",
+            headers={**_supabase_headers(key), "Prefer": "resolution=merge-duplicates"},
+            json={
+                "config_key":   _MISSED_LEDGER_KEY,
+                "config_value": json.dumps(ledger, separators=(",", ":")),
+                "notes":        "cases whose Form 204 lookup came back empty (pipeline/intake.py)",
+            },
+        )
+        resp.raise_for_status()
+
+
+# ---------------------------------------------------------------------------
 # Main intake runner (KD-63: discovery + S3; KD-64: persist + enqueue + alerts)
 # ---------------------------------------------------------------------------
 
@@ -637,6 +755,21 @@ def run(dry_run: bool = False) -> IntakeResult:
                 len(court_ids), since, until, "PACER" if has_pacer else "CourtListener", dry_run)
 
     # 2. Discover new Chapter 11 cases (PACER PCL if creds, else CourtListener).
+    # ONE limiter for the whole run: discovery and Form 204 retrieval spend the
+    # same CourtListener account quota (5/min, 50/hr). Giving each stage its own
+    # would let both believe they had a full budget — which is how the 2026-08-17
+    # run managed 493 x 429 and zero successful calls (KD-83).
+    # Reset first: the singleton would otherwise carry a spent budget into a
+    # second run() in the same process, which would report 100% unattempted and
+    # alert "out of quota" without making a single call.
+    reset_courtlistener_limiter()
+    limiter = get_courtlistener_limiter(
+        min_interval_sec=settings.courtlistener_min_interval_sec,
+        per_minute=settings.courtlistener_rate_per_min,
+        per_hour=settings.courtlistener_rate_per_hour,
+        run_budget=settings.courtlistener_run_call_budget,
+    )
+
     pacer: PacerClient | None = None
     token: str | None = None
     discovery_complete = True  # PACER raises on failure; CourtListener reports it
@@ -648,8 +781,14 @@ def run(dry_run: bool = False) -> IntakeResult:
                 court_ids=court_ids, date_from=since, date_to=until, chapter=11, token=token,
             )
         else:
+            # Cap discovery's share of the shared budget. At 20 results/page an
+            # uncapped 25-page walk could spend more than half the run's calls
+            # before a single Form 204 lookup — and if pagination exhausted the
+            # budget the watermark would be held and the next run would spend
+            # its budget the same way, never reaching retrieval at all.
             discoverer = CourtListenerDiscoverer(
                 settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
+                max_pages=settings.courtlistener_discovery_page_budget, limiter=limiter,
             )
             # Re-query a few days behind the watermark; re-processing is idempotent.
             cl_since = since - timedelta(days=_CL_LOOKBACK_DAYS)
@@ -683,12 +822,38 @@ def run(dry_run: bool = False) -> IntakeResult:
     if settings.courtlistener_api_token:
         retrievers.append(RecapRetriever(
             settings.courtlistener_api_token, timeout=settings.courtlistener_timeout_sec,
+            limiter=limiter,
         ))
     if has_pacer and pacer is not None and token is not None:
         retrievers.append(PacerCmecfRetriever(pacer, token))
     retriever = CompositeRetriever(retrievers)
 
-    for case in cases:
+    # Oldest first. Under a call budget a run only gets through part of the
+    # window, so the order decides which cases are attempted — ascending drains
+    # the backlog in filing order instead of starving the oldest cases forever.
+    # (Discovery returns dateFiled desc.) Cases with no filing date sort first
+    # and are harmless here; discovery already drops them.
+    cases = sorted(cases, key=lambda c: c.date_filed)
+
+    # Form 204 misses are reported ONCE at the end of the run. One Slack alert
+    # per case posted ~52 red messages a day into the client-visible channel and
+    # got alerting muted entirely on that service — see the KD-83 notes.
+    missed_cases: list[str] = []
+    # Any failure that is NOT "no Form 204 exists" — S3, upsert, enqueue. These
+    # leave a case with no S3 object and no DB row, so the idempotency gate
+    # cannot recover it; the watermark must be held so discovery returns it again.
+    had_persist_errors = False
+
+    ledger = _get_missed_ledger(sb_url, sb_key, sb_t)
+    ledger_dirty = False
+
+    for idx, case in enumerate(cases):
+        # Already looked up and found empty on a previous run — skip before any
+        # CourtListener call, so the budget goes to cases we know nothing about.
+        if _should_skip_missed(ledger.get(case.case_number_full, {}), until):
+            result.cases_known_missing += 1
+            continue
+
         s3_key = _form_204_s3_key(case.case_number_full)
 
         # Compound idempotency gate: S3 key AND a persisted bankruptcy row.
@@ -712,22 +877,37 @@ def run(dry_run: bool = False) -> IntakeResult:
         db_court_id = _correct_court_id(
             case.court_id[:-1] if case.court_id.endswith("k") else case.court_id
         )
-        retrieved = retriever.retrieve(CaseRef(
-            court_id=db_court_id,
-            case_number_full=case.case_number_full,
-            debtor_name=case.case_title,
-            case_link=case.case_link,
-        ))
+        try:
+            retrieved = retriever.retrieve(CaseRef(
+                court_id=db_court_id,
+                case_number_full=case.case_number_full,
+                debtor_name=case.case_title,
+                case_link=case.case_link,
+            ))
+        except BudgetExhausted as exc:
+            # Out of CourtListener quota. Every remaining case is UNKNOWN, not a
+            # miss — stop here rather than log false misses (the 2026-08-17
+            # failure mode). The watermark is held below so they stay
+            # discoverable; the ledger is what stops the next run repeating this
+            # run's work.
+            result.budget_exhausted = True
+            result.cases_unattempted = sum(
+                1 for c in cases[idx:]
+                if not _should_skip_missed(ledger.get(c.case_number_full, {}), until)
+            )
+            logger.warning("Retrieval stopped after %d/%d cases — %s "
+                           "(%d unattempted, left for the next run)",
+                           idx, len(cases), exc, result.cases_unattempted)
+            break
         pdf_bytes = retrieved.pdf if retrieved else None
         if pdf_bytes is None:
             logger.warning("Form 204 not found for %s (%s)", case.case_number_full, case.case_title)
             result.errors.append(f"{case.case_number_full}: Form 204 not found")
-            send_error_alert(
-                stage="intake.py — Form 204 retrieval",
-                error=f"Form 204 not found via RECAP or CM/ECF for {case.case_number_full}",
-                bot_token=settings.slack_bot_token,
-                channel_id=settings.slack_channel_id,
-            )
+            missed_cases.append(case.case_number_full)
+            # A CONFIRMED absence (every configured source answered) — record it
+            # so later runs spend their budget on cases they have not seen.
+            _record_miss(ledger, case.case_number_full, case.date_filed, until)
+            ledger_dirty = True
             result.cases_skipped += 1
             continue
 
@@ -738,6 +918,7 @@ def run(dry_run: bool = False) -> IntakeResult:
         except Exception as exc:
             logger.error("S3 upload failed for %s: %s", case.case_number_full, exc)
             result.errors.append(f"{case.case_number_full}: S3 upload failed")
+            had_persist_errors = True
             send_error_alert(
                 stage="intake.py — S3 upload",
                 error=str(exc),
@@ -761,6 +942,7 @@ def run(dry_run: bool = False) -> IntakeResult:
                 channel_id=settings.slack_channel_id,
             )
             result.errors.append(f"{case.case_number_full}: upsert failed")
+            had_persist_errors = True
             result.cases_skipped += 1
             continue
 
@@ -777,6 +959,7 @@ def run(dry_run: bool = False) -> IntakeResult:
                 channel_id=settings.slack_channel_id,
             )
             result.errors.append(f"{case.case_number_full}: enqueue failed")
+            had_persist_errors = True
             try:
                 _insert_pacer_poll_job(bankruptcy_id, "failed", sb_url, sb_key, sb_t)
             except Exception as poll_exc:
@@ -798,6 +981,37 @@ def run(dry_run: bool = False) -> IntakeResult:
     # Advancing the watermark after an incomplete discovery (outage / page cap)
     # would skip the un-fetched cases forever; leave it so the next run re-covers
     # (re-processing already-done cases is idempotent via the S3 + row gate).
+    # Persist the known-miss ledger before anything else can fail — losing it
+    # only costs quota next run, but writing it late risks losing this run's work.
+    if ledger_dirty:
+        try:
+            _set_missed_ledger(sb_url, sb_key, sb_t, _prune_missed_ledger(ledger, until))
+        except Exception as exc:  # noqa: BLE001 — advisory cache, never fatal
+            logger.warning("Could not persist the known-miss ledger: %s", exc)
+
+    # One summary alert for the run's Form 204 misses, not one per case. Per-case
+    # alerting posted ~52 red messages a day into the client-visible channel and
+    # got alerting on this service muted outright — see the KD-83 notes.
+    if missed_cases:
+        sample = ", ".join(missed_cases[:5])
+        more = f" (+{len(missed_cases) - 5} more)" if len(missed_cases) > 5 else ""
+        logger.warning("Form 204 not found for %d of %d attempted cases",
+                       len(missed_cases), len(missed_cases) + result.cases_uploaded)
+        send_error_alert(
+            stage="intake.py — Form 204 retrieval",
+            error=f"No Form 204 found via RECAP or CM/ECF for {len(missed_cases)} case(s) "
+                  f"this run: {sample}{more}. Expected while RECAP coverage is ~1.6% "
+                  f"(KD-75); not a pipeline fault.",
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+
+    # 5. Advance the watermark ONLY when the window is genuinely finished.
+    #
+    # Forward progress under a call budget comes from the known-miss ledger, NOT
+    # from moving the watermark over a partially-processed window: any case the
+    # watermark passes is never rediscovered, so advancing over un-attempted or
+    # failed cases loses them permanently.
     if not discovery_complete:
         logger.warning("Discovery incomplete — not advancing intake_last_run_at (window will be re-covered)")
         send_error_alert(
@@ -807,7 +1021,32 @@ def run(dry_run: bool = False) -> IntakeResult:
             bot_token=settings.slack_bot_token,
             channel_id=settings.slack_channel_id,
         )
-    elif result.cases_uploaded > 0 or result.cases_found == 0:
+    elif result.budget_exhausted:
+        # Watermark HELD: the un-attempted tail must stay discoverable. The next
+        # run skips this run's confirmed misses via the ledger, so it reaches
+        # further into the backlog instead of re-checking the same cases.
+        logger.warning("CourtListener budget exhausted after %d calls — %d cases unattempted, "
+                       "watermark held", limiter.spent, result.cases_unattempted)
+        send_error_alert(
+            stage="intake.py — CourtListener budget",
+            error=f"Ran out of CourtListener REST quota after {limiter.spent} calls. "
+                  f"{result.cases_unattempted} case(s) were NOT attempted — unknown, not "
+                  f"misses — and stay queued for the next run (watermark held at {since}). "
+                  f"If this repeats daily the backlog exceeds the free quota: see KD-75.",
+            bot_token=settings.slack_bot_token,
+            channel_id=settings.slack_channel_id,
+        )
+    elif had_persist_errors:
+        # S3 / upsert / enqueue failures leave no S3 object and no DB row, so the
+        # idempotency gate cannot recover those cases — only rediscovery can.
+        logger.warning("Persistence errors this run — holding intake_last_run_at so the "
+                       "affected cases are rediscovered")
+    else:
+        # Every discovered case was attempted and everything persisted. Advance
+        # even when nothing was found: without this, a window of genuine misses
+        # is re-discovered and re-attempted every single day, burning the whole
+        # budget on cases already known to be absent (what the 2026-08-17 run
+        # did). The ledger keeps those misses cheap either way.
         try:
             _set_last_run_date(sb_url, sb_key, sb_t, until)
         except Exception as exc:
@@ -841,8 +1080,11 @@ def main() -> None:
 
     result = run(dry_run=args.dry_run)
     logger.info(
-        "Intake complete: found=%d uploaded=%d skipped=%d errors=%d",
-        result.cases_found, result.cases_uploaded, result.cases_skipped, len(result.errors),
+        "Intake complete: found=%d uploaded=%d skipped=%d known_missing=%d "
+        "unattempted=%d errors=%d budget_exhausted=%s",
+        result.cases_found, result.cases_uploaded, result.cases_skipped,
+        result.cases_known_missing, result.cases_unattempted, len(result.errors),
+        result.budget_exhausted,
     )
     if result.errors:
         for err in result.errors:

@@ -37,11 +37,16 @@ from datetime import date
 
 import httpx
 
+from pipeline.ratelimit import BudgetExhausted, NullRateLimiter, RateLimiter
+
 logger = logging.getLogger(__name__)
 
 _CL_BASE = "https://www.courtlistener.com/api/rest/v4"
 
-# Burst 429s happen even under the 5000/hr ceiling — back off and retry.
+# Burst 429s happen even under the documented hourly ceiling — back off and
+# retry. Reactive backoff alone is NOT enough: discovery shares one 5/min, 50/hr
+# account quota with Form 204 retrieval, so pass the shared proactive limiter
+# (pipeline/ratelimit.py, KD-83) or a batch run poisons its own results.
 _DISCOVERY_MAX_ATTEMPTS = 4
 _DISCOVERY_RETRY_BASE_SEC = 2.0
 
@@ -62,15 +67,23 @@ class DiscoveredCase:
 class CourtListenerDiscoverer:
     """Discover new Chapter 11 dockets via the CourtListener Search API."""
 
-    def __init__(self, api_token: str, timeout: float = 30.0, max_pages: int = 25) -> None:
+    def __init__(self, api_token: str, timeout: float = 30.0, max_pages: int = 25,
+                 limiter: RateLimiter | None = None) -> None:
         self._token = api_token
         self._timeout = timeout
         self._max_pages = max_pages  # 20 results/page → ~500 cases/run cap
+        # Shared with retrieval — one account, one quota. Defaults to unpaced so
+        # existing callers/tests keep their behaviour; intake passes the real one.
+        self._limiter = limiter or NullRateLimiter()
 
     def _get(self, client: httpx.Client, url: str, params: dict | None) -> dict | None:
         """GET → JSON with 429/5xx/network backoff; None on non-retryable failure."""
         headers = {"Authorization": f"Token {self._token}", "Accept": "application/json"}
         for attempt in range(1, _DISCOVERY_MAX_ATTEMPTS + 1):
+            # Proactive pace BEFORE the call. Raises BudgetExhausted (propagated
+            # to discover(), which marks the window incomplete) rather than
+            # firing a request that is certain to 429.
+            self._limiter.acquire()
             try:
                 resp = client.get(url, headers=headers, params=params)
                 resp.raise_for_status()
@@ -81,7 +94,12 @@ class CourtListenerDiscoverer:
                     delay = _DISCOVERY_RETRY_BASE_SEC * (2 ** (attempt - 1))
                     logger.warning("CourtListener %d on discovery — backing off %.0fs (attempt %d/%d)",
                                    code, delay, attempt, _DISCOVERY_MAX_ATTEMPTS)
-                    time.sleep(delay)
+                    if code == 429:
+                        # A rejected request still spent quota — charge it, and
+                        # let the limiter own the wait.
+                        self._limiter.penalize(delay)
+                    else:
+                        time.sleep(delay)
                     continue
                 logger.warning("CourtListener discovery GET failed: %s", exc)
                 return None
@@ -127,7 +145,15 @@ class CourtListenerDiscoverer:
         pages = 0
         with httpx.Client(timeout=self._timeout) as client:
             while url and pages < self._max_pages:
-                data = self._get(client, url, params)
+                try:
+                    data = self._get(client, url, params)
+                except BudgetExhausted as exc:
+                    # Out of quota mid-pagination: the window is NOT covered.
+                    # complete=False holds the caller's watermark so the missing
+                    # pages are re-covered next run.
+                    logger.warning("CourtListener discovery stopped — %s", exc)
+                    complete = False
+                    break
                 if not data:
                     complete = False  # fetch failed mid-pagination — window not fully covered
                     break
