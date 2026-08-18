@@ -50,6 +50,10 @@ class PipelineSettings(BaseSettings):
     courtlistener_rate_per_min: int = 5
     courtlistener_rate_per_hour: int = 50
     courtlistener_run_call_budget: int = 45
+    # Discovery's share of that budget, in pages (20 results/page). Capped so a
+    # long backlog cannot spend the whole budget paginating and never reach a
+    # single Form 204 lookup.
+    courtlistener_discovery_page_budget: int = 12
 
     # Salesforce (salesforce_push stage — KD-68). Username/password + security
     # token (no Connected App / OAuth yet — MVP). Empty username/password ⇒ the

@@ -146,16 +146,17 @@ class RateLimiter:
                 self._sleep(wait)
 
     def penalize(self, seconds: float) -> None:
-        """Record a 429: hold off for ``seconds`` and charge it to the budget.
+        """Record a 429: hold off for ``seconds`` before the next call.
 
-        A rejected request still consumed quota upstream, so it must cost the
-        same as a successful one — otherwise a 429 storm looks free.
+        This does NOT charge the budget again: ``acquire`` already recorded the
+        call before it was sent, and a rejected request must cost the same as a
+        successful one — charging twice would exhaust the budget in half the
+        requests and report exhaustion long before it happened.
         """
         with self._lock:
             now = self._clock()
-            self._record(now)
             self._cooldown_until = max(self._cooldown_until, now + max(0.0, seconds))
-            logger.warning("%s: 429 penalty — cooling down %.0fs (spent %d)",
+            logger.warning("%s: 429 — cooling down %.0fs (spent %d)",
                            self._name, seconds, self._spent)
 
     # -- internals -----------------------------------------------------------

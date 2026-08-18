@@ -482,23 +482,46 @@ def test_docket_walk_is_skipped_when_it_cannot_be_afforded(monkeypatch):
             CaseRef(court_id="njb", case_number_full="23-13359", debtor_name="ACME Corp"))
 
 
-def test_composite_propagates_budget_exhaustion(monkeypatch):
-    class _Boom:
+def test_composite_falls_through_to_a_source_with_a_different_quota():
+    """RECAP being out of quota must not disable the PACER fallback.
+
+    PacerCmecfRetriever spends PACER's quota, not CourtListener's, so it can
+    still answer — stopping there would silently switch off the paid path in
+    exactly the configuration KD-75 is aiming for.
+    """
+    class _Exhausted:
         def retrieve(self, case):
             raise BudgetExhausted("spent")
 
-    class _Never:
-        def __init__(self):
-            self.called = False
-
+    class _Paid:
         def retrieve(self, case):
-            self.called = True
-            return RetrievalResult(pdf=b"x", source="pacer_cmecf")
+            return RetrievalResult(pdf=b"%PDF", source="pacer_cmecf", cost_note="PACER fees")
 
-    fallback = _Never()
+    got = CompositeRetriever([_Exhausted(), _Paid()]).retrieve(
+        CaseRef(court_id="njb", case_number_full="23-1", debtor_name="X"))
+    assert got is not None and got.source == "pacer_cmecf"
+
+
+def test_composite_raises_when_no_source_could_answer():
+    class _Exhausted:
+        def retrieve(self, case):
+            raise BudgetExhausted("spent")
+
+    class _Miss:
+        def retrieve(self, case):
+            return None
+
+    # One source could not answer and the other found nothing: the outcome is
+    # UNKNOWN, and unknown must never be recorded as "no Form 204 exists".
     with pytest.raises(BudgetExhausted):
-        CompositeRetriever([_Boom(), fallback]).retrieve(
+        CompositeRetriever([_Exhausted(), _Miss()]).retrieve(
             CaseRef(court_id="njb", case_number_full="23-1", debtor_name="X"))
-    # Out of quota is not a source failure — it must not escalate to the PAID
-    # PACER fallback for a case we never actually looked up.
-    assert not fallback.called
+
+
+def test_composite_returns_none_when_sources_agree_it_is_absent():
+    class _Miss:
+        def retrieve(self, case):
+            return None
+
+    assert CompositeRetriever([_Miss(), _Miss()]).retrieve(
+        CaseRef(court_id="njb", case_number_full="23-1", debtor_name="X")) is None

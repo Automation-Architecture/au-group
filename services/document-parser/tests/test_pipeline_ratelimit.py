@@ -105,11 +105,13 @@ def test_hourly_window_reopens_once_calls_age_out():
     assert clock.slept == []
 
 
-def test_penalize_charges_the_budget_and_cools_down():
+def test_penalize_cools_down_without_double_charging():
     clock = _FakeClock()
     lim = _limiter(clock, min_interval_sec=0.0)
+    lim.acquire()            # the request that came back 429 was already charged
     lim.penalize(8.0)
-    # A 429 consumed quota upstream, so it must cost the same as a real call.
+    # Charging again would exhaust the budget in half the requests and report
+    # exhaustion long before it actually happened.
     assert lim.spent == 1
     lim.acquire()
     assert clock.slept == [pytest.approx(8.0)]

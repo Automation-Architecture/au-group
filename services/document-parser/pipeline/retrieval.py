@@ -267,7 +267,7 @@ class RecapRetriever:
             # resolve the docket id). Without room for it the outcome is
             # UNKNOWN, not a miss — stop the run rather than log a false miss.
             walk_cost = self._max_entry_pages + (0 if docket_id is not None else 1)
-            if not self._limiter.can_afford(min(2, walk_cost)):
+            if not self._limiter.can_afford(walk_cost):
                 raise BudgetExhausted(
                     f"budget spent before the docket-entries walk for "
                     f"{case.case_number_full} — outcome unknown, not a miss"
@@ -423,14 +423,20 @@ class CompositeRetriever:
         self._retrievers = retrievers
 
     def retrieve(self, case: CaseRef) -> RetrievalResult | None:
+        inconclusive: BudgetExhausted | None = None
         for r in self._retrievers:
             name = type(r).__name__
             try:
                 result = r.retrieve(case)
-            except BudgetExhausted:
-                # NOT a source failure — the quota is gone, so no source can give
-                # a truthful answer for this case. Propagate so the caller stops.
-                raise
+            except BudgetExhausted as exc:
+                # NOT a source failure: this source's quota is gone, so it cannot
+                # say whether the document exists. Keep going — a later source
+                # (the PACER CM/ECF fallback) spends a DIFFERENT quota and may
+                # still answer. Only if nothing answers is the case unknown.
+                logger.info("%s out of quota for %s — trying remaining sources",
+                            name, case.case_number_full)
+                inconclusive = exc
+                continue
             except Exception as exc:  # noqa: BLE001 — one bad source must not kill the rest
                 logger.warning("%s raised for %s: %s", name, case.case_number_full, exc)
                 continue
@@ -438,4 +444,8 @@ class CompositeRetriever:
                 logger.info("Form 204 for %s via %s (%s)",
                             case.case_number_full, result.source, result.cost_note)
                 return result
+        if inconclusive is not None:
+            # A source that could not answer means "unknown", and unknown must
+            # never be recorded as "no Form 204 exists".
+            raise inconclusive
         return None
