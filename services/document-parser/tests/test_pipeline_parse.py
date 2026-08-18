@@ -47,8 +47,9 @@ class _FakeResp:
 class _FakeClient:
     """Context-manager httpx.Client stand-in serving queued responses."""
 
-    def __init__(self, queue):
+    def __init__(self, queue, calls=None):
         self._queue = queue
+        self.calls = calls if calls is not None else []
 
     def __enter__(self):
         return self
@@ -63,15 +64,22 @@ class _FakeClient:
         return item
 
     def post(self, *a, **k):
+        self.calls.append({"args": a, "kwargs": k})
         return self._next()
 
     def get(self, *a, **k):
+        self.calls.append({"args": a, "kwargs": k})
         return self._next()
 
 
 def _patch_client(monkeypatch, queue):
-    """Patch parse.httpx.Client so each construction shares one response queue."""
-    monkeypatch.setattr(parse.httpx, "Client", lambda *a, **k: _FakeClient(queue))
+    """Patch parse.httpx.Client so each construction shares one response queue.
+
+    Returns the shared call log, so tests can assert on the request that was sent.
+    """
+    calls: list[dict] = []
+    monkeypatch.setattr(parse.httpx, "Client", lambda *a, **k: _FakeClient(queue, calls))
+    return calls
 
 
 def _make_monotonic(values):
@@ -135,6 +143,24 @@ def test_is_transient(exc, expected):
 def test_start_parse_success_returns_document_id(monkeypatch):
     _patch_client(monkeypatch, [_FakeResp(202, {"document_id": "doc-abc", "status": "processing"})])
     assert parse._start_parse("bk-1", "raw-documents/x/form-204.pdf", _settings()) == "doc-abc"
+
+
+def test_start_parse_sends_the_creditor_matrix_docket_hint(monkeypatch):
+    """KD-82: without the hint a combined petition silently yields no creditors.
+
+    classify_filing_type() picks the highest-scoring anchor set, and a combined
+    voluntary petition carries more Form 201 anchors than creditor-matrix ones —
+    so the document routes to Form 201 extraction and returns zero creditors,
+    reporting success the whole way.
+    """
+    calls = _patch_client(monkeypatch, [_FakeResp(202, {"document_id": "doc-abc"})])
+    parse._start_parse("bk-1", "raw-documents/x/form-204.pdf", _settings())
+    body = calls[0]["kwargs"]["json"]
+    assert body["docket_hint"] == "CREDITOR_MATRIX"
+    # The hint must not disturb the rest of the contract.
+    assert body["bankruptcy_id"] == "bk-1"
+    assert body["s3_key"] == "raw-documents/x/form-204.pdf"
+    assert body["async_mode"] is True
 
 
 @pytest.mark.parametrize("code", [401, 403])
