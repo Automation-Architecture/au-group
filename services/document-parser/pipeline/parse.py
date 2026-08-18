@@ -151,6 +151,19 @@ def _enqueue_enrich(
 # Document-parser HTTP calls
 # ---------------------------------------------------------------------------
 
+# Every document this stage parses is a Form 204 that intake retrieved, so the
+# filing type is known up front — tell the parser instead of making it guess.
+# Without the hint, classify_filing_type() scores anchor phrases and picks the
+# highest: on a COMBINED voluntary petition (which is what RECAP returns for most
+# cases, since the 20-largest list is filed inside the petition rather than as a
+# standalone document) the Form 201 anchors outscore the creditor-matrix ones,
+# the document routes to Form 201 extraction, and ZERO creditors come out — with
+# no error anywhere, because parsing a petition as a petition "succeeded".
+# Value is FilingType.CREDITOR_MATRIX; kept as a literal so the cron entrypoints
+# do not import the FastAPI app package. (KD-82)
+_DOCKET_HINT = "CREDITOR_MATRIX"
+
+
 def _start_parse(
     bankruptcy_id: str,
     s3_key: str,
@@ -169,7 +182,12 @@ def _start_parse(
         resp = client.post(
             url,
             headers=_parser_headers(settings.document_parser_api_key),
-            json={"bankruptcy_id": bankruptcy_id, "s3_key": s3_key, "async_mode": True},
+            json={
+                "bankruptcy_id": bankruptcy_id,
+                "s3_key": s3_key,
+                "async_mode": True,
+                "docket_hint": _DOCKET_HINT,
+            },
         )
     if resp.status_code in (401, 403):
         raise _FatalParseError(f"document-parser auth failed ({resp.status_code})")
