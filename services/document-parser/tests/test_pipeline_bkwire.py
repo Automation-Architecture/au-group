@@ -196,7 +196,7 @@ class _Settings:
     supabase_url = "https://sb.example"
     supabase_service_role_key = "svc"
     supabase_http_timeout_sec = 5.0
-    bkwire_assumed_chapter = "11"
+    bkwire_chapter_type = "unknown"
     bkwire_unknown_state = "XX"
     bkwire_state_filter = ""
 
@@ -270,7 +270,9 @@ def test_ingest_sends_the_documented_sentinels(monkeypatch):
     assert payload["p_debtor_name"] == "AGD, L.P."
     assert payload["p_court_district"] == "BKWIRE"   # the feed carries no court
     assert payload["p_state"] == "XX"                # nor the debtor's state
-    assert payload["p_chapter_type"] == "11"         # nor a chapter — assumed
+    # The feed carries no chapter, so record that rather than fabricate '11'
+    # (enum member added in migration 20260818220000).
+    assert payload["p_chapter_type"] == "unknown"
 
 
 def test_ingest_hands_the_creditor_address_to_the_merge_rpc(monkeypatch):

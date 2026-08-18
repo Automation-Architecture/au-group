@@ -1,0 +1,19 @@
+-- BKwire feed: record an unknown chapter instead of fabricating '11'.
+--
+-- The BKwire daily export (pipeline/bkwire.py) carries no chapter column, but
+-- bankruptcies.chapter_type is NOT NULL and the enum had only
+-- ('11','7','11-Subchapter-V'). The ingest therefore had to write a chapter it
+-- did not know — defaulting to '11' on a feed whose volume (524 rows/day, far
+-- above business Chapter 11 filings) says it is mixed-chapter. That is a
+-- fabricated value sitting in a column other code is entitled to trust.
+--
+-- Nothing filters on chapter_type today (it is selected by the report and tier
+-- paths, never used in a WHERE), so adding a member is additive: existing rows
+-- and queries are unaffected.
+--
+-- MUST STAY IN ITS OWN MIGRATION. Postgres allows `alter type ... add value`
+-- inside a transaction, but the new value cannot be USED in that same
+-- transaction — anything referencing 'unknown' (a default, a check constraint,
+-- a backfill) belongs in a later migration. Runtime writes from the application
+-- are a separate transaction and are fine.
+alter type public.au_group_chapter_type add value if not exists 'unknown';
