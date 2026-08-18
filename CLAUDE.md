@@ -42,6 +42,13 @@ Salesforce → daily report are unaffected and read the same tables.
   State means the creditor, and whether "uploading into Zoom" means a manual ZoomInfo upload — which
   would route around the still-unavailable ZoomInfo API). `BKWIRE_STATE_FILTER` defaults to empty
   (keep everything) until they are answered.
+- **`intake-cron` IS SWITCHED OFF (2026-08-18).** Its `cronSchedule` was cleared (was
+  `0 9 * * 1-5`) now that PACER/CourtListener retrieval is dead — the service and its history remain,
+  only the schedule is gone. It still holds `SLACK_BOT_TOKEN=disabled`, so **if anyone revives it,
+  restore the real `xoxb-` token from 1Password first or it runs with no error alerting at all.**
+  `pipeline-worker` (`*/30`) was deliberately LEFT RUNNING — it drains the queue the BKwire ingest
+  enqueues `zoom_info_enrich` into, so it belongs to the new path (currently a no-op behind
+  `SKIP_ENRICH`/`SKIP_SF`). `daily-report` (`0 13 * * 1-5`) is untouched and working.
 - **KD-75 (Form 204 retrieval / the standard PACER account) is DEAD — close it.** So is the
   1.6%-vs-31% coverage argument. **KD-69/KD-70** (n8n parity + decommission) were premised on the
   PACER pipeline and need re-scoping against BKwire before either is worked. KD-83's pacing and
