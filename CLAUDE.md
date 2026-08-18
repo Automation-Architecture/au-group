@@ -27,13 +27,14 @@ Salesforce → daily report are unaffected and read the same tables.
   debtor's court (only 18% of the sample fell in our target states, TX alone 41%); a creditor
   repeated within one case is a **separate claim, not a duplicate** (summed by the ingest).
 - **Three NOT NULL columns the feed cannot fill:** `court_district` → `'BKWIRE'` sentinel,
-  debtor `state` → `'XX'` sentinel, and **`chapter_type` is an ASSUMPTION** (`BKWIRE_ASSUMED_CHAPTER`,
-  default `'11'`, logged every run) because the enum has no `unknown` member. The feed carries no
-  chapter and 524 rows/day is far above business Ch. 11 volume, so it is probably wrong for some
-  rows. **⚠️ NOW ACTIONABLE (confirmation was the only thing blocking it): add an `unknown` member to
-  `au_group_chapter_type` and write that instead of a fabricated `'11'`.** Note `alter type … add
-  value` cannot be used in the same transaction that uses the new value — split across two
-  migrations, and start numbering at `20260530120001` or later (see the live-schema drift doc).
+  debtor `state` → `'XX'` sentinel, and `chapter_type` → **`'unknown'`** (`BKWIRE_CHAPTER_TYPE`).
+  The feed carries no chapter and 524 rows/day is far above business Ch. 11 volume, so it is
+  mixed-chapter; `au_group_chapter_type` gained an `unknown` member in migration
+  **`20260818220000`** so the ingest records that instead of fabricating `'11'`. Nothing filters on
+  `chapter_type` (selected only, never in a WHERE), so this costs nothing downstream. **That
+  migration must stay alone: `alter type … add value` cannot be USED in the same transaction that
+  adds it** — anything referencing `'unknown'` (default, check constraint, backfill) goes in a
+  later file.
 - **Fetching is deliberately NOT automated.** The site caps downloads at 100 rows while a day held
   524; whether an API or full export exists is an open vendor question, and automated access needs a
   ToS check first.

@@ -55,15 +55,17 @@ class PipelineSettings(BaseSettings):
     # single Form 204 lookup.
     courtlistener_discovery_page_budget: int = 12
 
-    # BKwire CSV ingest — the PACER-replacement feed under evaluation (2026-08-18).
+    # BKwire CSV ingest — the confirmed PACER replacement (client, 2026-08-18).
     # The export carries no court district, no debtor state and no chapter, but
-    # bankruptcies requires all three NOT NULL, so two of them are sentinels and
-    # the chapter is an ASSUMPTION that is logged on every run. See
-    # pipeline/bkwire.py. bkwire_state_filter is a comma-separated list of
-    # CREDITOR states ("NY,NJ,PA") and defaults to empty = keep everything: only
-    # 18% of the sample export fell inside the old court-district scope, and the
-    # geography question is still open with the client.
-    bkwire_assumed_chapter: str = "11"
+    # bankruptcies requires all three NOT NULL, so court_district/state are
+    # sentinels and the chapter is written as 'unknown' (enum member added in
+    # migration 20260818220000) rather than fabricated as '11'. Override only if
+    # the feed is ever known to be single-chapter. See pipeline/bkwire.py.
+    # bkwire_state_filter is a comma-separated list of CREDITOR states
+    # ("NY,NJ,PA") and defaults to empty = keep everything: only 18% of the
+    # sample export fell inside the old court-district scope, and the geography
+    # question is still open with the client.
+    bkwire_chapter_type: str = "unknown"
     bkwire_unknown_state: str = "XX"
     bkwire_state_filter: str = ""
 

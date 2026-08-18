@@ -31,14 +31,13 @@ BKwire supplies none of them:
     state travels in the address, which is what the report actually groups by
     (``au_group_parse_creditor_state`` reads it back out), so the sentinel only
     surfaces for rows whose creditor state is unusable.
-  * chapter_type → ``bkwire_assumed_chapter``. **This is a fabricated value**:
-    the enum is ('11','7','11-Subchapter-V') with no 'unknown' member, so a
-    chapter must be written whether or not one is known. A 524-row day is far
-    above business Chapter 11 volume, so the feed is probably mixed-chapter and
-    this default is probably WRONG for some rows. It is a setting, and it is
-    logged at every run, precisely so it cannot become an invisible assumption.
-    The real fix is an 'unknown' enum member — deferred until BKwire is
-    confirmed, since it is a live-schema change made on a maybe.
+  * chapter_type → ``bkwire_chapter_type``, default ``'unknown'`` (enum member
+    added in migration 20260818220000). The feed carries no chapter and a
+    524-row day is far above business Chapter 11 volume, so it is mixed-chapter;
+    writing '11' would have been a fabricated value in a column other code is
+    entitled to trust. Nothing filters on chapter_type today, so 'unknown' costs
+    nothing downstream. Override only if the feed is ever known to be
+    single-chapter.
 
 Deliberately NOT automated here: fetching the file. The site caps downloads at
 100 rows while a day held 524, and whether there is an API, a full export, or
@@ -288,7 +287,7 @@ def _upsert_bankruptcy(group: CaseGroup, settings: PipelineSettings) -> str:
                 "p_debtor_name":    group.debtor,
                 "p_filing_date":    group.date_filed,
                 "p_court_district": _COURT_DISTRICT_SENTINEL,
-                "p_chapter_type":   settings.bkwire_assumed_chapter,
+                "p_chapter_type":   settings.bkwire_chapter_type,
                 "p_state":          settings.bkwire_unknown_state,
             },
         )
@@ -345,9 +344,9 @@ def ingest_text(text: str, *, dry_run: bool = False,
     result.claims_combined = combined
 
     logger.info(
-        "BKwire: %d row(s) → %d case(s), %d combined claim row(s). "
-        "chapter_type=%r is ASSUMED (the feed does not carry one)",
-        len(rows), len(groups), combined, s.bkwire_assumed_chapter,
+        "BKwire: %d row(s) → %d case(s), %d combined claim row(s). chapter_type=%r "
+        "(the feed carries no chapter)",
+        len(rows), len(groups), combined, s.bkwire_chapter_type,
     )
 
     if dry_run:
