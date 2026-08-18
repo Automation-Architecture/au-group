@@ -40,6 +40,16 @@ class PipelineSettings(BaseSettings):
     # falling back to the paid PACER CM/ECF fetch. Empty = RECAP source disabled.
     courtlistener_api_token: str = ""
     courtlistener_timeout_sec: float = 30.0
+    # Proactive pacing (KD-83). Discovery and Form 204 retrieval share ONE
+    # account quota — measured live at 5/min, 50/hr on the authenticated REST
+    # tier. 15s spacing is the interval proven to work; a burst of 5 is not.
+    # run_call_budget caps a single intake run so an unattended cron stops
+    # cleanly instead of grinding through hourly windows; cases it never reached
+    # are left for the next run rather than recorded as misses.
+    courtlistener_min_interval_sec: float = 15.0
+    courtlistener_rate_per_min: int = 5
+    courtlistener_rate_per_hour: int = 50
+    courtlistener_run_call_budget: int = 45
 
     # Salesforce (salesforce_push stage — KD-68). Username/password + security
     # token (no Connected App / OAuth yet — MVP). Empty username/password ⇒ the

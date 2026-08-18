@@ -7,6 +7,7 @@ documented response shapes. No live API token is exercised here.
 
 import httpx
 import pytest
+from pipeline.ratelimit import BudgetExhausted, NullRateLimiter
 from pipeline.retrieval import (
     CaseRef,
     CompositeRetriever,
@@ -416,3 +417,88 @@ def test_recap_non_json_search_falls_through_to_walk(monkeypatch):
     _patch(monkeypatch, [_BadJson(), dockets, entries, _pdf()])
     res = RecapRetriever("tok").retrieve(_case())
     assert res is not None and res.source == "recap"
+
+
+# ---------------------------------------------------------------------------
+# Proactive rate limiting (KD-83)
+# ---------------------------------------------------------------------------
+
+class _CountingLimiter(NullRateLimiter):
+    """Records acquires/penalties; optionally raises after N acquires."""
+
+    def __init__(self, raise_after=None, afford=True):
+        super().__init__()
+        self.acquires = 0
+        self.penalties: list[float] = []
+        self._raise_after = raise_after
+        self._afford = afford
+
+    def acquire(self):
+        if self._raise_after is not None and self.acquires >= self._raise_after:
+            raise BudgetExhausted("test budget spent")
+        self.acquires += 1
+
+    def penalize(self, seconds):
+        self.penalties.append(seconds)
+
+    def can_afford(self, calls):
+        return self._afford
+
+
+def test_every_rest_call_is_paced(monkeypatch):
+    _patch(monkeypatch, [_search_hit(), _pdf()])
+    lim = _CountingLimiter()
+    RecapRetriever("tok", limiter=lim).retrieve(
+        CaseRef(court_id="njb", case_number_full="23-13359", debtor_name="ACME Corp"))
+    # One search call paced; the storage.courtlistener.com PDF download is
+    # unauthenticated and off the REST budget, so it must NOT be paced.
+    assert lim.acquires == 1
+
+
+def test_429_charges_the_limiter_instead_of_a_bare_sleep(monkeypatch):
+    _patch(monkeypatch, [_FakeResp(status_code=429), _search_hit(), _pdf()])
+    lim = _CountingLimiter()
+    result = RecapRetriever("tok", limiter=lim).retrieve(
+        CaseRef(court_id="njb", case_number_full="23-13359", debtor_name="ACME Corp"))
+    assert result is not None
+    assert lim.penalties, "a 429 must be charged to the shared quota"
+
+
+def test_budget_exhaustion_propagates_rather_than_reading_as_a_miss(monkeypatch):
+    _patch(monkeypatch, [_search_hit(), _pdf()])
+    lim = _CountingLimiter(raise_after=0)
+    with pytest.raises(BudgetExhausted):
+        RecapRetriever("tok", limiter=lim).retrieve(
+            CaseRef(court_id="njb", case_number_full="23-13359", debtor_name="ACME Corp"))
+
+
+def test_docket_walk_is_skipped_when_it_cannot_be_afforded(monkeypatch):
+    # Search returns no match: concluding "not archived" would need the walk, and
+    # without budget for it the answer is UNKNOWN — raise, do not return None.
+    _patch(monkeypatch, [_FakeResp(json_data={"results": []})])
+    lim = _CountingLimiter(afford=False)
+    with pytest.raises(BudgetExhausted):
+        RecapRetriever("tok", limiter=lim).retrieve(
+            CaseRef(court_id="njb", case_number_full="23-13359", debtor_name="ACME Corp"))
+
+
+def test_composite_propagates_budget_exhaustion(monkeypatch):
+    class _Boom:
+        def retrieve(self, case):
+            raise BudgetExhausted("spent")
+
+    class _Never:
+        def __init__(self):
+            self.called = False
+
+        def retrieve(self, case):
+            self.called = True
+            return RetrievalResult(pdf=b"x", source="pacer_cmecf")
+
+    fallback = _Never()
+    with pytest.raises(BudgetExhausted):
+        CompositeRetriever([_Boom(), fallback]).retrieve(
+            CaseRef(court_id="njb", case_number_full="23-1", debtor_name="X"))
+    # Out of quota is not a source failure — it must not escalate to the PAID
+    # PACER fallback for a case we never actually looked up.
+    assert not fallback.called

@@ -52,17 +52,20 @@ from typing import Protocol
 
 import httpx
 
+from pipeline.ratelimit import BudgetExhausted, NullRateLimiter, RateLimiter
+
 logger = logging.getLogger(__name__)
 
 _CL_BASE = "https://www.courtlistener.com/api/rest/v4"
 _CL_STORAGE = "https://storage.courtlistener.com"
 
-# CourtListener's authenticated REST tier is 5/min, 50/hr. A daily intake batch
-# fires several lookups back-to-back, so 429s are expected — back off and retry
-# rather than treat a rate-limit as "not archived" (which would spuriously fall
-# through to a PAID PACER fetch, defeating the free-first design). Module-level
-# so tests can zero the delay. Base 2s × exp over 4 attempts ≈ 14s, enough to
-# clear the rolling 5/min window.
+# CourtListener's authenticated REST tier is 5/min, 50/hr, SHARED with discovery.
+# Reactive backoff alone is not sufficient and never was: on 2026-08-17 a batch
+# run produced 493 x 429 and zero successful calls, because once the quota is
+# spent the retries 429 too and every case logs as "no archived Form 204" — a
+# false miss. Pass the shared proactive limiter (pipeline/ratelimit.py, KD-83)
+# to pace calls before they are sent; the backoff below is now only the
+# second line of defence. Module-level so tests can zero the delay.
 _RECAP_MAX_ATTEMPTS = 4
 _RECAP_RETRY_BASE_SEC = 2.0
 
@@ -199,10 +202,13 @@ class RecapRetriever:
     """
 
     def __init__(self, api_token: str, timeout: float = 30.0,
-                 max_entry_pages: int = 3) -> None:
+                 max_entry_pages: int = 3, limiter: RateLimiter | None = None) -> None:
         self._token = api_token
         self._timeout = timeout
         self._max_entry_pages = max_entry_pages  # cap docket-entries pagination
+        # Shared with discovery — one account, one quota. Defaults to unpaced so
+        # existing callers/tests keep their behaviour; intake passes the real one.
+        self._limiter = limiter or NullRateLimiter()
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Token {self._token}", "Accept": "application/json"}
@@ -217,6 +223,10 @@ class RecapRetriever:
         (free) step or the paid fallback.
         """
         for attempt in range(1, _RECAP_MAX_ATTEMPTS + 1):
+            # Proactive pace BEFORE the call. BudgetExhausted propagates all the
+            # way to intake, which stops the run and holds its watermark — an
+            # un-attempted case must never be recorded as a miss.
+            self._limiter.acquire()
             try:
                 resp = client.get(url, headers=self._headers(), **kwargs)
                 resp.raise_for_status()
@@ -227,7 +237,12 @@ class RecapRetriever:
                     delay = _RECAP_RETRY_BASE_SEC * (2 ** (attempt - 1))
                     logger.warning("RECAP %d on %s — backing off %.0fs (attempt %d/%d)",
                                    code, url, delay, attempt, _RECAP_MAX_ATTEMPTS)
-                    time.sleep(delay)
+                    if code == 429:
+                        # The rejected request still spent quota — charge it and
+                        # let the limiter own the wait.
+                        self._limiter.penalize(delay)
+                    else:
+                        time.sleep(delay)
                     continue
                 logger.warning("RECAP GET %s failed: %s", url, exc)
                 return None
@@ -248,6 +263,15 @@ class RecapRetriever:
     def retrieve(self, case: CaseRef) -> RetrievalResult | None:
         doc, docket_id = self._search(case)
         if doc is None:
+            # The docket-entries walk costs up to _max_entry_pages calls (+1 to
+            # resolve the docket id). Without room for it the outcome is
+            # UNKNOWN, not a miss — stop the run rather than log a false miss.
+            walk_cost = self._max_entry_pages + (0 if docket_id is not None else 1)
+            if not self._limiter.can_afford(min(2, walk_cost)):
+                raise BudgetExhausted(
+                    f"budget spent before the docket-entries walk for "
+                    f"{case.case_number_full} — outcome unknown, not a miss"
+                )
             doc = self._walk_docket_entries(case, docket_id)
         if not doc:
             logger.info("RECAP: no archived Form 204 for %s (%s)",
@@ -403,6 +427,10 @@ class CompositeRetriever:
             name = type(r).__name__
             try:
                 result = r.retrieve(case)
+            except BudgetExhausted:
+                # NOT a source failure — the quota is gone, so no source can give
+                # a truthful answer for this case. Propagate so the caller stops.
+                raise
             except Exception as exc:  # noqa: BLE001 — one bad source must not kill the rest
                 logger.warning("%s raised for %s: %s", name, case.case_number_full, exc)
                 continue
