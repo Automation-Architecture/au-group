@@ -32,7 +32,7 @@ BKwire supplies none of them:
     (``au_group_parse_creditor_state`` reads it back out), so the sentinel only
     surfaces for rows whose creditor state is unusable.
   * chapter_type → ``bkwire_chapter_type``, default ``'unknown'`` (enum member
-    added in migration 20260818220000). The feed carries no chapter and a
+    added in migration 20260818135336). The feed carries no chapter and a
     524-row day is far above business Chapter 11 volume, so it is mixed-chapter;
     writing '11' would have been a fabricated value in a column other code is
     entitled to trust. Nothing filters on chapter_type today, so 'unknown' costs

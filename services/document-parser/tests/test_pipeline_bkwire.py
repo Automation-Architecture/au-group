@@ -271,7 +271,7 @@ def test_ingest_sends_the_documented_sentinels(monkeypatch):
     assert payload["p_court_district"] == "BKWIRE"   # the feed carries no court
     assert payload["p_state"] == "XX"                # nor the debtor's state
     # The feed carries no chapter, so record that rather than fabricate '11'
-    # (enum member added in migration 20260818220000).
+    # (enum member added in migration 20260818135336).
     assert payload["p_chapter_type"] == "unknown"
 
 

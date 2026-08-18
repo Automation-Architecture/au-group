@@ -1,7 +1,7 @@
 # Supabase Live Schema State — Divergence Reference
 
 **Project:** `umivttszdnsrosbqryia` (AU Group)  
-**Last audited:** 2026-05-30  
+**Last audited:** 2026-05-30 (enum + MCP-versioning notes updated 2026-08-18)  
 **Why this exists:** The live Supabase DB has drifted from the local migration files through ad-hoc MCP `apply_migration` + `execute_sql` calls made during early development. Any engineer writing new migrations or debugging schema errors must treat this doc as ground truth alongside querying the live DB directly.
 
 ---
@@ -32,6 +32,23 @@ where status = 'running'::processing_job_status
 ```
 
 The `au_group_job_status` type still exists on the live DB as a legacy object but is NOT what `processing_jobs.status` uses.
+
+### `au_group_chapter_type` — aligned, but mind the version (2026-08-18)
+
+Live values are now `11 | 7 | 11-Subchapter-V | unknown`. The `unknown` member was added for the
+BKwire CSV ingest (`pipeline/bkwire.py`), whose feed carries no chapter while
+`bankruptcies.chapter_type` is NOT NULL — without it the ingest had to fabricate `'11'`.
+
+Content matches the repo. The trap is the **version**: it was applied through MCP
+`apply_migration`, which assigned its own timestamp `20260818135336`, while the repo file had been
+authored as `20260818220000`. The repo file was renamed to match, so one change now has one
+version. **Rule: when a change is applied via MCP, name the repo file after the version MCP
+registered** — otherwise the same change is recorded twice and the KD-74 reconciliation cannot tell
+whether it is one change or two.
+
+Adding an enum member is additive and safe here (nothing filters on `chapter_type`; the report and
+tier paths select it but never use it in a `WHERE`). Note `alter type ... add value` cannot be
+**used** in the transaction that adds it, so that migration must stay alone in its file.
 
 ### `processing_jobs.job_type`
 
@@ -123,6 +140,14 @@ The Supabase MCP tool inserts the migration version into `schema_migrations` **b
 
 **Affected version in this repo:** `20260530120000` (failed on `'pending'::processing_job_status` — type doesn't exist; corrected version is `20260530120001`).
 
+**MCP also assigns its own version number.** The `name` argument is not the version: `apply_migration` stamps a fresh timestamp at call time. A repo file authored with a locally-chosen timestamp will therefore be registered live under a *different* version, leaving one change recorded twice. Name the repo file after the version that appears in `schema_migrations` after applying, and confirm with:
+
+```sql
+select version, name from supabase_migrations.schema_migrations order by version desc limit 5;
+```
+
+(Seen 2026-08-18: `au_group_chapter_type_unknown` registered as `20260818135336`; the repo file was renamed from `20260818220000` to match.)
+
 ---
 
 ## 6. Reconciliation plan
@@ -133,6 +158,8 @@ Priority order for bringing local files in sync with live DB:
 2. **Add `worker_name` + `job_payload` columns** to a local migration so `db reset` produces a matching schema.
 3. **Document `processing_job_status` type origin** — trace which ad-hoc call created it and add the `CREATE TYPE` to a migration so CI can replay it.
 4. After (1)–(3): validate with `supabase db reset --local` against the full migration history.
+
+**Do not create new drift while reconciling.** Anything applied through MCP must be committed with the version MCP registered (see §5). `20260818135336_au_group_chapter_type_unknown.sql` is the worked example: repo and live agree on both content and version, so it needs no reconciliation.
 
 ---
 
