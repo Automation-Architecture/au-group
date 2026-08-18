@@ -59,7 +59,7 @@ class PipelineSettings(BaseSettings):
     # The export carries no court district, no debtor state and no chapter, but
     # bankruptcies requires all three NOT NULL, so court_district/state are
     # sentinels and the chapter is written as 'unknown' (enum member added in
-    # migration 20260818220000) rather than fabricated as '11'. Override only if
+    # migration 20260818135336) rather than fabricated as '11'. Override only if
     # the feed is ever known to be single-chapter. See pipeline/bkwire.py.
     # bkwire_state_filter is a comma-separated list of CREDITOR states
     # ("NY,NJ,PA") and defaults to empty = keep everything: only 18% of the

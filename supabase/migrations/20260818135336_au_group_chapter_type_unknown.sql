@@ -16,4 +16,10 @@
 -- transaction — anything referencing 'unknown' (a default, a check constraint,
 -- a backfill) belongs in a later migration. Runtime writes from the application
 -- are a separate transaction and are fine.
+-- VERSION NOTE: this file is numbered to match the version Supabase MCP
+-- registered when the change was applied to the live DB (2026-08-18). MCP
+-- assigns its own timestamp, so a repo file named on local time would leave the
+-- SAME change recorded under two versions — precisely the repo<->live confusion
+-- KD-74 has to untangle. Name repo files after the registered version whenever a
+-- change is applied through MCP. See docs/architecture/supabase-live-schema-state.md.
 alter type public.au_group_chapter_type add value if not exists 'unknown';
