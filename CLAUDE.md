@@ -175,3 +175,31 @@ Assumptions Registry:
 | A4 | ~~JWT subject unused for authorization~~ moot — JWT removed | N/A |
 | A5 | DNS at URL-check time ≈ DNS at connect time | LOW |
 | A6 | au_group_merge_creditor_matrix enforces integrity in SQL | MED (not line-audited) |
+## Runbooks — check `aaa-runbooks` first
+
+Documentation for this project's third-party services, APIs and CLIs lives in the private
+**`Automation-Architecture/aaa-runbooks`** repo. Look there before EXA or Context7, and never
+reach for a plain web search for documentation. The detail stays there — this is only an index.
+
+```bash
+gh api "repos/Automation-Architecture/aaa-runbooks/contents/<path>" --jq '.content' | base64 -d
+```
+
+Pages this project depends on:
+
+- `infra/railway-deployments-approval-and-logs.md` — a merged PR does not ship — the approval gate, and pulling historical logs
+- `infra/ci-environments-and-secrets-template.md` — the `pr`/`staging`/`production` environment model and the secret-name inventory
+- `integrations/n8n-mcp-servers.md` — live + offline MCP servers for authoring n8n workflows
+- `reference/when-not-to-use-n8n.md` — when to collapse a workflow or standalone worker back into the app
+- `integrations/sentry.md` — org `automation-architect` — API auth, releases, alert rules, Slack setup, Sentry→Jira triage
+- `infra/rollback-procedures.md` — multi-service rollback in under 5 minutes
+- `infra/org-workflow-rollout-system.md` — how `auto-merge.yml` / `dashboard-sync.yml` reach this repo from the canonical `.github`, and drift audits
+- `reference/ci-assertion-and-alerting-failure-modes.md` — `grep -q` under `pipefail` inverts assertions (SIGPIPE 141); `if: env.X != ''` silently disables alerting
+- `integrations/1password-secrets-automation.md` — Service Accounts vs Connect — headless `op` auth for this repo's secrets
+- `integrations/op-cli-gotchas.md` — `op` CLI traps: session not reaching the shell, `--vault` scoping, validate before deploy
+- `integrations/aaa-jira-engineer-onboarding.md` — per-engineer Jira token, install, verify
+- `reference/jira-automation-flows.md` — smart values, conditions, and the PR-merge scoping trap
+
+If a page is missing, or stale for what you need, capture what you learn back into that repo
+by PR — see its `CONTRIBUTING.md` and `_template.md` (full frontmatter, honest `last_verified`,
+sources as URLs, credentials by 1Password item name only, client specifics parameterized).
